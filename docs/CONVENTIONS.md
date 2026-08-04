@@ -31,7 +31,7 @@ Branches: `stage-N-short-name`, merged to `main` when the stage's acceptance cri
 
 ## Python
 
-- Python 3.12. `ruff` for lint and format, `mypy` in non-strict mode.
+- Python 3.14. `ruff` for lint and format, `mypy` in non-strict mode.
 - Type hints on every function signature. Pydantic models for every request and response body.
 - Services are plain functions with typed inputs and outputs. No business logic in route handlers — routes validate, call a service, and shape the response.
 - No bare `except`. Catch the specific exception; log with context.

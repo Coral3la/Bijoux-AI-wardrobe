@@ -1,3 +1,26 @@
+# .gitignore
+
+# Secrets — .env.example is the one that ships
 .env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
 node_modules/
+dist/
+.angular/
+
+# Playwright
+playwright-report/
+test-results/
+
+# OS
 .DS_Store

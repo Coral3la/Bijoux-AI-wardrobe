@@ -1,0 +1,48 @@
+from typing import Literal
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+APP_VERSION = "0.1.0"
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    DATABASE_URL: str
+
+    JWT_SECRET: str = Field(min_length=32)
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_DAYS: int = 7
+
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+    CLOUDINARY_UPLOAD_FOLDER: str = "bijoux"
+    CLOUDINARY_REMOVE_BACKGROUND: bool = False
+
+    OPENAI_API_KEY: str = ""
+    OPENAI_VISION_MODEL: str = "gpt-4o-mini"
+    OPENAI_STYLIST_MODEL: str = "gpt-4o-mini"
+    OPENAI_TIMEOUT_SECONDS: int = 30
+
+    USE_FAKE_AI: bool = False
+    CORS_ORIGINS: str = "http://localhost:4200"
+    MAX_UPLOAD_MB: int = 10
+    MAX_FILES_PER_REQUEST: int = 20
+    ENV: Literal["development", "production"] = "development"
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENV == "production"
+
+
+settings = Settings()

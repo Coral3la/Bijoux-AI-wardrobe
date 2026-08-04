@@ -1,0 +1,23 @@
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "T20", "SIM"]
+ignore = [
+    "E501",  # line length is the formatter's job
+    "B008",  # FastAPI's Depends() lives in default arguments by design
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.mypy]
+python_version = "3.14"
+files = ["app"]
+plugins = ["pydantic.mypy"]
+disallow_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+ignore_missing_imports = true

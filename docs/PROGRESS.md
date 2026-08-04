@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 0 — Foundation
-**Status:** not started
++**Status:** in progress — 0.1 and 0.2 complete
 
 Claude Code updates this file at the end of every stage: tick the criteria, set the next stage, and note anything that changed relative to the plan.
 
@@ -10,8 +10,8 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 ## Stage 0 — Foundation
 `stages/STAGE-0-foundation.md` · target 3–4 days
 
-- [ ] Repository skeleton
-- [ ] Backend bootstrap, `/health`
++ [x] Repository skeleton
++ [x] Backend bootstrap, `/health`
 - [ ] Database and migration 0001
 - [ ] Closed vocabulary `enums.py`
 - [ ] Auth: register, login, `/auth/me`
