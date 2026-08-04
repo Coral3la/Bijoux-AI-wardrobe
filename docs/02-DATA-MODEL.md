@@ -188,7 +188,6 @@ CREATE TABLE items (
 
 CREATE INDEX idx_items_wardrobe ON items (user_id, status, category)
   WHERE is_archived = FALSE;
-CREATE INDEX idx_items_short ON items (short_id);
 ```
 
 Notes worth understanding:
@@ -197,7 +196,7 @@ Notes worth understanding:
 - **`image_public_id`, not a URL.** URLs are constructed at read time with the transform needed for that context — thumbnail, full view, or the 800px version sent to the vision model. Storing a URL would freeze one transform forever.
 - **`user_edited`** guards against a retag overwriting a manual correction, and gives the testing story a hook: it measures how often the AI got it wrong.
 - **`attributes JSONB`** absorbs future fields (brand, purchase price, embellishments) without a migration.
-- **`short_id`** is 6 characters from an unambiguous alphabet — `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, no `0`/`O`/`1`/`I`/`L`. Generate, check uniqueness, retry on collision.
+- **`short_id`** is 6 characters from an unambiguous alphabet — `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, no `0`/`O`/`1`/`I`/`L`. Generate, check uniqueness, retry on collision. It carries no index of its own: the `UNIQUE` constraint already creates one, and a second would be an exact duplicate maintained on every write.
 
 ---
 

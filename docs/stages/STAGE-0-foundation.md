@@ -29,7 +29,7 @@ FastAPI app with `/health` returning `{status, db, version}`. `pydantic-settings
 `requirements.txt`: fastapi, uvicorn[standard], sqlalchemy>=2.0, alembic, psycopg[binary], pydantic>=2, pydantic-settings, python-jose[cryptography], passlib[bcrypt], python-multipart, cloudinary, httpx, openai, pytest, pytest-asyncio, ruff, mypy.
 
 ### 0.3 Database and migration 0001
-SQLAlchemy `Base`, session factory, `get_db` dependency. Alembic initialised. Migration `0001_initial` creates the `citext` and `pgcrypto` extensions, all enum types, `users`, and `items` exactly as specified in `02-DATA-MODEL.md`.
+SQLAlchemy `Base`, session factory, `get_db` dependency. Alembic initialised. Migration `0001_initial` creates the `citext` and `pgcrypto` extensions, the three enum types (`item_status`, `item_category`, `item_layer`), `users`, and `items` exactly as specified in `02-DATA-MODEL.md`.
 
 Verify: `alembic upgrade head` then `alembic downgrade base` then `upgrade head` again. A migration that cannot roll back is a broken migration.
 
