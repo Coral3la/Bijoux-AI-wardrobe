@@ -51,7 +51,8 @@ Every boundary in the mapping table gets both sides asserted. Also unit-tested w
 - `serializer.py` — wardrobe to compact lines: null omission, field order, token budget
 - `enums.py` — `subcategory` validity per `category`, all 7 categories
 - `short_id` generation — alphabet excludes `0O1IL`, correct length, collision retry
-- `validate_tags()` — every coercion and every rejection path
+- `validate_tag_dict()` — every coercion and every rejection path
+- `validate_tags()` — the retry and the give-up, with the vision call mocked
 - `validate_look_response()` — all eight rules, each failing independently, including anchor present and locked items preserved
 
 ---

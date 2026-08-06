@@ -44,6 +44,12 @@ MAX_FILES_PER_REQUEST=20
 ENV=development
 ```
 
+Only `DATABASE_URL` and `JWT_SECRET` are required. Everything else has a default, and the API keys default to empty strings so that CI can run without an OpenAI account.
+
+`APP_VERSION` is deliberately **not** an environment variable — it is a constant in `app/core/config.py`, so a deployed build cannot misreport its own version.
+
+`DATABASE_URL` carries SQLAlchemy's `postgresql+psycopg://` prefix. `psql` does not understand it; strip `+psycopg` before pasting a connection string into a terminal.
+
 ### Frontend — `frontend/src/environments/`
 
 ```ts

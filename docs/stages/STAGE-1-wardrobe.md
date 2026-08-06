@@ -29,6 +29,8 @@ Prompt lives in `app/prompts/vision_system.md`. Enum lists are appended programm
 
 Include the `USE_FAKE_AI` branch from day one, not as an afterthought — Stage 5 depends on it and retrofitting it is annoying.
 
+**The response schema is unverified until this task runs.** It was written against the documented strict subset but has never been sent to the API, so a `400` on the first live call is a schema problem, not a prompt problem — check the nullable `color_secondary` union and the `minimum`/`maximum` bounds first, and correct `03-AI-CONTRACTS.md` in the same commit. Make one live call with a single image before wiring up the background task; debugging a schema rejection through `BackgroundTasks` is considerably worse.
+
 ### 1.2 Validation and retry
 `validate_tags(raw) -> ItemTags` implementing every check and coercion in `03-AI-CONTRACTS.md`. Exactly one retry on failure, naming the violation. Second failure raises `TaggingError`.
 
@@ -58,6 +60,8 @@ Category chips, colour swatches, formality and warmth ranges. Client-side over t
 
 ### 1.9 Item detail and tag editor
 Full-size image, tags as chips, wear stats placeholder. The editor uses a select per field bound to the closed vocabulary — **never a free-text input**. Show a "You edited this" badge when `user_edited` is true.
+
+**Changing the category select clears and re-prompts for `subcategory`, `rise` and `layer` — all three, not `subcategory` alone.** The server nulls whichever of them the request does not supply (`DECISIONS.md` 030), so an editor that only repopulates the subcategory select silently loses `rise` and `layer` on a `200`. The user must see three empty fields before saving.
 
 ### 1.10 Seed script
 `scripts/seed_demo.py` creating `demo@bijoux.app` with 40 pre-tagged items, `status='ready'`, no AI calls. Images uploaded to Cloudinary once and their `public_id`s committed in the script.

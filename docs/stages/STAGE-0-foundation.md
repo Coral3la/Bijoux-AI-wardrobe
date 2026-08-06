@@ -56,6 +56,8 @@ Validate MIME type and size **before** uploading. Reject with `415` / `413`.
 ### 0.8 Frontend bootstrap
 `npx @angular/cli@22 new bijoux --routing --style=scss` — Angular 22, the current stable release. Do not use Angular 19; it reached end of life in May 2026. Standalone components and zoneless change detection are both defaults in v22, so no flags are needed for either. Tailwind installed and configured with the palette from `05-FRONTEND-SPEC.md`. Routes: `/login`, `/register`, `/wardrobe`. `authGuard`, `jwtInterceptor`. `AuthService` with signals. `assets/i18n/en.json` with the strings used so far.
 
+Also `shared/models/enums.ts` — the hand-mirrored copy of `app/enums.py`, per `02-DATA-MODEL.md`. It lands here rather than in Stage 1 so that the filters (1.8) and the tag editor (1.9) find it already present.
+
 ### 0.9 Login and register screens
 Reactive forms, validation messages, error handling, token stored in `localStorage`, redirect to `/wardrobe` on success.
 

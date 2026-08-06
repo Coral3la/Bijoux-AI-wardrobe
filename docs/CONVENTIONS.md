@@ -37,11 +37,13 @@ Branches: `stage-N-short-name`, merged to `main` when the stage's acceptance cri
 - No bare `except`. Catch the specific exception; log with context.
 - Never `print`. Use the configured logger.
 - Secrets only from settings. No literal keys anywhere, including tests.
+- Configuration fields on `Settings` are UPPER_SNAKE and match their environment variable names exactly. Values derived from them are lowercase properties.
+- SQLAlchemy is synchronous — `Session`, not `AsyncSession`. `async def` is for HTTP clients (OpenAI, Open-Meteo), not for database work.
 
 ```
 snake_case      functions, variables, modules
 PascalCase      classes, Pydantic models
-UPPER_SNAKE     constants and enum members
+UPPER_SNAKE     constants, enum members, settings fields
 ```
 
 ## TypeScript / Angular

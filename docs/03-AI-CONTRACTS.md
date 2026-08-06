@@ -30,7 +30,7 @@ Rules:
 - `display_name` is 2-4 lowercase words a person would use to refer to this
   item, e.g. "light blue mom jeans", "black leather ankle boots".
 - `confidence` is your honest self-assessment from 0.0 to 1.0. Return below
-  0.5 when the image is blurry, cropped, or contains several items.
+  0.35 when the image is blurry, cropped, or contains several items.
 
 warmth — how insulating the garment is to wear. Higher is warmer.
   1  tank top, linen shirt, summer dress, sandals
@@ -62,18 +62,18 @@ The enum lists from `02-DATA-MODEL.md` are appended programmatically so the prom
                  "color_secondary","pattern","material","formality","warmth",
                  "layer","water_resistant","display_name","confidence"],
     "properties": {
-      "category":        { "enum": ["top","bottom","dress","outerwear","shoes","bag","accessory"] },
+      "category":        { "type": "string", "enum": ["top","bottom","dress","outerwear","shoes","bag","accessory"] },
       "subcategory":     { "type": "string" },
       "fit":             { "type": ["string","null"] },
       "length":          { "type": ["string","null"] },
       "rise":            { "type": ["string","null"] },
-      "color_primary":   { "enum": ["black","white","grey","beige","brown","navy","blue","light_blue","red","pink","orange","yellow","green","olive","purple","gold","silver"] },
-      "color_secondary": { "type": ["string","null"] },
-      "pattern":         { "enum": ["solid","stripes","checks","floral","animal","graphic","denim_wash","other"] },
-      "material":        { "enum": ["cotton","denim","knit","wool","leather","linen","silk","synthetic","other"] },
+      "color_primary":   { "type": "string", "enum": ["black","white","grey","beige","brown","navy","blue","light_blue","red","pink","orange","yellow","green","olive","purple","gold","silver"] },
+      "color_secondary": { "type": ["string","null"], "enum": ["black","white","grey","beige","brown","navy","blue","light_blue","red","pink","orange","yellow","green","olive","purple","gold","silver"] },
+      "pattern":         { "type": "string", "enum": ["solid","stripes","checks","floral","animal","graphic","denim_wash","other"] },
+      "material":        { "type": "string", "enum": ["cotton","denim","knit","wool","leather","linen","silk","synthetic","other"] },
       "formality":       { "type": "integer", "minimum": 1, "maximum": 5 },
       "warmth":          { "type": "integer", "minimum": 1, "maximum": 5 },
-      "layer":           { "enum": ["base","mid","outer","standalone"] },
+      "layer":           { "type": "string", "enum": ["base","mid","outer","standalone"] },
       "water_resistant": { "type": "boolean" },
       "display_name":    { "type": "string" },
       "confidence":      { "type": "number", "minimum": 0, "maximum": 1 }
@@ -82,17 +82,34 @@ The enum lists from `02-DATA-MODEL.md` are appended programmatically so the prom
 }
 ```
 
-`subcategory`, `fit`, and `length` are typed as plain strings because their valid values depend on `category`, which JSON Schema cannot express cleanly. They are validated in Python instead.
+`subcategory` is typed as a plain string because its valid values depend on `category`, which JSON Schema cannot express cleanly. `fit` and `length` are plain strings for a different reason: an out-of-vocabulary value there is coerced to null rather than retried, so constraining them in the schema would buy nothing. All three are validated in Python instead.
 
-### Validation and retry — `validate_tags()`
+Notes on the strict subset, because the block above is easy to get subtly wrong:
+
+- **Every property carries a `type`.** A bare `{ "enum": [...] }` does not appear anywhere in the supported subset; the documented form is always `type` plus `enum`.
+- **A nullable enum keeps `enum` and adds `null` to the `type` union only** — `null` does *not* go inside the `enum` array. This is the documented pattern, from the section headed **"All fields must be `required`"**: "it is possible to emulate an optional parameter by using a union type with `null`", illustrated with `{ "type": ["string", "null"], "enum": ["F", "C"] }`. It contradicts plain JSON Schema semantics, under which a `null` value would fail the `enum` constraint — follow the vendor's example, not the spec. Only `color_secondary` is in this shape.
+- **`minimum` / `maximum` are supported** on `integer` and `number` for the base models, which is what `formality`, `warmth` and `confidence` rely on. They are **not** supported for fine-tuned models — if this project ever fine-tunes, those three bounds move into Python.
+- Every property must appear in `required`, and `additionalProperties: false` is mandatory. Optionality is expressed only through a `null` union, never by omission from `required`.
+
+This schema has not yet been sent to the API. It is a paper contract until task 1.1 makes the first live call, and the first thing to suspect if that call returns a 400.
+
+### Validation and retry — `validate_tag_dict()` and `validate_tags()`
+
+Two layers, and the table below spans both. Every row except the last is `app/enums.py` → `validate_tag_dict(d) -> TagValidation`, a pure function that returns a report of `errors` and `coerced` and calls nothing. The *retry* in the right-hand column, and the confidence threshold, belong to `app/services/vision.py` → `validate_tags()`, which reads that report. See `DECISIONS.md` 028.
 
 | Check | On failure |
 |---|---|
+| `category` / `color_primary` / `pattern` / `material` / `layer` in its vocabulary | retry once |
 | `subcategory` belongs to `category` | retry once |
+| `formality` / `warmth` an integer 1–5 | retry once |
 | `fit` / `length` in the global enum, or null | coerce to null |
-| `rise` present only when `category == "bottom"` | coerce to null |
+| `color_secondary` in the global colour enum, or null | coerce to null |
+| `rise` present only when `category == "bottom"`, and in the enum | coerce to null |
 | `layer == "standalone"` for shoes/bag/accessory/dress | coerce |
+| `layer` is `mid` or `outer` when `category == "outerwear"` | coerce to `outer` |
 | `confidence < 0.35` | accept, but set `status='ready'` and flag for review in UI |
+
+The first and third rows cannot fire on model output — Structured Outputs with `strict: true` makes them impossible — but they are not dead checks: `PATCH /items/{id}` runs the same validator on a hand-built request body, where they are the difference between a `422` and a `CHECK` violation surfacing as a `500`.
 
 Retry policy: **one** retry, appending `Your previous response was invalid: {reason}. Correct it.` A second failure sets `status='failed'` and stores `error_message`. Never retry more than once — a model that fails twice on a strict schema is failing on the image, and a third call only spends money.
 
@@ -115,7 +132,7 @@ Each item becomes one compact line. Nulls are omitted.
 ```
 A3F9K2 | top/shirt | oversized | long_sleeve | white | solid | cotton | F3 W2 | base
 7BX1QM | bottom/jeans | straight | full | light_blue | denim_wash | denim | F2 W2 | base | rise:high
-P04FFE | shoes/boots | — | ankle | black | solid | leather | F3 W4 | standalone | waterproof
+P04FFE | shoes/boots | — | ankle | black | solid | leather | F3 W4 | standalone | water_resistant
 ZZ81KA | outerwear/blazer | relaxed | regular | beige | solid | wool | F4 W3 | outer
 ```
 

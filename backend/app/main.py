@@ -1,4 +1,3 @@
-# backend/app/main.py
 import logging
 
 from fastapi import Depends, FastAPI

@@ -196,9 +196,12 @@ Re-runs packing with a refreshed forecast. Replaces the existing looks.
 
 ### `GET /health`
 ```json
-← 200 { "status": "ok", "db": "ok", "version": "0.4.0" }
+← 200 { "status": "ok", "db": "ok",    "version": "0.4.0" }
+← 200 { "status": "ok", "db": "error", "version": "0.4.0" }
 ```
 Used by Render's health check and as the first Playwright smoke test.
+
+Always 200, including when the database is unreachable. `status` reports the process, `db` reports the dependency — see `DECISIONS.md` 027.
 
 ---
 
