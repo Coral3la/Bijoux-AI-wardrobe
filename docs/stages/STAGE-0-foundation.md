@@ -26,7 +26,9 @@ Create the monorepo structure from `01-ARCHITECTURE.md`. Add `.gitignore` coveri
 ### 0.2 Backend bootstrap
 FastAPI app with `/health` returning `{status, db, version}`. `pydantic-settings` config reading `.env`. CORS from `CORS_ORIGINS`. Structured logging — JSON in production, human-readable in development.
 
-`requirements.txt`: fastapi, uvicorn[standard], sqlalchemy>=2.0, alembic, psycopg[binary], pydantic>=2, pydantic-settings, python-jose[cryptography], passlib[bcrypt], python-multipart, cloudinary, httpx, openai, pytest, pytest-asyncio, ruff, mypy.
+`requirements.txt`: fastapi, uvicorn[standard], sqlalchemy>=2.0, alembic, psycopg[binary], pydantic>=2, pydantic-settings, email-validator, PyJWT, bcrypt, python-multipart, cloudinary, httpx, openai, pytest, pytest-asyncio, ruff, mypy.
+
+Three corrections to that list against the original plan, all made once the code met them: `passlib[bcrypt]` → `bcrypt` (`DECISIONS.md` 019, at task 0.2), `python-jose[cryptography]` → `PyJWT` (031, at 0.5), and `email-validator` added (032, at 0.5) because `EmailStr` will not import without it.
 
 ### 0.3 Database and migration 0001
 SQLAlchemy `Base`, session factory, `get_db` dependency. Alembic initialised. Migration `0001_initial` creates the `citext` and `pgcrypto` extensions, the three enum types (`item_status`, `item_category`, `item_layer`), `users`, and `items` exactly as specified in `02-DATA-MODEL.md`.
@@ -39,7 +41,11 @@ Verify: `alembic upgrade head` then `alembic downgrade base` then `upgrade head`
 **Do this before anything that consumes it.** Every later stage depends on this file being right.
 
 ### 0.5 Auth
-`security.py` — bcrypt hashing, JWT encode/decode. Routes `POST /auth/register`, `POST /auth/login`, `GET /auth/me`. `get_current_user` dependency raising `401` on a missing or invalid token.
+`security.py` — bcrypt hashing, JWT encode/decode. `models/user.py`, the first ORM model, imported in `alembic/env.py` as `02-DATA-MODEL.md` requires. Routes `POST /auth/register`, `POST /auth/login`, `GET /auth/me`. `get_current_user` dependency raising `401` on a missing or invalid token.
+
+This task also stands up two pieces of plumbing that no task owned and that it is the first to need: `api/v1/router.py`, the aggregate router named in `01-ARCHITECTURE.md` that every later route module registers into, and `core/errors.py`, the `{detail, code}` envelope that `CONVENTIONS.md` promises and FastAPI does not provide (`DECISIONS.md` 033). The `/api/v1` prefix lives on `api_router` rather than on `main.py`'s `include_router`, so `main.py` never names a version and adding a route module is one line in one file.
+
+**Tests here are `security.py`'s only.** The register, login, duplicate-email, bad-password and `/auth/me` route tests belong to task 0.10, which owns the `conftest.py` and the test-database fixture they need. Do not build that fixture early.
 
 ### 0.6 Cloudinary service
 `services/storage.py`:

@@ -6,8 +6,10 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.api.v1.router import api_router
 from app.core.config import APP_VERSION, settings
 from app.core.deps import get_db
+from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.schemas.health import HealthResponse
 
@@ -16,6 +18,9 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Bijoux API", version=APP_VERSION)
+
+register_error_handlers(app)
+app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,

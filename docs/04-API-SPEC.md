@@ -14,6 +14,7 @@ Auth: `Authorization: Bearer <jwt>` on everything except `/auth/*` and `/health`
   ```json
   { "detail": "Human-readable message", "code": "wardrobe_too_small" }
   ```
+  Two keys, on every error the application raises and on `422`. Routing-level failures are the exception — a `404` on an unknown path and a `405` on the wrong method carry `detail` only, because neither is an application error a client branches on. Where an error concerns a particular field, the field is named inside `detail` — there is no third key. Implemented in `app/core/errors.py` at task 0.5; see `DECISIONS.md` 033 for why FastAPI's native `422` shape is reshaped rather than passed through, and what is lost by doing so.
 - Timestamps are ISO 8601 UTC. Dates are `YYYY-MM-DD`.
 - Pagination: `?limit=` (default 100, max 200) and `?offset=`.
 
@@ -39,6 +40,25 @@ JWT lifetime: 7 days. No refresh token in this project; document the omission in
 
 ### `GET /auth/me`
 Returns the current user object.
+
+### The user object
+
+The `user` key above and the body of `GET /auth/me` and `PATCH /me` are all the same shape — every column of `users` except `password_hash`:
+
+```json
+{ "id": "uuid", "email": "a@b.com", "display_name": "Coral",
+  "height_cm": null, "size_top": null, "size_bottom": null, "size_shoe": null,
+  "style_notes": null, "home_city": null, "home_lat": null, "home_lon": null,
+  "created_at": "2026-08-06T09:14:22Z" }
+```
+
+Every field but `id`, `email` and `created_at` is nullable and is `null` on a fresh account. One shape for one resource — see `DECISIONS.md` 034.
+
+Failure codes on this group: `409` `email_exists`, `401` `invalid_credentials`, `401` `invalid_token`, `422` `validation_error`. Every `401` carries `WWW-Authenticate: Bearer`. Unknown keys in either request body are a `422` rather than being ignored (`DECISIONS.md` 039).
+
+Authentication is a bearer token in the `Authorization` header. There is no OAuth2 password-flow token endpoint — `/auth/login` takes JSON, not form encoding (`DECISIONS.md` 035).
+
+Passwords are a minimum of 8 **characters** and a maximum of 72 **bytes** in UTF-8. The units genuinely differ; the limit is bcrypt's and the error message names bytes. `DECISIONS.md` 036 has the worked example.
 
 ---
 
@@ -203,6 +223,10 @@ Used by Render's health check and as the first Playwright smoke test.
 
 Always 200, including when the database is unreachable. `status` reports the process, `db` reports the dependency — see `DECISIONS.md` 027.
 
+`/health` is the one route **outside** the `/api/v1` prefix. It is mounted at the root because `07-DEPLOYMENT.md` pins Render's health check to `/health`, and because a liveness probe should not be versioned alongside the application's own contract.
+
+The `version` value above is illustrative. `APP_VERSION` is a constant in `app/core/config.py` and does **not** track the task or stage number — do not read `0.4.0` as "task 0.4".
+
 ---
 
 ## Rate limits
@@ -216,3 +240,5 @@ Per user, enforced with a simple in-memory counter — Redis is not worth adding
 | `POST /trips/pack` | 10 per hour |
 
 `429` with `code: "rate_limited"` and a `Retry-After` header. This is the answer to "how do you stop a demo account from burning your OpenAI budget?"
+
+**Known limitation:** `/auth/*` is not on this table and is not throttled. Password guessing against `POST /auth/login` and email enumeration through `POST /auth/register` are both unlimited. The table above exists to cap cost, not to resist attack, and the omission is recorded rather than quietly carried — see `DECISIONS.md` 037 for the enumeration side of it.

@@ -117,6 +117,7 @@ bijoux/
 │   │   ├── core/
 │   │   │   ├── config.py        pydantic-settings, reads .env
 │   │   │   ├── security.py      JWT encode/decode, password hashing
+│   │   │   ├── errors.py        ApiError and the {detail, code} envelope
 │   │   │   └── deps.py          get_db, get_current_user
 │   │   ├── db/
 │   │   │   ├── session.py       engine, SessionLocal

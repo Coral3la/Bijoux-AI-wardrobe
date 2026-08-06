@@ -3,6 +3,9 @@ from logging.config import fileConfig
 import sqlalchemy as sa
 from sqlalchemy import pool
 
+# Imported for the side effect: each model registers itself on Base.metadata,
+# and target_metadata is empty without it.
+import app.models  # noqa: F401
 from alembic import context
 from app.core.config import settings
 from app.db.base import Base

@@ -1,3 +1,4 @@
+
 # Web framework
 fastapi
 uvicorn[standard]
@@ -10,9 +11,10 @@ psycopg[binary]
 # Configuration and validation
 pydantic>=2
 pydantic-settings
+email-validator
 
 # Auth and uploads
-python-jose[cryptography]
+PyJWT
 bcrypt
 python-multipart
 

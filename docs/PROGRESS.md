@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 0 — Foundation
-**Status:** in progress — 0.1 through 0.4 complete
+**Status:** in progress — 0.1 through 0.5 complete
 
 Claude Code updates this file at the end of every stage: tick the criteria, set the next stage, and note anything that changed relative to the plan.
 
@@ -14,7 +14,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Backend bootstrap, `/health`
 - [x] Database and migration 0001
 - [x] Closed vocabulary `enums.py`
-- [ ] Auth: register, login, `/auth/me`
+- [x] Auth: register, login, `/auth/me`
 - [ ] Cloudinary service
 - [ ] Upload endpoint
 - [ ] Frontend bootstrap

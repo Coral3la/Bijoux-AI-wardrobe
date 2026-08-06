@@ -49,6 +49,7 @@ def test_rain_modifier_appended():
 Every boundary in the mapping table gets both sides asserted. Also unit-tested with no AI:
 
 - `serializer.py` — wardrobe to compact lines: null omission, field order, token budget
+- `security.py` — hash and verify round-trip, the 72-byte cap raising rather than truncating, token round-trip, expiry, bad signature, tampered payload. Pure by construction: it imports no ORM and no session (`DECISIONS.md` 038), which is what lets these run at task 0.5, before any fixture exists
 - `enums.py` — `subcategory` validity per `category`, all 7 categories
 - `short_id` generation — alphabet excludes `0O1IL`, correct length, collision retry
 - `validate_tag_dict()` — every coercion and every rejection path
