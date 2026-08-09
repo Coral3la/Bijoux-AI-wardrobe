@@ -49,15 +49,28 @@ This task also stands up two pieces of plumbing that no task owned and that it i
 
 ### 0.6 Cloudinary service
 `services/storage.py`:
-- `upload_image(file_bytes, user_id) -> public_id`
+- `validate_image(file_bytes) -> None`, raising `UnsupportedFileTypeError` or `FileTooLargeError`
+- `upload_image(file_bytes, user_id) -> public_id`, which calls the validator itself
 - `build_url(public_id, transform) -> str` for the four named transforms in `07-DEPLOYMENT.md`
 
-Validate MIME type and size **before** uploading. Reject with `415` / `413`.
+Validate type and size **before** uploading. The original wording here said "validate MIME type", and this task could not do that as written: `upload_image(file_bytes, user_id)` carries no MIME type, and the one the browser declares is client-controlled in any case. The format is identified from the file's own bytes, and the accepted list is narrower than `image/*` — `DECISIONS.md` 045.
+
+The validator is public and separate so that 0.7 can check all twenty files before uploading any; `upload_image` calls it again regardless, because `scripts/seed_demo.py` at 1.10 is a second entrance that never touches a route. The service raises its own exceptions rather than `ApiError`; 0.7 maps them onto `415` / `413` / `502` (`DECISIONS.md` 043, 044).
+
+Also adds `settings.max_upload_bytes`, since a limit derived from a setting belongs on `Settings` per `CONVENTIONS.md` and 0.7 needs the same number without importing the storage module.
+
+**Delete the asset the exercise commands create.** Verifying this task end to end means really uploading a real image under a throwaway `user_id` that will never exist in the database, so remove it from the Cloudinary Media Library afterwards. It is the first instance of the orphaned-asset problem that per-user foldering exists to make auditable (`DECISIONS.md` 047), and leaving it in place while writing down that the problem is auditable would be a poor start.
 
 ### 0.7 Upload endpoint
 `POST /items/upload` — accepts 1–20 files, uploads each to Cloudinary, inserts an `items` row with a generated `short_id` and `status='processing'`, returns `202` with the rows. No background task yet.
 
 `GET /items` and `GET /items/{id}` with basic filtering.
+
+**Check `UploadFile.size` before `await file.read()`.** `01-ARCHITECTURE.md` claims backend memory during upload is "bounded by a 10 MB limit", and nothing enforces that claim: `validate_image` receives bytes that are already resident, so at twenty files it is a backstop on 200 MB, not a bound on it. Render's free tier will not survive a client that ignores the documented limit. The size check that actually bounds memory is the one on the `UploadFile` before it is read, against `settings.max_upload_bytes`; `validate_image` stays as the second line of defence and as the rule the seed script gets for free.
+
+Validate every file — type and size — before uploading any of them. `04-API-SPEC.md` makes one bad file reject the whole request, so validating as you go would leave the already-uploaded assets of a failed batch orphaned in Cloudinary.
+
+Map `storage.py`'s exceptions here: `UnsupportedFileTypeError` → `415` `unsupported_file_type`, `FileTooLargeError` → `413` `file_too_large`, `StorageError` → `502` `upload_failed`. An item belonging to another user is `404` `not_found`, never `403`.
 
 ### 0.8 Frontend bootstrap
 `npx @angular/cli@22 new bijoux --routing --style=scss` — Angular 22, the current stable release. Do not use Angular 19; it reached end of life in May 2026. Standalone components and zoneless change detection are both defaults in v22, so no flags are needed for either. Tailwind installed and configured with the palette from `05-FRONTEND-SPEC.md`. Routes: `/login`, `/register`, `/wardrobe`. `authGuard`, `jwtInterceptor`. `AuthService` with signals. `assets/i18n/en.json` with the strings used so far.
@@ -78,7 +91,7 @@ Reactive forms, validation messages, error handling, token stored in `localStora
 - [ ] Register → login → `/auth/me` works end to end from the browser
 - [ ] `alembic upgrade head` and `downgrade base` both run clean
 - [ ] Uploading 3 images returns `202` with 3 rows, all `status='processing'`, and 3 assets appear in Cloudinary
-- [ ] Uploading a `.txt` file returns `415`; a 15 MB image returns `413`
+- [ ] Uploading a `.txt` file returns `415`; a 15 MB image returns `413`; an SVG returns `415`
 - [ ] A logged-out user hitting `/wardrobe` is redirected to `/login`
 - [ ] `ng version` reports Angular 22.x
 - [ ] Auth tests pass

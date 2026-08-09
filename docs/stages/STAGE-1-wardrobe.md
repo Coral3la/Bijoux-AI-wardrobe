@@ -29,6 +29,8 @@ Prompt lives in `app/prompts/vision_system.md`. Enum lists are appended programm
 
 Include the `USE_FAKE_AI` branch from day one, not as an afterthought — Stage 5 depends on it and retrofitting it is annoying.
 
+**Settle the HEIC question before the first live call.** The `vision` transform is `f_auto`, and `f_auto` on a HEIC original delivered to a client that sends no `Accept` header is not confirmed to produce a format OpenAI can read — Cloudinary documents the fallback as the format given by the file extension, and these URLs have no extension (`DECISIONS.md` 046). Upload one HEIC through `upload_image`, fetch its `vision` URL with no `Accept` header, and check the `content-type`. If it comes back `image/heic`, change the `vision` transform to `f_jpg` and correct `07-DEPLOYMENT.md`. This costs two minutes here and is very hard to see through a `BackgroundTask`.
+
 **The response schema is unverified until this task runs.** It was written against the documented strict subset but has never been sent to the API, so a `400` on the first live call is a schema problem, not a prompt problem — check the nullable `color_secondary` union and the `minimum`/`maximum` bounds first, and correct `03-AI-CONTRACTS.md` in the same commit. Make one live call with a single image before wiring up the background task; debugging a schema rejection through `BackgroundTasks` is considerably worse.
 
 ### 1.2 Validation and retry

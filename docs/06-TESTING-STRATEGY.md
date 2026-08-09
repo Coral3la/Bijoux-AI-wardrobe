@@ -50,6 +50,7 @@ Every boundary in the mapping table gets both sides asserted. Also unit-tested w
 
 - `serializer.py` — wardrobe to compact lines: null omission, field order, token budget
 - `security.py` — hash and verify round-trip, the 72-byte cap raising rather than truncating, token round-trip, expiry, bad signature, tampered payload. Pure by construction: it imports no ORM and no session (`DECISIONS.md` 038), which is what lets these run at task 0.5, before any fixture exists
+- `storage.py` — the signature table for every accepted and rejected format, truncated files, the size boundary on both sides, and the four transform URLs against `07-DEPLOYMENT.md`. Pure by the same construction as `security.py`: the accept/reject rule is a function of bytes, and the one call that would leave the process is monkeypatched — including a fake that raises if called at all, which is how "validate before uploading" is enforced rather than assumed
 - `enums.py` — `subcategory` validity per `category`, all 7 categories
 - `short_id` generation — alphabet excludes `0O1IL`, correct length, collision retry
 - `validate_tag_dict()` — every coercion and every rejection path

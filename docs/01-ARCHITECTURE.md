@@ -169,7 +169,7 @@ bijoux/
 
 The browser sends bytes to FastAPI, which forwards them to Cloudinary. Direct browser-to-Cloudinary uploads (signed) would save one hop, but then the backend cannot guarantee that every stored image has a matching database row, and orphaned media is a real operational annoyance. One hop is worth the consistency.
 
-**Constraint:** enforce a 10 MB per-file limit and reject non-image MIME types before touching Cloudinary.
+**Constraint:** enforce a 10 MiB per-file limit and accept only JPEG, PNG, WebP and HEIC/HEIF, both decided before touching Cloudinary. The format is identified from the file's own bytes, not from the `Content-Type` the client declares, and the list is narrower than `image/*` on purpose — see `DECISIONS.md` 045.
 
 ### Background jobs use `BackgroundTasks`, not Celery
 

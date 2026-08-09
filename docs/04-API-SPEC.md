@@ -83,7 +83,7 @@ Used by both the profile screen and the trip form, so the frontend never calls a
 ## Items
 
 ### `POST /items/upload`
-`multipart/form-data`, field `files` (repeatable, 1–20 files, ≤ 10 MB each, `image/*` only).
+`multipart/form-data`, field `files` (repeatable, 1–20 files, ≤ 10 MiB each, JPEG · PNG · WebP · HEIC/HEIF only).
 
 ```json
 ← 202 {
@@ -94,7 +94,11 @@ Used by both the profile screen and the trip form, so the frontend never calls a
 }
 ```
 
-Returns as soon as the images are in Cloudinary and the rows are written. Tagging continues in the background. `413` if any file exceeds the limit; `415` for non-images.
+Returns as soon as the images are in Cloudinary and the rows are written. Tagging continues in the background.
+
+Failure codes on this endpoint: `415` `unsupported_file_type`, `413` `file_too_large`, `502` `upload_failed`. `413` if **any** file exceeds the limit and `415` if any file is not an accepted format — both reject the whole request, and both are decided for every file before a single one is uploaded, so a rejected batch leaves nothing behind in Cloudinary.
+
+The accepted formats are narrower than the `image/*` this document specified through task 0.5, and they are identified from the file's own bytes rather than from the `Content-Type` the client declares. SVG in particular is excluded deliberately. `DECISIONS.md` 045 has the reasoning and the trade-off.
 
 ### `GET /items`
 Query: `status`, `category`, `color_primary`, `formality_min`, `formality_max`, `warmth_min`, `warmth_max`, `search`, `include_archived`, `limit`, `offset`.
@@ -110,6 +114,8 @@ Query: `status`, `category`, `color_primary`, `formality_min`, `formality_max`, 
 `PATCH` accepts any tag field. It sets `user_edited = true` and validates every value against the closed vocabulary — the same validator the AI output passes through. `422` with the offending field on an invalid value.
 
 `DELETE` soft-deletes by setting `is_archived = true`. The Cloudinary asset is retained; deleted items may still be referenced by historical looks.
+
+An item that exists but belongs to another user returns `404` with `code: "not_found"` on every one of these — not `403`. One code for every resource, because telling a caller that a row exists but is not theirs is an existence oracle for other people's wardrobes (`DECISIONS.md` 043).
 
 ### `POST /items/{id}/retag`
 Re-runs vision tagging. `409` if `user_edited` is true unless `?force=true` is passed — a manual correction must not be silently overwritten.

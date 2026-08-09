@@ -81,11 +81,21 @@ Comment **why**, never **what**. Code that needs a comment to explain what it do
 
 ## Error handling
 
-Backend returns `{ "detail": str, "code": str }`. Codes are stable strings the frontend can branch on: `wardrobe_too_small`, `stylist_failed`, `forecast_unavailable`, `rate_limited`, `tagging_failed`, `email_exists`, `invalid_credentials`, `invalid_token`, `validation_error`.
+Backend returns `{ "detail": str, "code": str }`. Codes are stable strings the frontend can branch on: `wardrobe_too_small`, `stylist_failed`, `forecast_unavailable`, `rate_limited`, `tagging_failed`, `email_exists`, `invalid_credentials`, `invalid_token`, `validation_error`, `unsupported_file_type`, `file_too_large`, `not_found`, `upload_failed`.
+
+The last four were added at task 0.6. `unsupported_file_type` (`415`) and `file_too_large` (`413`) are STAGE-0's upload rejections; `not_found` (`404`) is the cross-user isolation answer `06-TESTING-STRATEGY.md` requires, and is deliberately one code for every resource rather than one per resource; `upload_failed` (`502`) covers any failure to store an image and closes a gap no document had noticed — without it a Cloudinary outage produced an unhandled `500` with no `code` at all. See `DECISIONS.md` 043.
+
+Services do not raise `ApiError`. They raise their own exceptions and the route maps them, so that a service is still callable from a script with no request in flight — `DECISIONS.md` 044, following the same reasoning as 036.
 
 Two keys, on every error the application raises and on FastAPI's own `422` — the machinery is `app/core/errors.py`, built at task 0.5. Routing-level failures raised before our code runs are the documented exception: a `404` on an unknown path and a `405` on the wrong method carry `detail` only. `HTTPException` alone does not produce this shape and `RequestValidationError` produces a `detail` that is a list; both are normalised by handlers. Where an error concerns a specific field, the field is named inside `detail`, never as a third key. See `DECISIONS.md` 033.
 
 The frontend never renders a raw error. Every failure path has a written message and, where recovery is possible, an action.
+
+## Limits and units
+
+A limit expressed in MB means **mebibytes** — 1024², not 1000². `MAX_UPLOAD_MB=10` is 10,485,760 bytes, and both sides read it from one place: the backend from `settings.max_upload_bytes`, the frontend mirroring the same arithmetic in the upload sheet at task 1.6. Written down because the two definitions differ by 5% and the failure mode is a file the browser accepts and the API rejects.
+
+Where a limit is counted in a unit other than the one a user would count in, the error message names the unit — `DECISIONS.md` 036 is the worked example, with a minimum in characters and a maximum in bytes.
 
 ## Tests
 
