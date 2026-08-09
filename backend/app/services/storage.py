@@ -64,6 +64,11 @@ _HEIF_BRANDS = frozenset(
     {b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"hevm", b"hevs", b"mif1", b"msf1"}
 )
 
+# The widest offset any signature reads. Twelve bytes decide the type for every
+# accepted format, which is what lets the upload route check twenty files
+# before pulling a single one of them into memory.
+SIGNATURE_BYTES = 12
+
 
 def _is_accepted_image(data: bytes) -> bool:
     # Slices rather than indexes throughout: a file shorter than a signature
@@ -76,9 +81,13 @@ def _is_accepted_image(data: bytes) -> bool:
     )
 
 
-def validate_image(file_bytes: bytes) -> None:
-    if not _is_accepted_image(file_bytes):
+def validate_image_type(head: bytes) -> None:
+    if not _is_accepted_image(head):
         raise UnsupportedFileTypeError("Only JPEG, PNG, WebP and HEIC images can be uploaded.")
+
+
+def validate_image(file_bytes: bytes) -> None:
+    validate_image_type(file_bytes)
     if len(file_bytes) > settings.max_upload_bytes:
         raise FileTooLargeError(f"Images must be {settings.MAX_UPLOAD_MB} MB or smaller.")
 

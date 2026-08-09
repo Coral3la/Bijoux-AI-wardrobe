@@ -43,6 +43,10 @@ Wire `BackgroundTasks` into `POST /items/upload`. One task per item. On success,
 
 Add a startup sweep that resets `processing` rows older than 10 minutes to `failed`.
 
+**`items.updated_at` does not update itself — fix it here.** Migration `0001` gives the column `DEFAULT now()` and nothing more; PostgreSQL has no column-level `ON UPDATE`, and neither the model nor the migration installs a trigger. This task is the first in the project that writes to an existing row, so without a fix every tagged item keeps the `updated_at` it was inserted with, and 1.4's `PATCH`, soft `DELETE` and `retag` all inherit the same staleness. The one-line fix is `onupdate=text("now()")` on `Item.updated_at`: it is a Core-level default, so it applies to ORM flushes and to `update()` statements alike, but **not** to raw `text()` SQL or to anything run in `psql`. If database-level truth is wanted instead, that is a trigger and it needs its own migration. Found at task 0.7, which writes the column correctly on insert and never updates a row, and assigned here rather than pre-built there.
+
+**The upload route is a synchronous `def`** (`DECISIONS.md` 049). `BackgroundTasks` accepts both sync and async callables, so `tag_item` being `async` is fine — but a sync background function would run in the threadpool and an async one on the event loop, which matters because the OpenAI call is the long pole.
+
 ### 1.4 Item endpoints
 `PATCH /items/{id}` with full closed-vocabulary validation, setting `user_edited=true`. `DELETE` as soft archive. `POST /items/{id}/retag` with the `409` / `?force=true` behaviour. `GET /items/stats`.
 

@@ -42,7 +42,7 @@ Branches: `stage-N-short-name`, merged to `main` when the stage's acceptance cri
 - Never `print`. Use the configured logger.
 - Secrets only from settings. No literal keys anywhere, including tests.
 - Configuration fields on `Settings` are UPPER_SNAKE and match their environment variable names exactly. Values derived from them are lowercase properties.
-- SQLAlchemy is synchronous — `Session`, not `AsyncSession`. `async def` is for HTTP clients (OpenAI, Open-Meteo), not for database work.
+- SQLAlchemy is synchronous — `Session`, not `AsyncSession`. `async def` is for HTTP clients (OpenAI, Open-Meteo), not for database work. A route that calls a **blocking** third-party library is a synchronous `def` for the same reason: FastAPI runs it in a threadpool, where a `def` handler occupies one slot, whereas the same call awaited inside an `async def` blocks the event loop for every request in the process. `POST /items/upload` is the worked example — `DECISIONS.md` 049.
 
 ```
 snake_case      functions, variables, modules
@@ -110,3 +110,5 @@ Where a limit is counted in a unit other than the one a user would count in, the
 A task is done when the code works, has tests, passes lint and type checks, and the relevant document is updated in the same commit. A stage is done when every acceptance criterion in its file passes and `PROGRESS.md` reflects it.
 
 Where a task's tests depend on scaffolding that a **later** task owns, that task ships the tests it can run unaided and the stage file names the task that completes the coverage. Task 0.5 is the worked example: `security.py` is pure and is unit-tested on delivery, while the register, login and `/auth/me` route tests wait for the `conftest.py` and test-database fixture that task 0.10 owns. This is a deferral with a named owner, not an exemption — a task may not simply declare itself untestable.
+
+Task 0.7 is the second instance, and it shows how far "unaided" reaches. Its rejection paths need no database at all, so they are tested on delivery by overriding `get_db` with a stub that raises when *used* — which turns the absence of the fixture into the assertion, since a route that never touches the session provably rejected the request before it could. Only the row-writing half waits for 0.10.

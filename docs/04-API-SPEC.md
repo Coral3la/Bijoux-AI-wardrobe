@@ -86,17 +86,18 @@ Used by both the profile screen and the trip form, so the frontend never calls a
 `multipart/form-data`, field `files` (repeatable, 1–20 files, ≤ 10 MiB each, JPEG · PNG · WebP · HEIC/HEIF only).
 
 ```json
-← 202 {
-  "items": [
-    { "id": "…", "short_id": "A3F9K2", "status": "processing",
-      "image_url": "https://res.cloudinary.com/…", "created_at": "…" }
-  ]
-}
+← 202 { "items": [ { …full item… } ] }
 ```
+
+Every element is the same **full item** shape `GET /items` returns, with every tag field `null` — one shape for one resource, on the same reasoning as `DECISIONS.md` 034 for the user object. Through task 0.6 this document printed a narrower five-key object here; that was corrected at 0.7 by widening the response rather than shrinking it, and the abbreviated example is why. See `DECISIONS.md` 050.
 
 Returns as soon as the images are in Cloudinary and the rows are written. Tagging continues in the background.
 
-Failure codes on this endpoint: `415` `unsupported_file_type`, `413` `file_too_large`, `502` `upload_failed`. `413` if **any** file exceeds the limit and `415` if any file is not an accepted format — both reject the whole request, and both are decided for every file before a single one is uploaded, so a rejected batch leaves nothing behind in Cloudinary.
+Failure codes on this endpoint: `415` `unsupported_file_type`, `413` `file_too_large`, `502` `upload_failed`. `413` if **any** file exceeds the limit and `415` if any file is not an accepted format — both reject the whole request, and both are decided for every file before a single one is uploaded, so a rejected batch leaves nothing behind in Cloudinary. Type is decided before size for the whole batch, so an over-large non-image reports `415`, preserving at batch level the rule `DECISIONS.md` 045 set for a single file. Where the failure concerns one file, that file's name appears inside `detail`.
+
+Fewer than 1 or more than 20 parts is a `422` `validation_error` naming `files`, not a `413` — the limit on the *count* is a request-shape rule, where `413` is reserved for the size of an individual file. No separate code (`DECISIONS.md` 048).
+
+**A batch that fails after some files are already stored leaves those assets in Cloudinary.** The rows are rolled back, the client gets its error, and the stranded `public_id`s are written to the log at `ERROR`. Nothing deletes them — `DECISIONS.md` 053.
 
 The accepted formats are narrower than the `image/*` this document specified through task 0.5, and they are identified from the file's own bytes rather than from the `Content-Type` the client declares. SVG in particular is excluded deliberately. `DECISIONS.md` 045 has the reasoning and the trade-off.
 
@@ -107,7 +108,15 @@ Query: `status`, `category`, `color_primary`, `formality_min`, `formality_max`, 
 ← 200 { "items": [ { …full item… } ], "total": 138 }
 ```
 
-`search` matches `display_name` only — a simple `ILIKE`, no full-text index.
+`search` matches `display_name` only — a simple `ILIKE`, no full-text index. It is not escaped, so `%` and `_` in the search string keep their wildcard meaning.
+
+`total` counts the filter, not the page. Results are ordered `created_at DESC, short_id` — the second key is load-bearing rather than cosmetic, because `now()` is the transaction timestamp and every row of one upload therefore shares a `created_at` to the microsecond. Archived items are excluded unless `include_archived` is passed.
+
+**The full item** is every column of `items` except that `image_public_id` is accompanied by `image_url`, a ready-built **thumbnail** URL (`w_300,h_300,c_pad,b_white`). The `public_id` is what `cloudinary-url.pipe.ts` builds every other transform from; the thumbnail is included because it is what the grid renders on arrival. See `DECISIONS.md` 050.
+
+All eleven parameters above are implemented as of task 0.7. **An unknown or misspelled query parameter is still silently ignored and still returns `200` with an unfiltered list** — `?colour_primary=navy` filters nothing and says nothing. Query strings have no `extra="forbid"` equivalent, so `DECISIONS.md` 039's guarantee genuinely stops at request bodies. Rejecting unknown query keys would be one piece of middleware; **task 5.4** owns deciding whether to add it or to publish it as a known issue, and it is named here rather than left implied (`DECISIONS.md` 051).
+
+Pagination defaults to 100, and `05-FRONTEND-SPEC.md` filters client-side "over the loaded collection". A wardrobe above 100 items therefore filters over the first page only unless the client passes `limit`. The wardrobe screen must pass it; `01-ARCHITECTURE.md` sizes a realistic wardrobe at 80–150.
 
 ### `GET /items/{id}` · `PATCH /items/{id}` · `DELETE /items/{id}`
 
@@ -246,5 +255,7 @@ Per user, enforced with a simple in-memory counter — Redis is not worth adding
 | `POST /trips/pack` | 10 per hour |
 
 `429` with `code: "rate_limited"` and a `Retry-After` header. This is the answer to "how do you stop a demo account from burning your OpenAI budget?"
+
+**No task in any stage file builds this table.** It is specified here and `STAGE-5` asserts on it, but `STAGE-0` 0.7 built `POST /items/upload` without it and no task between them owns it. That gap was found at task 0.7 and is recorded rather than quietly carried: whoever writes the rate limiter should add it to a stage file first.
 
 **Known limitation:** `/auth/*` is not on this table and is not throttled. Password guessing against `POST /auth/login` and email enumeration through `POST /auth/register` are both unlimited. The table above exists to cap cost, not to resist attack, and the omission is recorded rather than quietly carried — see `DECISIONS.md` 037 for the enumeration side of it.

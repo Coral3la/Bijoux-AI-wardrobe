@@ -11,6 +11,7 @@ from cloudinary.exceptions import Error as CloudinaryError
 
 from app.core.config import settings
 from app.services.storage import (
+    SIGNATURE_BYTES,
     FileTooLargeError,
     StorageError,
     Transform,
@@ -18,6 +19,7 @@ from app.services.storage import (
     build_url,
     upload_image,
     validate_image,
+    validate_image_type,
 )
 
 JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01"
@@ -91,6 +93,45 @@ def test_rejects_an_image_one_byte_over_the_size_limit() -> None:
 def test_reports_an_unsupported_type_before_a_size_problem() -> None:
     with pytest.raises(UnsupportedFileTypeError):
         validate_image(b"x" * (settings.max_upload_bytes + 1))
+
+
+def test_the_signature_width_is_the_widest_offset_any_signature_reads() -> None:
+    # WebP compares data[8:12] and HEIF data[8:12]; nothing reads further, and
+    # the upload route reads exactly this many bytes per file in its first pass.
+    assert SIGNATURE_BYTES == 12
+
+
+@pytest.mark.parametrize(
+    "data", [JPEG, PNG, WEBP, HEIC, HEIF], ids=["jpeg", "png", "webp", "heic", "heif"]
+)
+def test_accepts_every_format_from_the_signature_width_alone(data: bytes) -> None:
+    validate_image_type(data[:SIGNATURE_BYTES])
+
+
+@pytest.mark.parametrize("data", [GIF, SVG, BMP, TEXT], ids=["gif", "svg", "bmp", "text"])
+def test_rejects_a_head_that_carries_no_accepted_signature(data: bytes) -> None:
+    with pytest.raises(UnsupportedFileTypeError):
+        validate_image_type(data[:SIGNATURE_BYTES])
+
+
+@pytest.mark.parametrize(
+    "data,signature_length",
+    [(JPEG, 3), (PNG, 8), (WEBP, 12), (HEIC, 12), (HEIF, 12)],
+    ids=["jpeg", "png", "webp", "heic", "heif"],
+)
+def test_rejects_a_head_truncated_below_its_own_signature(
+    data: bytes, signature_length: int
+) -> None:
+    # The truncated upload a dropped connection produces must be a 415, not an
+    # IndexError from indexing past the end and not a 413 from the size pass.
+    for length in range(signature_length):
+        with pytest.raises(UnsupportedFileTypeError):
+            validate_image_type(data[:length])
+
+
+def test_rejects_an_empty_head() -> None:
+    with pytest.raises(UnsupportedFileTypeError):
+        validate_image_type(b"")
 
 
 def test_has_one_member_per_documented_transform() -> None:

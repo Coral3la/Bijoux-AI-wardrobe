@@ -66,11 +66,21 @@ Also adds `settings.max_upload_bytes`, since a limit derived from a setting belo
 
 `GET /items` and `GET /items/{id}` with basic filtering.
 
-**Check `UploadFile.size` before `await file.read()`.** `01-ARCHITECTURE.md` claims backend memory during upload is "bounded by a 10 MB limit", and nothing enforces that claim: `validate_image` receives bytes that are already resident, so at twenty files it is a backstop on 200 MB, not a bound on it. Render's free tier will not survive a client that ignores the documented limit. The size check that actually bounds memory is the one on the `UploadFile` before it is read, against `settings.max_upload_bytes`; `validate_image` stays as the second line of defence and as the rule the seed script gets for free.
+**Check `UploadFile.size` before the bytes are read.** `DECISIONS.md` 008 claims backend memory during upload is "bounded by a 10 MB limit", and nothing enforces that claim: `validate_image` receives bytes that are already resident, so at twenty files it is a backstop on 200 MB, not a bound on it. Render's free tier will not survive a client that ignores the documented limit. The size check that actually bounds memory is the one on the `UploadFile` before it is read, against `settings.max_upload_bytes`; `validate_image` stays as the second line of defence and as the rule the seed script gets for free.
+
+Two corrections to that paragraph, both made once the code met it. The sentence quoted is **008's**, not `01-ARCHITECTURE.md`'s — that document says "enforce a 10 MiB per-file limit", which task 0.6 had already corrected, and the misattribution stood here through 0.6. And the instruction originally read "before `await file.read()`", which presumes an `async` handler; this route is a synchronous `def` so that the blocking Cloudinary SDK cannot stall the event loop, and it reads through `file.file`. The substance — check the size before the bytes are in memory — is unchanged. `DECISIONS.md` 049.
 
 Validate every file — type and size — before uploading any of them. `04-API-SPEC.md` makes one bad file reject the whole request, so validating as you go would leave the already-uploaded assets of a failed batch orphaned in Cloudinary.
 
+Reading twenty files in full to type-check them would undo the paragraph above, so the two rules are reconciled with a twelve-byte read: `storage.SIGNATURE_BYTES` is the widest offset any accepted signature inspects, the batch is type-checked from heads and size-checked from `UploadFile.size`, and only then is any file read in full. Type before size, so 045's ordering survives the batch. `DECISIONS.md` 048.
+
 Map `storage.py`'s exceptions here: `UnsupportedFileTypeError` → `415` `unsupported_file_type`, `FileTooLargeError` → `413` `file_too_large`, `StorageError` → `502` `upload_failed`. An item belonging to another user is `404` `not_found`, never `403`.
+
+More than `MAX_FILES_PER_REQUEST` files is a `422` `validation_error`, not a `413` — no document specified it and no new code was invented for it (`DECISIONS.md` 048). `GET /items` implements all eleven documented query parameters rather than a subset, because an undeclared parameter is silently ignored and that is 039's failure arriving through the one door 039 does not cover (`DECISIONS.md` 051).
+
+**Rate limiting is not built here and is not built anywhere.** `04-API-SPEC.md` specifies 100 files per hour on this endpoint and `STAGE-5` asserts on it, but no task in any stage file creates it. Out of scope for 0.7 and recorded in `04-API-SPEC.md` as an unowned gap rather than silently skipped.
+
+**Delete the assets the exercise commands create**, for the same reason 0.6 did: verifying this task means really uploading under a throwaway account, and the successful batch leaves three assets under `bijoux/<that user's uuid>/`.
 
 ### 0.8 Frontend bootstrap
 `npx @angular/cli@22 new bijoux --routing --style=scss` — Angular 22, the current stable release. Do not use Angular 19; it reached end of life in May 2026. Standalone components and zoneless change detection are both defaults in v22, so no flags are needed for either. Tailwind installed and configured with the palette from `05-FRONTEND-SPEC.md`. Routes: `/login`, `/register`, `/wardrobe`. `authGuard`, `jwtInterceptor`. `AuthService` with signals. `assets/i18n/en.json` with the strings used so far.
@@ -83,6 +93,10 @@ Reactive forms, validation messages, error handling, token stored in `localStora
 ### 0.10 Test scaffolding
 `pytest.ini` with the `eval` marker registered. `conftest.py` with a test database fixture and a `TestClient`. Tests for register, login, duplicate email, bad password, and `/auth/me` with and without a token.
 
+This task also owns the row-writing half of 0.7's coverage, which needs the database fixture it builds: that `POST /items/upload` inserts one row per file with `status='processing'`, that `short_id` is unique across a batch and retried on collision, and cross-user isolation on `GET /items` and `GET /items/{id}`. Task 0.7 shipped the half that runs unaided — the rejection paths, with `get_db` stubbed to raise on use so that "nothing reached the database" is asserted rather than assumed. `06-TESTING-STRATEGY.md` lists collision retry under unit tests; it cannot be one, because the constraint is what detects a collision.
+
+Note on the config file: pytest 9 already reports `backend/pyproject.toml` as its `configfile`, and `DECISIONS.md` 020 put every other tool's configuration there. Register the marker under `[tool.pytest.ini_options]` in `pyproject.toml` rather than creating a separate `pytest.ini`, and correct the wording above when you do.
+
 ---
 
 ## Acceptance criteria
@@ -90,8 +104,8 @@ Reactive forms, validation messages, error handling, token stored in `localStora
 - [ ] `GET /health` returns 200 with `db: "ok"`
 - [ ] Register → login → `/auth/me` works end to end from the browser
 - [ ] `alembic upgrade head` and `downgrade base` both run clean
-- [ ] Uploading 3 images returns `202` with 3 rows, all `status='processing'`, and 3 assets appear in Cloudinary
-- [ ] Uploading a `.txt` file returns `415`; a 15 MB image returns `413`; an SVG returns `415`
+- [x] Uploading 3 images returns `202` with 3 rows, all `status='processing'`, and 3 assets appear in Cloudinary
+- [x] Uploading a `.txt` file returns `415`; a 15 MB image returns `413`; an SVG returns `415`
 - [ ] A logged-out user hitting `/wardrobe` is redirected to `/login`
 - [ ] `ng version` reports Angular 22.x
 - [ ] Auth tests pass

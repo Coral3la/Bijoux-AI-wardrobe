@@ -118,6 +118,8 @@ bijoux/
 │   │   │   ├── config.py        pydantic-settings, reads .env
 │   │   │   ├── security.py      JWT encode/decode, password hashing
 │   │   │   ├── errors.py        ApiError and the {detail, code} envelope
+│   │   │   ├── logging.py       JSON in production, human-readable in dev
+│   │   │   ├── short_id.py      the 6-char id the AI layer uses
 │   │   │   └── deps.py          get_db, get_current_user
 │   │   ├── db/
 │   │   │   ├── session.py       engine, SessionLocal
@@ -170,6 +172,8 @@ bijoux/
 The browser sends bytes to FastAPI, which forwards them to Cloudinary. Direct browser-to-Cloudinary uploads (signed) would save one hop, but then the backend cannot guarantee that every stored image has a matching database row, and orphaned media is a real operational annoyance. One hop is worth the consistency.
 
 **Constraint:** enforce a 10 MiB per-file limit and accept only JPEG, PNG, WebP and HEIC/HEIF, both decided before touching Cloudinary. The format is identified from the file's own bytes, not from the `Content-Type` the client declares, and the list is narrower than `image/*` on purpose — see `DECISIONS.md` 045.
+
+**Both decisions are made for the whole batch before any file is uploaded**, because one bad file rejects the whole request and validating as you go would strand the assets already sent. Type comes from a twelve-byte read per part and size from `UploadFile.size`, so a twenty-file batch is fully decided for 240 bytes of reading and only one file's bytes are ever resident (`DECISIONS.md` 048). What that bounds is process memory, not the request: Starlette spools the entire body before the handler runs, rolling parts above 1 MiB to disk, so twenty 10 MiB files cost ~200 MB of ephemeral disk whatever our code does. See the amendment to `DECISIONS.md` 008 and the risk entry in `07-DEPLOYMENT.md`.
 
 ### Background jobs use `BackgroundTasks`, not Celery
 

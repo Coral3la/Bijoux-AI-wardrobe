@@ -50,6 +50,14 @@ Only `DATABASE_URL` and `JWT_SECRET` are required. Everything else has a default
 
 Empty Cloudinary credentials fail at call time rather than at import, and the SDK reports them as a plain `ValueError`, not as a Cloudinary error — see `DECISIONS.md` 044 for why `storage.py` catches wider than the SDK documents.
 
+**An unset `CLOUDINARY_CLOUD_NAME` breaks reads as well as writes, and less legibly.** `build_url` raises `StorageError` rather than emit a URL with an empty host (046), and from task 0.7 it runs during response serialisation, so `GET /items` fails with a bare `500` carrying no `code` — the one shape `CONVENTIONS.md` promises the frontend never sees. `/health` does not check Cloudinary, so nothing surfaces it earlier. Recorded as a known limitation with task 5.4 as its owner (`DECISIONS.md` 050); the practical answer is that this variable is not optional in any environment that serves items.
+
+## Upload sizing on the free tier
+
+`POST /items/upload` accepts up to 20 files of up to 10 MiB. The route reads one file into memory at a time (`DECISIONS.md` 048), so peak RSS is bounded at roughly 10 MiB — but **Starlette parses and spools the whole multipart body before the handler runs**, rolling every part above 1 MiB to a temporary file. A maximal request therefore writes ~200 MB to the instance's ephemeral disk before any of our code sees it, and a client ignoring the documented limits can do so repeatedly.
+
+Nothing in the application can prevent this: FastAPI resolves the form before the handler body executes, so the only bound is a `Content-Length` check in middleware or a request-size limit at the proxy. **Neither is built.** It belongs with the Render configuration rather than with the API — task 5.6 — and it is written down here rather than left as a surprise under load. The amendment to `DECISIONS.md` 008 has the measurements.
+
 `APP_VERSION` is deliberately **not** an environment variable — it is a constant in `app/core/config.py`, so a deployed build cannot misreport its own version.
 
 `DATABASE_URL` carries SQLAlchemy's `postgresql+psycopg://` prefix. `psql` does not understand it; strip `+psycopg` before pasting a connection string into a terminal.

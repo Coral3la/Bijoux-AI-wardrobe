@@ -200,7 +200,9 @@ Notes worth understanding:
 - **`image_public_id`, not a URL.** URLs are constructed at read time with the transform needed for that context — thumbnail, full view, or the 800px version sent to the vision model. Storing a URL would freeze one transform forever.
 - **`user_edited`** guards against a retag overwriting a manual correction, and gives the testing story a hook: it measures how often the AI got it wrong.
 - **`attributes JSONB`** absorbs future fields (brand, purchase price, embellishments) without a migration.
-- **`short_id`** is 6 characters from an unambiguous alphabet — `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, no `0`/`O`/`1`/`I`/`L`. Generate, check uniqueness, retry on collision. It carries no index of its own: the `UNIQUE` constraint already creates one, and a second would be an exact duplicate maintained on every write.
+- **`short_id`** is 6 characters from an unambiguous alphabet — `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, no `0`/`O`/`1`/`I`/`L`. Generate, check uniqueness, retry on collision. It carries no index of its own: the `UNIQUE` constraint already creates one, and a second would be an exact duplicate maintained on every write. "Check uniqueness" is done by *inserting* and catching the violation on `uq_items_short_id`, not by selecting first — the same race-free pattern 037 chose for `uq_users_email`. The generator lives in `app/core/short_id.py` (`DECISIONS.md` 052).
+- **`updated_at` does not maintain itself.** `DEFAULT now()` fires on insert only; PostgreSQL has no column-level `ON UPDATE` and migration `0001` installs no trigger. Task 1.3 is the first writer to an existing row and owns fixing it — see `STAGE-1-wardrobe.md`. Until then the column is correct on insert and stale after any update.
+- **`wear_count` and `last_worn_at` are shown above but do not exist yet.** Migration `0003` adds them, per the table below. The ORM model added at task 0.7 deliberately omits both, because a model declaring a column the database lacks breaks every query against it.
 
 ---
 

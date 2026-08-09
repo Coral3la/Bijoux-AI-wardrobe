@@ -52,7 +52,7 @@ Every boundary in the mapping table gets both sides asserted. Also unit-tested w
 - `security.py` — hash and verify round-trip, the 72-byte cap raising rather than truncating, token round-trip, expiry, bad signature, tampered payload. Pure by construction: it imports no ORM and no session (`DECISIONS.md` 038), which is what lets these run at task 0.5, before any fixture exists
 - `storage.py` — the signature table for every accepted and rejected format, truncated files, the size boundary on both sides, and the four transform URLs against `07-DEPLOYMENT.md`. Pure by the same construction as `security.py`: the accept/reject rule is a function of bytes, and the one call that would leave the process is monkeypatched — including a fake that raises if called at all, which is how "validate before uploading" is enforced rather than assumed
 - `enums.py` — `subcategory` validity per `category`, all 7 categories
-- `short_id` generation — alphabet excludes `0O1IL`, correct length, collision retry
+- `short_id` generation — alphabet excludes `0O1IL`, correct length, no repeat across a large sample. **Collision retry is not here**, and the original wording was wrong to place it: what detects a collision is the `uq_items_short_id` constraint, so the retry cannot run without a database. Task 0.7 shipped the pure half; task 0.10 owns the retry with the rest of the row-writing tests
 - `validate_tag_dict()` — every coercion and every rejection path
 - `validate_tags()` — the retry and the give-up, with the vision call mocked
 - `validate_look_response()` — all eight rules, each failing independently, including anchor present and locked items preserved
@@ -93,6 +93,7 @@ def fake_vision(monkeypatch):
 What gets covered:
 
 - **Upload returns 202 before tagging completes.** Assert `status == 'processing'` in the response body — this is the core UX promise and it should be enforced by a test.
+- **The upload rejection paths, without a database.** Task 0.7 covers `415` (text, SVG, empty, truncated), `413`, `415`-before-`413` on an over-large non-image, one bad file rejecting a whole batch, the `422` on 0 and on 21 files, the `502` on a storage failure, and `401` on every route — with `get_db` overridden by a stub that raises on *attribute access* and `cloudinary.uploader.upload` monkeypatched to raise if called. That stub is the assertion: it is what proves "every file is decided before any file is uploaded" rather than assuming it. It raises on use rather than on call because FastAPI resolves every dependency before the handler runs, so a call-raising stub would fail requests the route rejects first.
 - **Background task transitions the row** to `ready` with populated tags.
 - **Tagging failure** sets `status='failed'` and `error_message`, and does not raise into the request.
 - **Hallucination guard:** feed a stylist fixture containing an ID that is not in the wardrobe and assert a `502`, not a partially rendered look. This is the single most important integration test in the project.

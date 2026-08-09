@@ -45,6 +45,12 @@ Any real defect found and not fixed gets a `test.fail()` test with a comment nam
 
 A suite that records a known bug reads as more mature than one that hides it. This was the right call on the Playwright assignment and it is the right call here.
 
+**Three limitations found in earlier stages are assigned here rather than left to be rediscovered.** Each needs either a fix or a `KNOWN-ISSUES.md` entry, and the decision is this task's:
+
+- **Unknown query parameters are silently ignored.** `?colour_primary=navy` returns `200` unfiltered. `DECISIONS.md` 039 forbids this for request bodies and query strings have no equivalent of `extra="forbid"`, so the guarantee stops at the body. The fix is middleware rejecting query keys a route did not declare (`DECISIONS.md` 051).
+- **A failed upload batch strands assets in Cloudinary.** They are logged, never deleted, and reconciling them is a manual directory listing per user (`DECISIONS.md` 053).
+- **`GET /items` returns a bare `500` if `CLOUDINARY_CLOUD_NAME` is unset**, because `build_url` raises during serialisation and `/health` does not check Cloudinary (`DECISIONS.md` 050).
+
 ### 5.5 CI
 `.github/workflows/ci.yml` per `07-DEPLOYMENT.md`. Three jobs: backend, frontend, e2e. Playwright HTML report and traces uploaded as artefacts. `eval`-marked tests excluded. No OpenAI key present anywhere in CI.
 

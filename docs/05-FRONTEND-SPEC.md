@@ -93,17 +93,25 @@ The home screen and the most-used surface.
 
 **Filter sheet:** category, colour swatches, formality range, warmth range, "never worn" toggle *(Stage 3)*. Filters are client-side over the loaded collection — the whole wardrobe fits in memory.
 
+That only holds if the whole wardrobe was loaded. `GET /items` defaults to `limit=100` and caps at 200, while a realistic wardrobe is 80–150 items, so the store must pass an explicit `limit` rather than take the default — otherwise the filter bar silently filters over the first hundred items and the counts are wrong with no error anywhere.
+
 ### 3. Upload sheet — bottom sheet over the wardrobe
 
 Two buttons, both leading to the same pipeline:
 
 ```html
 <!-- opens the camera directly on mobile -->
-<input type="file" accept="image/*" capture="environment" (change)="onFiles($event)">
+<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+       capture="environment" (change)="onFiles($event)">
 
 <!-- multi-select from the gallery -->
-<input type="file" accept="image/*" multiple (change)="onFiles($event)">
+<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+       multiple (change)="onFiles($event)">
 ```
+
+`accept` was `image/*` through task 0.6. It is narrowed to match the formats the API actually accepts (`DECISIONS.md` 045) — left as `image/*`, the gallery picker offers GIFs, BMPs and SVGs that the upload endpoint answers with a `415`, which reads to the user as the app breaking rather than as the picker being wrong. `accept` is a hint the user can override, so it replaces no server-side check.
+
+The sheet must also enforce the batch rules before it posts, because the server rejects the **whole** request for one bad file: at most `MAX_FILES_PER_REQUEST` (20) files, each at most `MAX_UPLOAD_MB` mebibytes. Mirror the arithmetic from `CONVENTIONS.md` — 1024², not 1000².
 
 - **Take a photo** — for adding items one at a time. After each upload the sheet stays open so the user can shoot the next garment without navigating.
 - **Choose from gallery** — up to 20 at once. This is the wardrobe-filling path.
