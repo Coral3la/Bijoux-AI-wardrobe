@@ -64,15 +64,34 @@ Nothing in the application can prevent this: FastAPI resolves the form before th
 
 ### Frontend — `frontend/src/environments/`
 
+Three files, created by `ng generate environments` at task 0.8 and typed against a shared interface so a key cannot be present in one and missing from the other:
+
 ```ts
-export const environment = {
+// environment.model.ts — the shape both files satisfy
+export interface Environment {
+  readonly production: boolean;
+  readonly apiUrl: string;
+  readonly cloudinaryCloudName: string;
+}
+
+// environment.ts — the BASE file, used by `ng build`
+export const environment: Environment = {
+  production: true,
+  apiUrl: 'https://REPLACE-WITH-RENDER-HOST/api/v1',
+  cloudinaryCloudName: 'REPLACE-WITH-CLOUD-NAME',
+};
+
+// environment.development.ts — swapped in by fileReplacements for `ng serve`
+export const environment: Environment = {
   production: false,
   apiUrl: 'http://localhost:8000/api/v1',
-  cloudinaryCloudName: 'your-cloud-name',
+  cloudinaryCloudName: 'REPLACE-WITH-CLOUD-NAME',
 };
 ```
 
-Only the Cloudinary **cloud name** reaches the browser — it is public by design, used to build transform URLs. The API key and secret never leave the backend.
+**The base file is the production one**, and the development file is the replacement — that is the direction `ng generate environments` wires `fileReplacements`, and it is the opposite of what this section showed through task 0.7, which printed a single file with `production: false`.
+
+Only the Cloudinary **cloud name** reaches the browser — it is public by design, used to build transform URLs. The API key and secret never leave the backend. Note that unlike `backend/.env`, these files **are committed**: the cloud name belongs in them, a credential never does.
 
 ---
 
@@ -131,9 +150,12 @@ Running migrations in the start command is acceptable at this scale — one inst
 
 ### Vercel
 1. Import the repo, root directory `frontend`.
-2. Build: `npm run build`, output `dist/bijoux/browser`. Node 20 or newer — Angular 22 requires it.
-3. Add `NG_APP_API_URL` pointing at the Render URL.
-4. Add the Vercel domain to `CORS_ORIGINS` on Render.
+2. Build: `npm run build`, output `dist/bijoux/browser`. **Node 24** — set it explicitly in Vercel's Node.js Version setting. Angular 22 declares `node: ^22.22.3 || ^24.15.0 || >=26.0.0`; Node 20 is excluded and an earlier draft of this line was wrong to allow it (`DECISIONS.md` 054).
+3. Add the Vercel domain to `CORS_ORIGINS` on Render.
+
+**There is no environment variable for the API URL.** An earlier draft of this section said to set `NG_APP_API_URL` in Vercel; that prefix belongs to `@ngx-env/builder`, which this project does not use, so the variable would have been set, silently ignored, and discovered only when the deployed build called `localhost`. The API URL is edited in `frontend/src/environments/environment.ts` and pushed — see `DECISIONS.md` 061. Do not go looking for the dashboard setting.
+
+The Angular project is named `bijoux` while its directory is `frontend`, which is why the root directory and the output path disagree. That is deliberate (`DECISIONS.md` 055).
 
 ---
 

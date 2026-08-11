@@ -19,6 +19,7 @@ src/app/
 ├── core/
 │   ├── auth/            auth.service.ts (signals), auth.guard.ts, jwt.interceptor.ts
 │   ├── api/             items.api.ts, looks.api.ts, trips.api.ts, weather.api.ts, me.api.ts
+│   ├── i18n/            i18n.service.ts
 │   └── state/           wardrobe.store.ts, user.store.ts
 ├── features/
 │   ├── auth/            login.page.ts, register.page.ts
@@ -29,10 +30,16 @@ src/app/
 │   └── profile/         profile.page.ts
 ├── shared/
 │   ├── ui/              button, chip, sheet, skeleton, empty-state, spinner, toast
-│   ├── models/          item.model.ts, look.model.ts, trip.model.ts, enums.ts
+│   ├── models/          user.model.ts, item.model.ts, look.model.ts,
+│   │                    trip.model.ts, enums.ts
 │   └── pipes/           cloudinary-url.pipe.ts, enum-label.pipe.ts
-└── assets/i18n/en.json
+
+src/environments/        environment.model.ts, environment.ts,
+                         environment.development.ts
+public/i18n/en.json
 ```
+
+Two corrections made at task 0.8. `user.model.ts` was missing — `AuthService` needs a `User` and a `TokenResponse` from its first line, and both mirror `04-API-SPEC.md`'s user object (`DECISIONS.md` 059). And the string file is at **`public/i18n/en.json`**, not `src/app/assets/i18n/en.json`: `public/` has been Angular's asset root since v18, `src/assets` does not exist in a v22 scaffold, and a file under `src/app/` is not served at runtime at all. The path this diagram drew through task 0.7 could not have been built.
 
 ---
 
@@ -231,6 +238,9 @@ Hard stop after 3 minutes; mark anything still processing as failed in the UI an
 One decision, made once, applied everywhere: **the clothes are the design.** The interface is a neutral gallery wall.
 
 - Background `#FAFAF8`, surfaces white, text `#1A1A1A`, one accent used sparingly.
+- **The accent is `#2F4858`**, a deep desaturated ink-blue, settled at task 0.8. A warm mid-chroma accent — terracotta was the alternative — reads as a garment itself and competes with brown, beige, red and pink, four of the seventeen wardrobe colours it would sit beside in the grid. `DECISIONS.md` 057.
+- **The display typeface is Fraunces**; body text uses Tailwind's default `--font-sans`, which is already the system stack this section asks for and is deliberately not overridden. Self-hosting the font files is **task 0.9's**; until then headings fall through to `ui-serif, Georgia, serif`.
+- The four colours and the display face are declared once, as `@theme` tokens in `frontend/src/tailwind.css`, and generate their own utilities (`bg-canvas`, `text-ink`, `font-display`). There is no `tailwind.config.js` — Tailwind 4 is CSS-first. `DECISIONS.md` 056.
 - Cut-out garment images on white read as a catalogue. Nothing else should compete with them.
 - Generous whitespace, no card borders — use shadow and spacing for separation.
 - One display typeface for headings, one system stack for body.
@@ -242,7 +252,7 @@ One decision, made once, applied everywhere: **the clothes are the design.** The
 
 English only in this project, Hebrew afterwards. Two rules make that a JSON file rather than a rewrite:
 
-1. **No hard-coded user-facing strings.** Everything goes through a key in `assets/i18n/en.json`.
+1. **No hard-coded user-facing strings.** Everything goes through a key in `public/i18n/en.json`, read by `core/i18n/i18n.service.ts` — forty lines, signal-based, no dependency, with `{{name}}` interpolation from the first version. Keys are flat and dotted (`login.title`); a missing key renders as itself, and a placeholder with no value supplied is left visible rather than blanked, so both failures are findable on screen. Components inject the service and call `t()`; there is no translate pipe. `DECISIONS.md` 058 has the reasoning and names `@ngx-translate/core` as the escape hatch if a second locale ever arrives.
 2. **CSS logical properties only** — `margin-inline-start`, `padding-inline-end`, `text-align: start`. Never `left` or `right` for layout.
 
 Tailwind supports the logical variants (`ms-4`, `me-2`, `text-start`). Use them from the first component.

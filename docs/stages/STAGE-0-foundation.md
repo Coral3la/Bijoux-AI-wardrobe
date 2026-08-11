@@ -83,12 +83,38 @@ More than `MAX_FILES_PER_REQUEST` files is a `422` `validation_error`, not a `41
 **Delete the assets the exercise commands create**, for the same reason 0.6 did: verifying this task means really uploading under a throwaway account, and the successful batch leaves three assets under `bijoux/<that user's uuid>/`.
 
 ### 0.8 Frontend bootstrap
-`npx @angular/cli@22 new bijoux --routing --style=scss` — Angular 22, the current stable release. Do not use Angular 19; it reached end of life in May 2026. Standalone components and zoneless change detection are both defaults in v22, so no flags are needed for either. Tailwind installed and configured with the palette from `05-FRONTEND-SPEC.md`. Routes: `/login`, `/register`, `/wardrobe`. `authGuard`, `jwtInterceptor`. `AuthService` with signals. `assets/i18n/en.json` with the strings used so far.
+`npx @angular/cli@22 new bijoux --directory frontend --style=scss --ssr=false --zoneless --skip-git` — Angular 22, the current stable release. Do not use Angular 19; it reached end of life in May 2026. Standalone components, routing and zoneless change detection are all schematic defaults in v22 — `routing`, `standalone` and `zoneless` each default to `true` in `application/schema.json`. **`--routing` is therefore dropped from the command rather than carried forward**, because a flag that restates a default reads as though it were doing something. `--zoneless` is kept for the opposite reason: it is the one default a reader is most likely to doubt, since it was opt-in until recently. `--ssr=false` is passed because `ssr` is the only relevant option carrying an `x-prompt`, so omitting it stops the command to ask.
+
+Three corrections to the command as it stood through task 0.7. **`--directory frontend`** is what reconciles `01-ARCHITECTURE.md`'s `frontend/` with `07-DEPLOYMENT.md`'s `dist/bijoux/browser` — the project is `bijoux`, the directory is `frontend` (`DECISIONS.md` 055). **`--skip-git`**, because this repository already exists. And **Node 24**: `@angular/cli@22.1.3` declares `node: ^22.22.3 || ^24.15.0 || >=26.0.0`, so the "Node 20+" written elsewhere in these documents was never a version this command would run on (`DECISIONS.md` 054).
+
+Tailwind 4, installed by hand and wired the way Angular's own internal `tailwind` schematic wires it — a separate plain-CSS file listed before `styles.scss`, because Sass resolves `@import` before PostCSS ever runs (`DECISIONS.md` 056). The palette is `05-FRONTEND-SPEC.md`'s, with the accent and display face settled at this task (057).
+
+Routes: `/login`, `/register`, `/wardrobe`, plus `''` and `**` both redirecting to `/wardrobe`. `authGuard`, `jwtInterceptor`. `AuthService` with signals, owning `localStorage` outright so that 0.9 owns only its two screens. `core/i18n/i18n.service.ts` and **`public/i18n/en.json`** — not `assets/`, which is not an asset root in a v22 scaffold and would never have been served (058).
+
+`ng new` scaffolds the test runner: Vitest and jsdom land in `devDependencies` and `angular.json` gets a `@angular/build:unit-test` target, so `ng test` works with no extra configuration and picks up `**/*.spec.ts` automatically.
+
+**Verifying Tailwind takes two greps, not a successful build.** A build that merely succeeds is not evidence — the first attempt at this task produced a green build, a rendering page, and no palette at all (`DECISIONS.md` 064). Both halves have to be asserted positively, because each can pass while the other fails:
+
+```bash
+rm -rf dist .angular && npx ng build
+grep -c "tab-size" dist/bijoux/browser/styles-*.css          # preflight ran → 1
+grep -o -- "--color-accent:[^;]*" dist/bijoux/browser/styles-*.css   # theme survived
+```
+
+The first proves `@import 'tailwindcss'` resolved and Tailwind emitted its base layer. The second proves our `@theme` block reached the output rather than being tree-shaken out of it. Grepping for the string `tailwindcss` proves nothing in either direction — that literal never survives import resolution, so it reads `0` in a perfectly working build. Match the hex in lower case; prettier rewrites `#2F4858` on save.
 
 Also `shared/models/enums.ts` — the hand-mirrored copy of `app/enums.py`, per `02-DATA-MODEL.md`. It lands here rather than in Stage 1 so that the filters (1.8) and the tag editor (1.9) find it already present.
 
 ### 0.9 Login and register screens
-Reactive forms, validation messages, error handling, token stored in `localStorage`, redirect to `/wardrobe` on success.
+Reactive forms, validation messages, error handling, redirect to `/wardrobe` on success. The token is already stored in `localStorage` — `AuthService` owns that from 0.8, and this task owns only the two screens that call it.
+
+**This task also owns three things 0.8 deferred to it by name**, each with a decision entry rather than an omission:
+
+- **Self-hosting Fraunces** — woff2 files, `@font-face`, a preload hint and a `font-display` choice. Until it lands every heading falls through to Georgia. `DECISIONS.md` 057.
+- **Global `401` handling.** `jwtInterceptor` attaches the bearer token and does nothing else at 0.8. This task decides what a `401` on an authenticated request does — clear the token and navigate to `/login` is the expected answer — and records it. `DECISIONS.md` 060.
+- **Restoring `currentUser` on reload.** After 0.8 a stored token survives a reload but `currentUser()` is `null`, so `isAuthenticated()` can be `true` with no user object. The fix is a `GET /auth/me` at bootstrap, and it belongs here because it is the same question as the `401` branch above: what to do when a stored token turns out to be bad. `DECISIONS.md` 062.
+
+Note for whoever builds it: the interceptor skips `/auth/login` and `/auth/register` by name, **not** the `/auth/` prefix, because `GET /auth/me` is bearer-authenticated. Do not "simplify" that list into a prefix check (060).
 
 ### 0.10 Test scaffolding
 `pytest.ini` with the `eval` marker registered. `conftest.py` with a test database fixture and a `TestClient`. Tests for register, login, duplicate email, bad password, and `/auth/me` with and without a token.
@@ -106,8 +132,8 @@ Note on the config file: pytest 9 already reports `backend/pyproject.toml` as it
 - [ ] `alembic upgrade head` and `downgrade base` both run clean
 - [x] Uploading 3 images returns `202` with 3 rows, all `status='processing'`, and 3 assets appear in Cloudinary
 - [x] Uploading a `.txt` file returns `415`; a 15 MB image returns `413`; an SVG returns `415`
-- [ ] A logged-out user hitting `/wardrobe` is redirected to `/login`
-- [ ] `ng version` reports Angular 22.x
+- [x] A logged-out user hitting `/wardrobe` is redirected to `/login`
+- [x] `ng version` reports Angular 22.x
 - [ ] Auth tests pass
 
 ## Commit checkpoints

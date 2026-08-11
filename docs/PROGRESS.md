@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 0 — Foundation
-**Status:** in progress — 0.1 through 0.7 complete
+**Status:** in progress — 0.1 through 0.8 complete
 
 Claude Code updates this file at the end of every stage: tick the criteria, set the next stage, and note anything that changed relative to the plan.
 
@@ -17,7 +17,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Auth: register, login, `/auth/me`
 - [x] Cloudinary service
 - [x] Upload endpoint
-- [ ] Frontend bootstrap
+- [x] Frontend bootstrap
 - [ ] Login and register screens
 - [ ] Test scaffolding
 

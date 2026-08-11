@@ -66,6 +66,8 @@ PascalCase      classes: ItemCard, WardrobeStore
 camelCase       everything else
 ```
 
+**One exception, added at task 0.8: a type that describes an API payload keeps the server's `snake_case`.** `User.display_name`, `Item.color_primary`, `Item.image_public_id` — the names arrive that way and are not renamed. `04-API-SPEC.md` is authoritative over the wire shape, and the alternative gives every field two names, so a network tab, a stack trace and a source file disagree about what it is called. The boundary is legible: if the name came from the server, it is the server's name; everything the frontend invents is `camelCase`. `DECISIONS.md` 059.
+
 ## Comments
 
 Comment **why**, never **what**. Code that needs a comment to explain what it does should be rewritten instead.
@@ -93,7 +95,9 @@ The frontend never renders a raw error. Every failure path has a written message
 
 ## Limits and units
 
-A limit expressed in MB means **mebibytes** — 1024², not 1000². `MAX_UPLOAD_MB=10` is 10,485,760 bytes, and both sides read it from one place: the backend from `settings.max_upload_bytes`, the frontend mirroring the same arithmetic in the upload sheet at task 1.6. Written down because the two definitions differ by 5% and the failure mode is a file the browser accepts and the API rejects.
+A limit expressed in MB means **mebibytes** — 1024², not 1000². `MAX_UPLOAD_MB=10` is 10,485,760 bytes. The backend reads it from `settings.max_upload_bytes`; the frontend mirrors the same arithmetic in the upload sheet at task 1.6. Written down because the two definitions differ by 5% and the failure mode is a file the browser accepts and the API rejects.
+
+**Amended at task 0.8 — "both sides read it from one place" was not true and should not have been written.** `MAX_UPLOAD_MB` and `MAX_FILES_PER_REQUEST` are environment variables read by pydantic-settings at process start; a browser cannot read them, and no endpoint publishes them. What the frontend has is a **hand-written copy that can drift silently**, and the drift is invisible until a user picks a file the sheet accepts and the API answers with `413`. Nothing detects it — there is no test that can compare a Python setting against a TypeScript constant. This is the same shape of overstatement as the original `DECISIONS.md` 008 ("bounded by a 10 MB limit"), corrected on the same terms: the arithmetic is stated in one place *in prose*, and honoured in two places *in code*. If it ever matters enough to fix, the fix is an endpoint that returns the limits, not a build step.
 
 Where a limit is counted in a unit other than the one a user would count in, the error message names the unit — `DECISIONS.md` 036 is the worked example, with a minimum in characters and a maximum in bytes.
 

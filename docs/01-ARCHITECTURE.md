@@ -154,8 +154,11 @@ bijoux/
 │       │   ├── stylist/         request form, look card
 │       │   ├── trips/           trip form, packing view
 │       │   └── profile/         measurements, location, preferences
-│       ├── shared/              ui components, pipes, models
-│       └── assets/i18n/en.json
+│       └── shared/              ui components, pipes, models
+│   ├── src/environments/        environment.ts + .development.ts
+│   └── public/i18n/en.json      corrected at 0.8 — `public/` is Angular's
+│                                asset root since v18, and a file under
+│                                src/app/ is never served
 ├── e2e/                         Playwright, TypeScript
 │   ├── pages/                   Page Object Model
 │   ├── tests/

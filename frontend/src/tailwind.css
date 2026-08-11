@@ -1,0 +1,13 @@
+@import 'tailwindcss';
+
+/* `static` is load-bearing: styles.scss consumes these across a file
+   boundary, and Angular hands PostCSS one stylesheet at a time, so
+   Tailwind cannot see that usage and prunes them. DECISIONS.md 064. */
+@theme static {
+  --color-canvas: #fafaf8;
+  --color-surface: #ffffff;
+  --color-ink: #1a1a1a;
+  --color-accent: #2f4858;
+
+  --font-display: 'Fraunces', ui-serif, Georgia, serif;
+}
