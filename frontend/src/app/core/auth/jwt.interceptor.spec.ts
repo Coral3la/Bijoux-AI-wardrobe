@@ -1,7 +1,7 @@
 import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { NavigationEnd, Router, provideRouter } from '@angular/router';
+import { NavigationEnd, NavigationStart, Router, provideRouter } from '@angular/router';
 import { filter, firstValueFrom, take } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -145,11 +145,22 @@ describe('jwtInterceptor', () => {
     it('clears the session but does not navigate during bootstrap', () => {
       expect(router.navigated).toBe(false);
 
+      // Asserting router.url here would prove nothing: navigation is async, so
+      // a started-but-unfinished redirect reads as '/' either way. Counting
+      // NavigationStart is what actually says nothing was attempted.
+      const started: NavigationStart[] = [];
+      const sub = router.events.subscribe((event) => {
+        if (event instanceof NavigationStart) {
+          started.push(event);
+        }
+      });
+
       fail401(`${environment.apiUrl}/auth/me`);
+      sub.unsubscribe();
 
       expect(auth.token()).toBeNull();
       expect(auth.restoreNotice()).toBe('signed-out');
-      expect(router.url).toBe('/');
+      expect(started).toEqual([]);
     });
 
     // The one 401 in the application that must not sign anyone out. It is not

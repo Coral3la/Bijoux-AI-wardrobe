@@ -40,6 +40,8 @@ Locators: `getByRole` and `getByLabel` first, `data-testid` only where the acces
 
 Include the failure journey — a tagging failure producing a warning tile with a working retry. Error paths are where a QA-oriented submission separates itself.
 
+**Also owed here, from task 0.9.** One journey must type an invalid value into a form and assert the validation message renders with nothing programmatic in the loop. The component specs cannot prove this: they call `fixture.whenStable()`, which forces change detection, where zoneless Angular re-renders only when the view is marked dirty. Playwright is the only layer that cannot cheat, and this is the last live doubt from 0.9 rather than a new requirement — see `06-TESTING-STRATEGY.md` and `DECISIONS.md` 070.
+
 ### 5.4 Document known bugs honestly
 Any real defect found and not fixed gets a `test.fail()` test with a comment naming expected versus actual behaviour, and a line in `docs/KNOWN-ISSUES.md`.
 

@@ -102,6 +102,16 @@ What gets covered:
 - **`wardrobe_too_small`:** 5 ready items returns `400` before any AI call is attempted.
 - **Rate limits** return `429` with `Retry-After`.
 
+### Two ways a frontend test passes without proving anything
+
+Both were found at task 0.9, by deleting the behaviour and watching the suite stay green. Neither is visible from reading the test.
+
+**A fake that resolves synchronously cannot test an ordering.** `app.config.spec.ts` replaces `HttpBackend` to drive the app initializers, and with an immediate reply every assertion held whether or not bootstrap awaited the restore — the whole point of the spec. The fix is `delay(0)`, plus a test asserting the fake *is* asynchronous, so deleting the delay breaks a test rather than silently weakening four. **A test for a blocking behaviour has to be slower than the thing it tests.**
+
+**Asserting `router.url` right after a synchronous response is a race, not an assertion.** Navigation is asynchronous, so a started-but-unfinished redirect reads identically to no redirect at all. Assert on `NavigationStart`/`NavigationEnd` events instead — an event count is deterministic where a URL read is not.
+
+**The check that separates the two cases is mutation.** Remove the behaviour, run the suite, and confirm a named test fails. Four were run at 0.9 — the blocking initializer, the `router.navigated` gate, `restore()`'s in-flight guard, and the double-submit guard — and two of them exposed tests that were passing for the wrong reason.
+
 ---
 
 ## Layer 4 — E2E with Playwright
@@ -158,6 +168,8 @@ Locators use `getByRole` and `getByLabel` first, `data-testid` only where the ac
 Journeys 12 and 13 are the most reliable assertions in the whole suite — the requested item is either in the DOM or it is not, with no judgement involved. Worth writing early.
 
 Test 11 needs a fixture that deliberately fails. Do not skip it — error paths are where a QA-oriented submission distinguishes itself, and it is exactly the kind of case the Jones assignment rewarded.
+
+**One thing only this layer can prove, owed from task 0.9.** The component specs call `fixture.whenStable()` after every interaction, which forces a change-detection cycle. Zoneless Angular re-renders only when something marks the view dirty, so those specs cannot distinguish "the view was marked dirty" from "the harness ran change detection anyway" — an interaction that updates form state without a template-bound event would leave them green and the browser stale. Playwright is where that closes, because nothing in it can force a render. **Task 5.3 owns it:** one journey must type an invalid value into a form and assert the validation message appears with no programmatic step in the loop. `DECISIONS.md` 070.
 
 ### Deliberate bug documentation
 

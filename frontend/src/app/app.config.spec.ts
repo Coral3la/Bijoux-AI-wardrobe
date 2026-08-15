@@ -74,6 +74,22 @@ async function bootAt(url: string, meReply: Reply): Promise<ApplicationRef> {
   return app;
 }
 
+// This is a test of the harness, and it is here so that removing delay(0)
+// above breaks a test rather than quietly weakening four. Without it every
+// assertion below holds whether or not bootstrap awaits the initializer.
+describe('the fake backend', () => {
+  it('replies asynchronously', () => {
+    const provider = backendReplying(new HttpResponse({ status: 200, body: USER }));
+    let arrived = false;
+
+    provider.useValue
+      .handle(new HttpRequest('GET', `${environment.apiUrl}/auth/me`))
+      .subscribe(() => (arrived = true));
+
+    expect(arrived).toBe(false);
+  });
+});
+
 describe('bootstrap with a stored token', () => {
   beforeEach(() => {
     localStorage.clear();
