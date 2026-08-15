@@ -161,6 +161,8 @@ describe('RegisterPage', () => {
     request.flush(TOKEN_RESPONSE);
   });
 
+  // expectOne is the assertion, not setup: it throws when more than one
+  // request matches, which is the whole test. There is nothing else to add.
   it('sends one request when submitted twice in a row', async () => {
     fillValid();
     submit();

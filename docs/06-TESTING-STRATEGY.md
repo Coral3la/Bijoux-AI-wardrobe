@@ -102,15 +102,20 @@ What gets covered:
 - **`wardrobe_too_small`:** 5 ready items returns `400` before any AI call is attempted.
 - **Rate limits** return `429` with `Retry-After`.
 
-### Two ways a frontend test passes without proving anything
+### A test that measures a moment cannot assert an event
 
-Both were found at task 0.9, by deleting the behaviour and watching the suite stay green. Neither is visible from reading the test.
+One idea, found twice at task 0.9 by deleting the behaviour and watching the suite stay green. Both instances read as perfectly ordinary tests.
 
-**A fake that resolves synchronously cannot test an ordering.** `app.config.spec.ts` replaces `HttpBackend` to drive the app initializers, and with an immediate reply every assertion held whether or not bootstrap awaited the restore — the whole point of the spec. The fix is `delay(0)`, plus a test asserting the fake *is* asynchronous, so deleting the delay breaks a test rather than silently weakening four. **A test for a blocking behaviour has to be slower than the thing it tests.**
+**Asynchronous behaviour is only observable if something is still pending when you look.** Read a value immediately after triggering an async operation and you see the state *before* it, which is indistinguishable from the operation never having happened. The assertion is true either way, so it proves nothing — and it fails silently, by continuing to pass.
 
-**Asserting `router.url` right after a synchronous response is a race, not an assertion.** Navigation is asynchronous, so a started-but-unfinished redirect reads identically to no redirect at all. Assert on `NavigationStart`/`NavigationEnd` events instead — an event count is deterministic where a URL read is not.
+The two instances:
 
-**The check that separates the two cases is mutation.** Remove the behaviour, run the suite, and confirm a named test fails. Four were run at 0.9 — the blocking initializer, the `router.navigated` gate, `restore()`'s in-flight guard, and the double-submit guard — and two of them exposed tests that were passing for the wrong reason.
+- **`app.config.spec.ts`** replaced `HttpBackend` with a fake that replied **synchronously**, so `restore()` resolved inside the same microtask chain as bootstrap. Every assertion held whether or not the initializer was awaited — which was the entire point of the spec. Fixed with `delay(0)`, so the reply lands on a macrotask. **A test for a blocking behaviour has to be slower than the thing it tests.**
+- **`jwt.interceptor.spec.ts`** asserted `router.url === '/'` right after a synchronous flush, to prove no redirect had fired during bootstrap. Navigation is asynchronous, so a **started-but-unfinished** navigation reads exactly like no navigation. Fixed by counting `NavigationStart` events.
+
+Same shape both times: a moment sampled instead of an event observed. The general rule is to **assert on the event, not on the state afterwards** — an event count is deterministic where a state read is a race — and where that is impossible, make the operation slow enough that the wrong answer is visible.
+
+**Mutation is what separates the two, and nothing else does.** Delete the behaviour, run the suite, and confirm a *named* test fails. Seven were run across the specs at task 0.9; **four of them exposed something** — two tests passing for the wrong reason, and two behaviours with no test at all (the `**` wildcard's destination, and the deliberate asymmetry between the two login notices). Both now have tests. Two more remain undefendable at this layer and are 5.3's — see below.
 
 ---
 
@@ -169,7 +174,11 @@ Journeys 12 and 13 are the most reliable assertions in the whole suite — the r
 
 Test 11 needs a fixture that deliberately fails. Do not skip it — error paths are where a QA-oriented submission distinguishes itself, and it is exactly the kind of case the Jones assignment rewarded.
 
-**One thing only this layer can prove, owed from task 0.9.** The component specs call `fixture.whenStable()` after every interaction, which forces a change-detection cycle. Zoneless Angular re-renders only when something marks the view dirty, so those specs cannot distinguish "the view was marked dirty" from "the harness ran change detection anyway" — an interaction that updates form state without a template-bound event would leave them green and the browser stale. Playwright is where that closes, because nothing in it can force a render. **Task 5.3 owns it:** one journey must type an invalid value into a form and assert the validation message appears with no programmatic step in the loop. `DECISIONS.md` 070.
+**Two things only this layer can prove, both owed from task 0.9.**
+
+**`novalidate` on the auth forms.** Without it the browser's own constraint validation blocks submission and shows an untranslatable bubble before our i18n messages render. **The unit suite cannot defend this and it was wrong to imply otherwise:** the page specs trigger submission with `form.dispatchEvent(new Event('submit'))`, which bypasses constraint validation entirely, and jsdom's `requestSubmit()` fires the handler even with an invalid required field. Adding a native `required` attribute to a field leaves all 72 tests green. Only a real browser rejects it.
+
+**Change detection.** The component specs call `fixture.whenStable()` after every interaction, which forces a change-detection cycle. Zoneless Angular re-renders only when something marks the view dirty, so those specs cannot distinguish "the view was marked dirty" from "the harness ran change detection anyway" — an interaction that updates form state without a template-bound event would leave them green and the browser stale. Playwright is where that closes, because nothing in it can force a render. **Task 5.3 owns it:** one journey must type an invalid value into a form and assert the validation message appears with no programmatic step in the loop. `DECISIONS.md` 070.
 
 ### Deliberate bug documentation
 

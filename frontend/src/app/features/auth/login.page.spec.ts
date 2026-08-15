@@ -47,6 +47,12 @@ function fill(selector: string, value: string): void {
   input.dispatchEvent(new Event('input'));
 }
 
+function notice(fragment: string): HTMLParagraphElement {
+  return [...(fixture.nativeElement as HTMLElement).querySelectorAll('p')].find((p) =>
+    p.textContent?.includes(fragment),
+  )!;
+}
+
 function submit(): void {
   (fixture.nativeElement as HTMLElement).querySelector('form')!.dispatchEvent(new Event('submit'));
 }
@@ -198,6 +204,10 @@ describe('LoginPage', () => {
 
       expect(text()).toContain('Please sign in again.');
       expect(text()).not.toContain('Try again');
+      // The class carries a decision, not a style: danger means "something is
+      // wrong and you must act". Asserted so the asymmetry with the notice
+      // below cannot be tidied away as an oversight. DECISIONS.md 057.
+      expect(notice('Please sign in again.').classList).toContain('text-danger');
     });
 
     it('offers a retry when the server could not be reached', async () => {
@@ -208,6 +218,9 @@ describe('LoginPage', () => {
 
       expect(text()).toContain("We couldn't reach Bijoux. You may still be signed in.");
       expect(text()).toContain('Try again');
+      // Deliberately NOT danger: this notice appears mostly while a sleeping
+      // instance wakes, and 1.3's failed tiles lean on the same signal.
+      expect(notice("We couldn't reach Bijoux").classList).not.toContain('text-danger');
     });
 
     // No guard re-runs on an already-active route, so the page has to move the

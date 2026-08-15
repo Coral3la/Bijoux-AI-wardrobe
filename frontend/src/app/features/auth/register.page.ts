@@ -42,6 +42,13 @@ function requiredText(control: AbstractControl): ValidationErrors | null {
     <main class="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-6 p-6">
       <h1 class="font-display text-3xl">{{ i18n.t('register.title') }}</h1>
 
+      <!-- novalidate, and no native 'required' on any field: both would hand
+           submission back to the browser's constraint validation, which blocks
+           it and shows an untranslatable bubble before our messages render.
+           The unit suite cannot catch either being added back — its submits
+           bypass constraint validation — so task 5.3 asserts this in a browser.
+           'autocomplete="username"' on email and 'nickname' on the display name
+           are deliberate token choices, not guesses. DECISIONS.md 070. -->
       <form [formGroup]="form" (ngSubmit)="submit()" novalidate class="flex flex-col gap-4">
         @let nameError = messageFor(form.controls.displayName);
         <div class="flex flex-col gap-1">

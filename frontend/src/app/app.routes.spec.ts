@@ -1,0 +1,35 @@
+import { TestBed } from '@angular/core/testing';
+import { Router, provideRouter } from '@angular/router';
+import { afterEach, describe, expect, it } from 'vitest';
+
+import { routes } from './app.routes';
+import { AuthService } from './core/auth/auth.service';
+
+async function navigate(url: string): Promise<string> {
+  TestBed.configureTestingModule({
+    providers: [
+      provideRouter(routes),
+      { provide: AuthService, useValue: { isAuthenticated: () => true } },
+    ],
+  });
+  const router = TestBed.inject(Router);
+  await router.navigateByUrl(url);
+
+  return router.url;
+}
+
+describe('routes', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('sends the empty path to the wardrobe', async () => {
+    expect(await navigate('/')).toBe('/wardrobe');
+  });
+
+  // This exists to stop the tidy-up. `redirectTo: ''` removes the duplicated
+  // destination below and does NOT chain through the empty-path route — it
+  // lands on '/' with nothing rendered, for every mistyped or stale URL.
+  // Measured at 0.9. DECISIONS.md 068.
+  it('sends an unknown URL to the wardrobe rather than to a blank page', async () => {
+    expect(await navigate('/does-not-exist')).toBe('/wardrobe');
+  });
+});
