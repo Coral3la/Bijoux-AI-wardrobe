@@ -13,7 +13,7 @@ The central question: **how do you write reliable automated tests against a non-
 | Unit — pure logic | pytest | yes | no |
 | Contract — schema validation | pytest | yes | no |
 | Integration — API + DB | pytest + httpx | yes | no (mocked) |
-| Frontend unit — stores, pipes | Vitest | yes | no |
+| Frontend unit — services, guards, interceptors, models, pages | Vitest | yes | no |
 | E2E — user journeys | Playwright + TS | yes | no (mocked) |
 | AI evaluation — quality | pytest, `-m eval` | **no**, manual | yes |
 

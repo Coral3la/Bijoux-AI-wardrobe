@@ -8,9 +8,9 @@ import {
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { AuthService } from './auth.service';
-import { authGuard } from './auth.guard';
+import { authGuard, guestGuard } from './auth.guard';
 
-function runGuard(authenticated: boolean): boolean | UrlTree {
+function run(guard: typeof authGuard, authenticated: boolean): boolean | UrlTree {
   TestBed.configureTestingModule({
     providers: [
       provideRouter([]),
@@ -19,7 +19,7 @@ function runGuard(authenticated: boolean): boolean | UrlTree {
   });
 
   return TestBed.runInInjectionContext(() =>
-    authGuard({} as ActivatedRouteSnapshot, {} as RouterStateSnapshot),
+    guard({} as ActivatedRouteSnapshot, {} as RouterStateSnapshot),
   ) as boolean | UrlTree;
 }
 
@@ -27,13 +27,28 @@ describe('authGuard', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('lets an authenticated user through', () => {
-    expect(runGuard(true)).toBe(true);
+    expect(run(authGuard, true)).toBe(true);
   });
 
   it('redirects an anonymous user to /login', () => {
-    const result = runGuard(false);
+    const result = run(authGuard, false);
 
     expect(result).toBeInstanceOf(UrlTree);
     expect(String(result)).toBe('/login');
+  });
+});
+
+describe('guestGuard', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('lets an anonymous user through', () => {
+    expect(run(guestGuard, false)).toBe(true);
+  });
+
+  it('redirects an authenticated user to /wardrobe', () => {
+    const result = run(guestGuard, true);
+
+    expect(result).toBeInstanceOf(UrlTree);
+    expect(String(result)).toBe('/wardrobe');
   });
 });

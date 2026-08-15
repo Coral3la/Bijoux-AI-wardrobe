@@ -73,6 +73,10 @@ export class WardrobeStore {
 
 Single-column, centred. Email, password, display name on register. Nothing else. This screen must not consume design time.
 
+Built at task 0.9. **Display name is required by the form** although the API accepts `null`, because registration is the only place in the whole application where it can be set — `PATCH /me` at Stage 2 covers only `home_city`/`home_lat`/`home_lon`, and no task builds the profile screen in §8. Password rules mirror the API's on register (8 characters minimum, 72 **bytes** maximum) and are absent on login, where `LoginRequest` has none. Both forms carry `novalidate` so the browser's own bubble cannot preempt the i18n messages, and submit is disabled only while a request is in flight — never on an invalid form, which must stay submittable so the messages can appear. `DECISIONS.md` 070.
+
+`/login` also renders the bootstrap notice: **"Please sign in again."** when a stored token was rejected, or an unreachable message with a **Try again** button when `GET /auth/me` got no answer. `/register` renders neither — a user who asked for the register form is not looking at an unexplained login screen, and the notice survives on the service if they follow the link across. `DECISIONS.md` 067.
+
 ### 2. Wardrobe — `/wardrobe` *(default route once authenticated)*
 
 The home screen and the most-used surface.
@@ -239,8 +243,10 @@ One decision, made once, applied everywhere: **the clothes are the design.** The
 
 - Background `#FAFAF8`, surfaces white, text `#1A1A1A`, one accent used sparingly.
 - **The accent is `#2F4858`**, a deep desaturated ink-blue, settled at task 0.8. A warm mid-chroma accent — terracotta was the alternative — reads as a garment itself and competes with brown, beige, red and pink, four of the seventeen wardrobe colours it would sit beside in the grid. `DECISIONS.md` 057.
-- **The display typeface is Fraunces**; body text uses Tailwind's default `--font-sans`, which is already the system stack this section asks for and is deliberately not overridden. Self-hosting the font files is **task 0.9's**; until then headings fall through to `ui-serif, Georgia, serif`.
-- The four colours and the display face are declared once, as `@theme` tokens in `frontend/src/tailwind.css`, and generate their own utilities (`bg-canvas`, `text-ink`, `font-display`). There is no `tailwind.config.js` — Tailwind 4 is CSS-first. `DECISIONS.md` 056.
+- **The display typeface is Fraunces**, self-hosted at task 0.9 as a latin-subset variable woff2 in `public/fonts/`, preloaded, `font-display: swap`. Body text uses Tailwind's default `--font-sans`, which is already the system stack this section asks for and is deliberately not overridden. `DECISIONS.md` 065.
+- **The display face is for chrome we author.** Anything a user entered or a model generated uses the body face — Fraunces is latin-subset and the family has no Hebrew coverage, so a non-Latin name in a display heading falls back per character and renders in two faces on one line. The wardrobe screen's "Signed in as …" is the first instance and it takes the body face. Four later surfaces must apply the rule deliberately: **item detail (1.9), weather strip (2.2), look card title (2.9), trip header (4.5)** — each renders text this project did not write. `DECISIONS.md` 071.
+- **`--color-danger: #7f2f3c`** is the fifth token, added at 0.9 for validation messages and failure notices. It is used only where something is wrong: the "server may be waking up" notice deliberately does not take it, because task 1.3's failed tiles lean on the same signal and it must not also mean "slow". `DECISIONS.md` 057.
+- The five colours and the display face are declared once, as `@theme` tokens in `frontend/src/tailwind.css`, and generate their own utilities (`bg-canvas`, `text-ink`, `text-danger`, `font-display`). There is no `tailwind.config.js` — Tailwind 4 is CSS-first. `DECISIONS.md` 056.
 - Cut-out garment images on white read as a catalogue. Nothing else should compete with them.
 - Generous whitespace, no card borders — use shadow and spacing for separation.
 - One display typeface for headings, one system stack for body.

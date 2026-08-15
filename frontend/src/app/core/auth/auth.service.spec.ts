@@ -61,7 +61,15 @@ describe('AuthService', () => {
     construct();
 
     expect(service.token()).toBe('stored.token');
-    expect(service.isAuthenticated()).toBe(true);
+  });
+
+  // The other half of the split above. A stored token is a credential we hold,
+  // not a session the server has confirmed. DECISIONS.md 067.
+  it('is not authenticated on a stored token alone', () => {
+    localStorage.setItem(TOKEN_KEY, 'stored.token');
+    construct();
+
+    expect(service.isAuthenticated()).toBe(false);
   });
 
   it('does not hydrate the user, only the token', () => {
@@ -78,10 +86,11 @@ describe('AuthService', () => {
 
     expect(service.token()).toBe('a.b.c');
     expect(service.currentUser()?.email).toBe('coral@example.com');
+    expect(service.isAuthenticated()).toBe(true);
     expect(localStorage.getItem(TOKEN_KEY)).toBe('a.b.c');
   });
 
-  it('sends display_name on register even when it is null', () => {
+  it('accepts a null display_name at the service boundary', () => {
     construct();
     service.register('coral@example.com', 'hunter2hunter2', null).subscribe();
     const request = mock.expectOne(`${environment.apiUrl}/auth/register`);
@@ -103,5 +112,91 @@ describe('AuthService', () => {
     expect(service.currentUser()).toBeNull();
     expect(service.isAuthenticated()).toBe(false);
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+  });
+
+  describe('restore', () => {
+    it('makes no request and clears the notice when there is no token', async () => {
+      construct();
+      await service.restore();
+
+      expect(service.currentUser()).toBeNull();
+      expect(service.restoreNotice()).toBeNull();
+    });
+
+    it('populates the user and clears the notice on 200', async () => {
+      localStorage.setItem(TOKEN_KEY, 'stored.token');
+      construct();
+
+      const done = service.restore();
+      mock.expectOne(`${environment.apiUrl}/auth/me`).flush(response.user);
+      await done;
+
+      expect(service.currentUser()?.email).toBe('coral@example.com');
+      expect(service.isAuthenticated()).toBe(true);
+      expect(service.restoreNotice()).toBeNull();
+    });
+
+    it('keeps the token and reports unreachable when the request fails', async () => {
+      localStorage.setItem(TOKEN_KEY, 'stored.token');
+      construct();
+
+      const done = service.restore();
+      mock.expectOne(`${environment.apiUrl}/auth/me`).error(new ProgressEvent('error'));
+      await done;
+
+      expect(service.token()).toBe('stored.token');
+      expect(service.isAuthenticated()).toBe(false);
+      expect(service.restoreNotice()).toBe('unreachable');
+    });
+
+    // A 401 belongs to the interceptor. If restore() also wrote here, the
+    // notice would depend on which of the two ran last. DECISIONS.md 067.
+    it('leaves the notice alone on a 401', async () => {
+      localStorage.setItem(TOKEN_KEY, 'stored.token');
+      construct();
+
+      const done = service.restore();
+      mock
+        .expectOne(`${environment.apiUrl}/auth/me`)
+        .flush(null, { status: 401, statusText: 'Unauthorized' });
+      await done;
+
+      expect(service.restoreNotice()).toBeNull();
+    });
+
+    it('ignores a second call while one is in flight', async () => {
+      localStorage.setItem(TOKEN_KEY, 'stored.token');
+      construct();
+
+      const first = service.restore();
+      const second = service.restore();
+      mock.expectOne(`${environment.apiUrl}/auth/me`).flush(response.user);
+      await Promise.all([first, second]);
+
+      expect(service.restoring()).toBe(false);
+    });
+  });
+
+  describe('rejectSession', () => {
+    it('clears the session and records that the server said no', () => {
+      localStorage.setItem(TOKEN_KEY, 'stored.token');
+      construct();
+      service.rejectSession();
+
+      expect(service.token()).toBeNull();
+      expect(service.currentUser()).toBeNull();
+      expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+      expect(service.restoreNotice()).toBe('signed-out');
+    });
+
+    // logout() must not touch the notice, or the 401 path would depend on
+    // which of the two ran first. DECISIONS.md 067.
+    it('is not undone by a later logout', () => {
+      construct();
+      service.rejectSession();
+      service.logout();
+
+      expect(service.restoreNotice()).toBe('signed-out');
+    });
   });
 });

@@ -101,6 +101,8 @@ A limit expressed in MB means **mebibytes** — 1024², not 1000². `MAX_UPLOAD_
 
 Where a limit is counted in a unit other than the one a user would count in, the error message names the unit — `DECISIONS.md` 036 is the worked example, with a minimum in characters and a maximum in bytes.
 
+**Second instance, at task 0.9.** `register.page.ts` mirrors both password rules: `MIN_PASSWORD_LENGTH` from `app/schemas/auth.py` and `MAX_PASSWORD_BYTES` from `app/core/security.py`, the second enforced with `TextEncoder` so the count is bytes rather than characters. Same shape as the upload limits above and the same accepted cost — two hand-written copies, nothing comparing them, and the drift invisible until a user is rejected by a rule the form allowed. The message names bytes. `DECISIONS.md` 070.
+
 ## Tests
 
 - `tests/unit/`, `tests/integration/`, `tests/fixtures/`

@@ -51,7 +51,7 @@ These are deliberate exclusions, not oversights. If asked in the defence, the re
 
 ## Language
 
-The UI ships in **English only**. All user-facing strings live in `frontend/src/assets/i18n/en.json` from day one and are referenced by key, never hard-coded. All layout uses CSS logical properties (`margin-inline-start`, not `margin-left`). Adding Hebrew later is then a new JSON file plus `dir="rtl"`, with no component rewrites.
+The UI ships in **English only**. All user-facing strings live in `frontend/public/i18n/en.json` from day one and are referenced by key, never hard-coded. (`src/assets/` does not exist in a v22 scaffold; this line was corrected at task 0.9, having been missed when the same path was fixed in `01-ARCHITECTURE.md` and `05-FRONTEND-SPEC.md` at 0.8 — see `DECISIONS.md` 058.) **One string is exempt and is the only one:** the pre-bootstrap marker in `index.html`, which must render before the service that loads strings has run (`DECISIONS.md` 066). All layout uses CSS logical properties (`margin-inline-start`, not `margin-left`). Adding Hebrew later is then a new JSON file plus `dir="rtl"`, with no component rewrites.
 
 AI responses are generated in English. The response language is a single variable in the stylist prompt.
 

@@ -1,13 +1,67 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Bijoux</title>
-  <base href="/">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
-</head>
-<body>
-  <app-root></app-root>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>Bijoux</title>
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- crossorigin is required even though the file is same-origin: fonts are
+         always fetched in CORS mode, and without it this preload does not match
+         the @font-face request and the browser downloads the file twice. -->
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href="/fonts/fraunces-latin-variable.woff2"
+      crossorigin
+    />
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+
+    <style>
+      /* Inline, and it has to stay inline: the marker must paint before the
+         bundle arrives, and Angular defers the stylesheet by design
+         (media="print"), so a rule that waited on that request would start the
+         ten-second timer late. Nothing but the pre-bootstrap marker belongs in
+         here — no application styling, which goes in styles.scss or in Tailwind
+         classes on the element. .boot-mark repeats the display stack rather
+         than reading --font-display because the theme may not have loaded.
+         It cannot use I18nService either: that service is loaded by an app
+         initializer, so nothing before bootstrap can read a string from it.
+         DECISIONS.md 066. */
+      .boot {
+        padding-block: 25vh 0;
+        text-align: center;
+        color: var(--color-ink, #1a1a1a);
+      }
+      .boot-mark {
+        font-family: 'Fraunces', ui-serif, Georgia, serif;
+        font-size: 1.5rem;
+      }
+      /* visibility, not opacity alone: an opacity-0 element is still in the
+         accessibility tree, so a screen reader would announce this line
+         immediately instead of at ten seconds. */
+      .boot-hint {
+        visibility: hidden;
+        opacity: 0;
+        padding-block-start: 0.75rem;
+        font-size: 0.875rem;
+        animation: boot-hint 200ms ease-out 10s forwards;
+      }
+      @keyframes boot-hint {
+        to {
+          visibility: visible;
+          opacity: 1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <app-root>
+      <div class="boot">
+        <p class="boot-mark">Bijoux</p>
+        <p class="boot-hint">This is taking longer than usual. The server may be waking up.</p>
+      </div>
+    </app-root>
+  </body>
 </html>

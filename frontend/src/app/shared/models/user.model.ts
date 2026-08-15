@@ -18,3 +18,10 @@ export interface TokenResponse {
   readonly token_type: 'bearer';
   readonly user: User;
 }
+
+// Trimmed rather than `??`: display_name is nullable in the column and the API
+// accepts whitespace, so an empty or blank name must fall through to the email
+// instead of rendering as nothing. DECISIONS.md 071.
+export function userLabel(user: User): string {
+  return user.display_name?.trim() || user.email;
+}

@@ -117,6 +117,9 @@ Reactive forms, validation messages, error handling, redirect to `/wardrobe` on 
 Note for whoever builds it: the interceptor skips `/auth/login` and `/auth/register` by name, **not** the `/auth/` prefix, because `GET /auth/me` is bearer-authenticated. Do not "simplify" that list into a prefix check (060).
 
 ### 0.10 Test scaffolding
+
+**Two corrections inherited from 0.9, both found by reading the route rather than the spec.** `RegisterRequest.display_name` is `str | None = None` while the register form now requires it — tighten to `str = Field(min_length=1, strip_whitespace=True)` and amend `04-API-SPEC.md`'s "`null` on a fresh account" in the same commit (`DECISIONS.md` 070). And `POST /auth/login`'s `401` carries no `WWW-Authenticate: Bearer`, which `04-API-SPEC.md` promises for every `401`; add `headers` to that `ApiError`, and assert it in the login test this task already owns.
+
 `pytest.ini` with the `eval` marker registered. `conftest.py` with a test database fixture and a `TestClient`. Tests for register, login, duplicate email, bad password, and `/auth/me` with and without a token.
 
 This task also owns the row-writing half of 0.7's coverage, which needs the database fixture it builds: that `POST /items/upload` inserts one row per file with `status='processing'`, that `short_id` is unique across a batch and retried on collision, and cross-user isolation on `GET /items` and `GET /items/{id}`. Task 0.7 shipped the half that runs unaided — the rejection paths, with `get_db` stubbed to raise on use so that "nothing reached the database" is asserted rather than assumed. `06-TESTING-STRATEGY.md` lists collision retry under unit tests; it cannot be one, because the constraint is what detects a collision.
@@ -128,7 +131,7 @@ Note on the config file: pytest 9 already reports `backend/pyproject.toml` as it
 ## Acceptance criteria
 
 - [ ] `GET /health` returns 200 with `db: "ok"`
-- [ ] Register → login → `/auth/me` works end to end from the browser
+- [x] Register → login → `/auth/me` works end to end from the browser
 - [ ] `alembic upgrade head` and `downgrade base` both run clean
 - [x] Uploading 3 images returns `202` with 3 rows, all `status='processing'`, and 3 assets appear in Cloudinary
 - [x] Uploading a `.txt` file returns `415`; a 15 MB image returns `413`; an SVG returns `415`
@@ -138,4 +141,6 @@ Note on the config file: pytest 9 already reports `backend/pyproject.toml` as it
 
 ## Commit checkpoints
 
-`chore: repo skeleton` · `feat(api): health and config` · `feat(db): initial migration` · `feat(core): closed vocabulary enums` · `feat(auth): register and login` · `feat(storage): cloudinary upload` · `feat(api): item upload endpoint` · `feat(web): app shell and auth screens`
+`chore: repo skeleton` · `feat(api): health and config` · `feat(db): initial migration` · `feat(core): closed vocabulary enums` · `feat(auth): register and login` · `feat(storage): cloudinary upload` · `feat(api): item upload endpoint` · `feat(web): app shell, auth plumbing and tailwind palette` · `feat(web): login and register screens` · `test(api): auth and upload coverage`
+
+The last three were one entry through task 0.8, which `CONVENTIONS.md` forbids — one commit per task, and 0.8 had already departed from the single wording. Corrected at 0.9, which also gave 0.10 a checkpoint it never had.

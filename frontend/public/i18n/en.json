@@ -1,5 +1,32 @@
 {
   "login.title": "Sign in",
+  "login.email.label": "Email",
+  "login.password.label": "Password",
+  "login.submit": "Sign in",
+  "login.submitting": "Signing in…",
+  "login.toRegister": "Create an account",
+  "login.error.invalidCredentials": "Incorrect email or password.",
+  "login.notice.signedOut": "Please sign in again.",
+  "login.notice.unreachable": "We couldn't reach Bijoux. You may still be signed in.",
+  "login.notice.retry": "Try again",
+
   "register.title": "Create an account",
-  "wardrobe.title": "Wardrobe"
+  "register.displayName.label": "Display name",
+  "register.email.label": "Email",
+  "register.password.label": "Password",
+  "register.submit": "Create account",
+  "register.submitting": "Creating your account…",
+  "register.toLogin": "Sign in instead",
+  "register.error.emailExists": "That email is already registered.",
+
+  "validation.required": "This field is required.",
+  "validation.email": "Enter a valid email address.",
+  "validation.password.tooShort": "Use at least {{min}} characters.",
+  "validation.password.tooLong": "Use at most {{max}} bytes — accented and non-Latin characters take more than one byte each.",
+
+  "error.unexpected": "Something went wrong. Please try again.",
+
+  "wardrobe.title": "Wardrobe",
+  "wardrobe.signedInAs": "Signed in as {{name}}",
+  "wardrobe.signOut": "Sign out"
 }
