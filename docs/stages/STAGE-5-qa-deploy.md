@@ -33,6 +33,8 @@ Fill the gaps from `06-TESTING-STRATEGY.md`:
 
 Coverage target ≥ 75% on `app/services` and `app/api`. Report it; do not chase 100%.
 
+**Four `GET /items` behaviours this task would otherwise have covered were reassigned into Stage 1**, to the task that first depends on each: the `status` filter and the `include_archived` exclusion to **1.4**, both written at its start; `limit`'s default and cap to **1.5**; the `created_at DESC, short_id` ordering to **1.7**. All four shipped at 0.7 and were undefended at 0.10. They moved because each one fails in a way that presents as something else — a polling loop that never empties, a grid that reorders itself, a `DELETE` that appears to do nothing, a filter bar counting over the first hundred items — and none of those is worth four stages of exposure. Do not go looking for them here.
+
 ### 5.3 Playwright suite
 `e2e/` with Page Object Model. All 11 journeys from `06-TESTING-STRATEGY.md`.
 

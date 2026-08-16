@@ -12,7 +12,14 @@ from app.db.base import Base
 
 config = context.config
 
-if config.config_file_name is not None:
+# fileConfig defaults to disable_existing_loggers=True, and conftest.py runs
+# `command.upgrade` in-process, so the first test that touches the database
+# would otherwise set disabled=True on every logger that already exists and is
+# not named in alembic.ini — app.main, app.api.v1.routes.items,
+# app.services.storage. Nothing noticed because no test had asserted a log
+# line. This file configures logging for the CLI; in-process it is
+# reconfiguring somebody else's process, so the caller gets to decline.
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata

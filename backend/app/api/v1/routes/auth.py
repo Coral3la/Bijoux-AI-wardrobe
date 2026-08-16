@@ -43,7 +43,8 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)) -> TokenRespo
             status.HTTP_409_CONFLICT, "email_exists", "That email is already registered."
         ) from exc
 
-    db.refresh(user)
+    # No refresh: the INSERT returns users.id and users.created_at, which is
+    # everything UserResponse reads that the request did not supply. 040.
     return _issue(user)
 
 

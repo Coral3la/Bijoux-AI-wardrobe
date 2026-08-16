@@ -145,6 +145,10 @@ Note on the config file: pytest 9 already reports `backend/pyproject.toml` as it
 
 The migration criterion was verified at 0.10 rather than 0.3, against an empty `postgres:18` container: `upgrade head` → `downgrade base` → `upgrade head`, clean each time, with `citext` and `pgcrypto` created by the migration itself and deliberately not dropped by the downgrade. It had never been run against a virgin database before — Neon already had both extensions, so 0.3 could not have distinguished a migration that creates them from one that assumes them.
 
+**The `/health` criterion carries two kinds of evidence and neither supersedes the other.** The tick is a manual observation made after the 0.10 commit, against a running server on the Neon database: `{"status":"ok","db":"ok","version":"0.1.0"}`. That is the only thing in this project that has ever shown a real database is reachable from a real process, and it cannot run in CI. Everything else 027 fixes — the `db: "error"` branch, the 200 on failure, `status` reporting the process rather than the dependency, and the warning that is the sole signal a 200 does not carry — was untested until `tests/integration/test_health.py` was written before task 1.1. Those tests stub the session and prove nothing whatever about reachability. Read the tick as both claims, not as either one having replaced the other.
+
+Writing them surfaced a defect that had nothing to do with `/health`: **no test in this suite could assert on any application log line**, because `alembic/env.py`'s `fileConfig` disables every existing logger and `conftest.py` runs alembic in-process. Three decisions lean on log lines — 044, 052, 053 — and all three were undefendable at this layer until it was fixed. `DECISIONS.md` 076.
+
 ## Commit checkpoints
 
 `chore: repo skeleton` · `feat(api): health and config` · `feat(db): initial migration` · `feat(core): closed vocabulary enums` · `feat(auth): register and login` · `feat(storage): cloudinary upload` · `feat(api): item upload endpoint` · `feat(web): app shell, auth plumbing and tailwind palette` · `feat(web): login and register screens` · `test(api): auth and upload coverage`

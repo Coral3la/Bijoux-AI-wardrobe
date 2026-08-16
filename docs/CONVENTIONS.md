@@ -18,10 +18,13 @@ Conventional commits, scoped:
 ```
 feat(api): add trip packing endpoint
 fix(web): stop polling after 3 minutes
+refactor(api): drop the redundant db.refresh calls
 test(e2e): cover tagging failure path
 docs: record stage 2 evaluation results
 chore(db): add trips migration
 ```
+
+`refactor` was added before task 1.1, for the commit that removed the two redundant `db.refresh` calls. It is standard conventional-commits and this list simply did not carry it. `chore` was the closest available fit and would have been wrong: a change that alters what the code does — even by subtraction, and even with no change in observable behaviour — is not housekeeping. Adding a type once is cheaper than mislabelling commits for four stages. `DECISIONS.md` 040.
 
 Scopes: `api` · `web` · `ai` · `db` · `auth` · `core` · `storage` · `weather` · `e2e` · `ci` · `docs`
 
@@ -32,6 +35,19 @@ A scope names the module a reader would grep for, not the deployable unit. `auth
 One commit per task in the stage files. Not one commit per stage — a stage-sized commit is unreviewable and unrevertable.
 
 Branches: `stage-N-short-name`, merged to `main` when the stage's acceptance criteria pass and CI is green.
+
+## Pinned majors, and what search results assume
+
+**When a pinned library's installed major differs from the one nearly every example online assumes, say so at orientation, before any code is written.** Name the installed version, the shape the examples will use, and the shape this project uses.
+
+The expected first symptom is always the same: *the method or file the tutorial reaches for does not exist.* It is a bad symptom because it reads as a broken install rather than as a version gap, and the obvious next move — searching the error — returns more material written against the same older major.
+
+Two instances so far, both of which cost time before the rule existed:
+
+- **Tailwind 4** at task 0.8. Almost all Tailwind material is v3-shaped: `tailwind.config.js`, `theme.extend`, `@apply` conventions. v4 is CSS-first and that config file does not exist at all. `DECISIONS.md` 056.
+- **openai 2.x** at task 1.1. `client.chat.completions.parse` and `client.responses.parse` are top-level, while structured-outputs examples overwhelmingly use 1.x's `client.beta.chat.completions.parse`. `client.beta` still exists, which makes the older shape look current rather than superseded.
+
+This is a rule about *disclosure*, not about version choice — 015, 018 and 054 already settled that this project runs current majors and accepts the cost. What it forbids is discovering the gap halfway through a task and treating it as an obstacle rather than as a known property of the pin.
 
 ## Python
 

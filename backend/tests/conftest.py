@@ -94,6 +94,10 @@ def _schema() -> Iterator[None]:
     # against the ini file, so both are made absolute.
     config = Config(str(BACKEND_ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(BACKEND_ROOT / "alembic"))
+    # Without this, alembic's fileConfig runs with disable_existing_loggers=True
+    # and switches off every application logger for the rest of the session, so
+    # no test after this fixture can assert on a log line. `DECISIONS.md` 076.
+    config.attributes["configure_logger"] = False
     command.upgrade(config, "head")
 
     # The per-test rollback is the most deletable line in this file: turn it

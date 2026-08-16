@@ -1,7 +1,7 @@
 # Progress
 
-**Current stage:** Stage 0 — Foundation
-**Status:** Stage 0 complete — 0.1 through 0.10, all acceptance criteria verified
+**Current stage:** Stage 1 — Wardrobe
+**Status:** Stage 0 closed, all acceptance criteria verified. Stage 1 not started.
 
 Claude Code updates this file at the end of every stage: tick the criteria, set the next stage, and note anything that changed relative to the plan.
 
@@ -101,3 +101,5 @@ Changed from the plan, all recorded in `DECISIONS.md` 072–075:
 - Documented Postgres 16 corrected to 18 in four documents; CI's `postgres:16` pin is 5.5's.
 
 **Stage 0 is closed.** The last open criterion — `GET /health` returning `db: "ok"` — was verified manually after the 0.10 commit, against a running server on the Neon database: `{"status":"ok","db":"ok","version":"0.1.0"}`. It is a manual check rather than a test because it needs a live server and a reachable database; nothing in the suite covers it.
+
+**2026-08-16 — before task 1.1, four behaviours reassigned across stages.** The `status` filter, the `created_at DESC, short_id` ordering, the `include_archived` exclusion and `limit`'s default and cap all shipped at 0.7 and were left undefended at 0.10, implicitly falling to task 5.2. They now belong to 1.4 (status filter, archived exclusion — both written at that task's start), 1.5 (limit) and 1.7 (ordering). Recorded here rather than only in the stage files because it is a change to the plan, not a change to the code.

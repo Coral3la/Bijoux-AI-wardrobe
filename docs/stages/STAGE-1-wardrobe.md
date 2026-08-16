@@ -18,6 +18,14 @@ Stage 0 acceptance criteria all pass.
 
 No stylist. No looks. No weather. No trips. Do not build a "suggest an outfit" button, even disabled.
 
+## Coverage inherited from Stage 0
+
+Four `GET /items` behaviours shipped at task 0.7 and were left undefended at 0.10: the **`status` filter**, the **`created_at DESC, short_id` ordering**, the **`include_archived` exclusion**, and **`limit`'s default and cap**. They were implicitly task 5.2's.
+
+They are reassigned into this stage, to the task that first depends on each — 1.4, 1.5 and 1.7 below. A behaviour defended four stages after the code that relies on it is not defended in any useful sense, and each of these four fails in a way that presents as something else: a polling loop that never empties, a grid that reorders itself between polls, a `DELETE` that appears to do nothing, a filter bar counting over the first hundred items. `STAGE-5` 5.2 records where each one went so nobody goes looking for them there.
+
+**All four are backend integration tests**, in the same file as the rest of `GET /items`'s coverage, regardless of which task owns them — 1.5 and 1.7 are frontend tasks and this is the one thing about them that is not.
+
 ---
 
 ## Tasks, in order
@@ -50,8 +58,15 @@ Add a startup sweep that resets `processing` rows older than 10 minutes to `fail
 ### 1.4 Item endpoints
 `PATCH /items/{id}` with full closed-vocabulary validation, setting `user_edited=true`. `DELETE` as soft archive. `POST /items/{id}/retag` with the `409` / `?force=true` behaviour. `GET /items/stats`.
 
+**Two `GET /items` tests are written at the *start* of this task, before any of the above.** Both defend behaviour 0.7 shipped, both are cheap, and both are what 1.5 and 1.7 then build on.
+
+- **`include_archived`.** Archived rows are excluded unless the parameter is passed (`DECISIONS.md` 051). This task is the first in the project to create an archived row, so it is the first that can test the exclusion at all. Without it, a `DELETE` that soft-archives correctly and a `GET` that silently stopped filtering are indistinguishable from the client — the symptom is that `DELETE` appears to do nothing.
+- **The `status` filter.** `?status=processing` really narrows the result set. The only test today is `test_rejects_a_status_filter_outside_the_closed_vocabulary`, which proves a bad value is a `422` and says nothing whatever about filtering. **Ownership is 1.7's** — the polling loop is what depends on it — and it is written here because 1.7 is a frontend task and because the defence should exist before the two tasks that lean on it.
+
 ### 1.5 Wardrobe grid
 `WardrobeStore` with the signals from `05-FRONTEND-SPEC.md`. Responsive grid — 3 columns at 390px, 5 on desktop. Skeleton tiles for `processing`, warning tiles for `failed` with a working retry button. Empty state with both CTAs.
+
+**`GET /items`'s `limit` is this task's to defend.** `05-FRONTEND-SPEC.md` requires the store to pass an explicit `limit`, because filters are client-side over the loaded collection while the parameter defaults to 100 and a realistic wardrobe is 80–150. Nothing asserts either end of that today. Test both: the default that applies when no `limit` is passed, and that a value above the documented cap of 200 is a `422` rather than a silently clamped page. The failure this catches is the one `05-FRONTEND-SPEC.md` already names — a filter bar quietly filtering over the first hundred items and reporting wrong counts, with no error anywhere.
 
 ### 1.6 Upload sheet
 Bottom sheet with both inputs — `capture="environment"` for the camera, `multiple` for the gallery. Local previews via `URL.createObjectURL` before the response returns. The sheet stays open after a camera capture so the next garment can be shot immediately.
@@ -60,6 +75,12 @@ The tip line — *"Best results: lay the item flat or hang it against a plain wa
 
 ### 1.7 Polling
 Poll `GET /items?status=processing` every 2 seconds while any item is processing. Stop when the set empties. Hard stop after 3 minutes, marking the rest failed in the UI.
+
+**This task owns two backend behaviours; one of them was already written at 1.4.**
+
+The **`status` filter** is 1.4's to write and this task's to depend on. A filter that silently stopped filtering would never let the result set empty, so the loop would run to the 3-minute hard stop and the fault would present as slow tagging rather than as a broken query — which is exactly the kind of failure the hard stop is good at disguising.
+
+The **`created_at DESC, short_id` ordering** (`DECISIONS.md` 051) is untested and is this task's to write. `now()` is the transaction timestamp, so every row of one upload shares a `created_at` to the microsecond and the `short_id` tiebreak is the only thing making the order total; without it a page can repeat or drop rows. The symptom is tiles changing places between two polls, which reads as a grid bug and sends you to the wrong file.
 
 ### 1.8 Filters
 Category chips, colour swatches, formality and warmth ranges. Client-side over the loaded collection. Filter state reflected in the URL so a filtered view can be shared and reloaded.

@@ -24,8 +24,11 @@ from app.enums import Category, ItemStatus, Layer
 class Item(Base):
     __tablename__ = "items"
 
-    # Spelled out here as well as in migration 0001 so that a schema built by
-    # create_all and one built by migrations agree, per 02-DATA-MODEL.md.
+    # Spelled out here as well as in migration 0001 so the ORM's description of
+    # the table names the same constraints the database has, per 02-DATA-MODEL.md.
+    # Not so that create_all could build this schema: create_type=False on all
+    # three enums (024) means it emits no CREATE TYPE and no CREATE EXTENSION,
+    # so it fails on CITEXT before it reaches item_status (074).
     __table_args__ = (
         CheckConstraint("formality BETWEEN 1 AND 5", name="formality_range"),
         CheckConstraint("warmth BETWEEN 1 AND 5", name="warmth_range"),

@@ -99,10 +99,9 @@ def _insert(db: Session, user_id: uuid.UUID, public_ids: list[str]) -> list[Item
                 extra={"user_id": str(user_id), "attempts_left": attempts_left},
             )
         else:
-            # SessionLocal sets expire_on_commit=False, so the server defaults
-            # this response needs are not otherwise fetched. Same reason as 040.
-            for item in items:
-                db.refresh(item)
+            # No refresh: the ORM's INSERT already returns every server default
+            # this response reads, and tests/integration/test_server_defaults.py
+            # asserts that no SELECT follows it. DECISIONS.md 075.
             return items
 
 

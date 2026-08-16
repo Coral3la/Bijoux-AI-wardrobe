@@ -3,9 +3,12 @@ from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
-    # Pinned so a schema built by create_all in a test fixture and one built by
-    # migrations produce identical constraint names, instead of leaving
-    # PostgreSQL to invent names that a later migration cannot reference.
+    # Pinned so the names SQLAlchemy would generate match the ones migration
+    # 0001 spells out as literals. It has no runtime effect: the live schema is
+    # built by the migration, so the name PostgreSQL reports in an IntegrityError
+    # — which is what register (040) and upload (052) match on — comes from
+    # there and not from here. What this buys is that the model and the database
+    # do not describe the same constraint under two different names.
     metadata = MetaData(
         naming_convention={
             "ix": "ix_%(table_name)s_%(column_0_N_name)s",
