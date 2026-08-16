@@ -134,7 +134,7 @@ Note on the config file: pytest 9 already reports `backend/pyproject.toml` as it
 
 ## Acceptance criteria
 
-- [ ] `GET /health` returns 200 with `db: "ok"`
+- [x] `GET /health` returns 200 with `db: "ok"`
 - [x] Register → login → `/auth/me` works end to end from the browser
 - [x] `alembic upgrade head` and `downgrade base` both run clean
 - [x] Uploading 3 images returns `202` with 3 rows, all `status='processing'`, and 3 assets appear in Cloudinary

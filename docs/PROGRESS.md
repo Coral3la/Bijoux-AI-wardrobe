@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 0 — Foundation
-**Status:** 0.1 through 0.10 complete — one acceptance criterion open, see the log
+**Status:** Stage 0 complete — 0.1 through 0.10, all acceptance criteria verified
 
 Claude Code updates this file at the end of every stage: tick the criteria, set the next stage, and note anything that changed relative to the plan.
 
@@ -100,4 +100,4 @@ Changed from the plan, all recorded in `DECISIONS.md` 072–075:
 - `pyproject.toml` needed `pythonpath = ["."]` as well as the `eval` marker: the bare `pytest` in `07-DEPLOYMENT.md`'s CI step could not import `app` at all.
 - Documented Postgres 16 corrected to 18 in four documents; CI's `postgres:16` pin is 5.5's.
 
-**Stage 0 is not closed.** `GET /health` returning `db: "ok"` is the one acceptance criterion never verified — it needs a running server against a reachable database, which is a manual check rather than a test. Everything else is ticked.
+**Stage 0 is closed.** The last open criterion — `GET /health` returning `db: "ok"` — was verified manually after the 0.10 commit, against a running server on the Neon database: `{"status":"ok","db":"ok","version":"0.1.0"}`. It is a manual check rather than a test because it needs a live server and a reachable database; nothing in the suite covers it.
