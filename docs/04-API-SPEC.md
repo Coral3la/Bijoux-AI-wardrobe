@@ -52,11 +52,13 @@ The `user` key above and the body of `GET /auth/me` and `PATCH /me` are all the 
   "created_at": "2026-08-06T09:14:22Z" }
 ```
 
-Every field but `id`, `email` and `created_at` is nullable and is `null` on a fresh account. One shape for one resource — see `DECISIONS.md` 034.
+Every field but `id`, `email`, `display_name` and `created_at` is nullable and is `null` on a fresh account.
 
-**Two corrections owed here, both found at task 0.9 and both owned by 0.10.** `display_name` is no longer `null` on a fresh account in practice: the register form requires it from 0.9, and `RegisterRequest.display_name` should be tightened to match its only client (`DECISIONS.md` 070) — at which point the sentence above is wrong for that field and must be amended rather than left. And **`POST /auth/login`'s `401` carries no `WWW-Authenticate` header**, contradicting the line below: `auth.py` raises `ApiError` with no `headers`, while `get_current_user` in `deps.py` does set it. RFC 9110 is on this document's side, so the code is what changes.
+**`display_name` is the exception, and it is nullable in the column while never being `null` on a new account.** `POST /auth/register` has required it since task 0.10 — `str`, trimmed, at least one character after trimming — so nothing this API creates can have a blank one. The column stays `TEXT NULL` because four accounts predate the rule and because `PATCH /me` does not set it, so a client reading `GET /auth/me` must still handle `null`. Tightening the request did not tighten the response: `UserResponse.display_name` is `str | None`. The spelling of the constraint is not the one `DECISIONS.md` 070 proposed — see 072 for why `Field(strip_whitespace=True)` silently does nothing.
 
-Failure codes on this group: `409` `email_exists`, `401` `invalid_credentials`, `401` `invalid_token`, `422` `validation_error`. Every `401` carries `WWW-Authenticate: Bearer`. Unknown keys in either request body are a `422` rather than being ignored (`DECISIONS.md` 039).
+One shape for one resource — see `DECISIONS.md` 034.
+
+Failure codes on this group: `409` `email_exists`, `401` `invalid_credentials`, `401` `invalid_token`, `422` `validation_error`. Every `401` carries `WWW-Authenticate: Bearer` — `get_current_user` has since task 0.5, and `POST /auth/login` since 0.10, where the gap was closed and `test_login_401_offers_the_bearer_challenge` was written to keep it closed. Unknown keys in either request body are a `422` rather than being ignored (`DECISIONS.md` 039).
 
 Authentication is a bearer token in the `Authorization` header. There is no OAuth2 password-flow token endpoint — `/auth/login` takes JSON, not form encoding (`DECISIONS.md` 035).
 

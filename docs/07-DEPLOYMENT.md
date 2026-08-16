@@ -4,7 +4,7 @@ Everything below runs on free tiers. Total cost is the OpenAI usage — a few do
 
 | Component | Service | Notes |
 |---|---|---|
-| Database | Neon | Postgres 16, free tier, branching for a separate test DB |
+| Database | Neon | Postgres 18, free tier, branching for a separate test DB |
 | Backend | Render | Web Service, free tier — sleeps after 15 min idle |
 | Frontend | Vercel | Static Angular build |
 | Media | Cloudinary | Free tier: 25 monthly credits, far beyond this project's needs |
@@ -61,6 +61,19 @@ Nothing in the application can prevent this: FastAPI resolves the form before th
 `APP_VERSION` is deliberately **not** an environment variable — it is a constant in `app/core/config.py`, so a deployed build cannot misreport its own version.
 
 `DATABASE_URL` carries SQLAlchemy's `postgresql+psycopg://` prefix. `psql` does not understand it; strip `+psycopg` before pasting a connection string into a terminal.
+
+### `TEST_DATABASE_URL`, added at task 0.10
+
+The backend test suite refuses to run without it, and refuses to run if it is equal to `DATABASE_URL`. It is **not** a field on `Settings` — no application code reads it, and it must never be set on Render (`DECISIONS.md` 073). Locally:
+
+```bash
+docker run --name bijoux-test-db -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=bijoux_test -p 5433:5432 -d postgres:18
+
+TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5433/bijoux_test
+```
+
+The same variable is what the Neon `test` branch below and CI's service container are for; only its value changes. The suite runs `alembic upgrade head` against it once per session, so the target needs no preparation beyond existing. **Postgres 18 rather than 16**, to match what Neon actually serves — CI's `postgres:16` pin is task 5.5's to correct.
 
 ### Frontend — `frontend/src/environments/`
 

@@ -54,7 +54,10 @@ def login(body: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     stored_hash = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
     if not verify_password(body.password, stored_hash) or user is None:
         raise ApiError(
-            status.HTTP_401_UNAUTHORIZED, "invalid_credentials", "Incorrect email or password."
+            status.HTTP_401_UNAUTHORIZED,
+            "invalid_credentials",
+            "Incorrect email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     return _issue(user)
 

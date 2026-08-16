@@ -118,13 +118,17 @@ Note for whoever builds it: the interceptor skips `/auth/login` and `/auth/regis
 
 ### 0.10 Test scaffolding
 
-**Two corrections inherited from 0.9, both found by reading the route rather than the spec.** `RegisterRequest.display_name` is `str | None = None` while the register form now requires it — tighten to `str = Field(min_length=1, strip_whitespace=True)` and amend `04-API-SPEC.md`'s "`null` on a fresh account" in the same commit (`DECISIONS.md` 070). And `POST /auth/login`'s `401` carries no `WWW-Authenticate: Bearer`, which `04-API-SPEC.md` promises for every `401`; add `headers` to that `ApiError`, and assert it in the login test this task already owns.
+**Two corrections inherited from 0.9, both found by reading the route rather than the spec.** `RegisterRequest.display_name` was `str | None = None` while the register form required it — tightened to match its only client, and `04-API-SPEC.md`'s "`null` on a fresh account" amended in the same commit (`DECISIONS.md` 070). And `POST /auth/login`'s `401` carried no `WWW-Authenticate: Bearer`, which `04-API-SPEC.md` promises for every `401`; `headers` added to that `ApiError` and asserted in the login test this task owns.
 
-`pytest.ini` with the `eval` marker registered. `conftest.py` with a test database fixture and a `TestClient`. Tests for register, login, duplicate email, bad password, and `/auth/me` with and without a token.
+**The first of those was specified wrongly and the spelling is corrected here.** This paragraph said `str = Field(min_length=1, strip_whitespace=True)`, and so did 070. Pydantic v2's `Field` has no `strip_whitespace` parameter — it is accepted as an extra keyword, warns, and strips nothing, so a display name of `"   "` would have passed the API while the form rejected it. The form that works is `Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]`. Measured before either was written; `DECISIONS.md` 072.
+
+Configuration under `[tool.pytest.ini_options]` in `pyproject.toml` — **not a separate `pytest.ini`**, per the note below, which is why this sentence no longer names one. It registers the `eval` marker and sets `pythonpath = ["."]`; without the second, the bare `pytest` that `07-DEPLOYMENT.md`'s CI step runs cannot import `app` and collects nothing, while `python -m pytest` works. `conftest.py` with a test database fixture and a `TestClient`. Tests for register, login, duplicate email, bad password, and `/auth/me` with and without a token.
+
+**The test database is a separate database, named by `TEST_DATABASE_URL`, and the fixture refuses to run without it.** `DATABASE_URL` on this project is a live Neon database with real rows in it; a fixture that migrates and truncates must not be one stale `.env` away from it. The guard refuses at import when the variable is unset or equal to `DATABASE_URL`, before any engine exists. Locally the target is a `postgres:18` container; `07-DEPLOYMENT.md`'s Neon `test` branch and CI's service container are the same variable pointed elsewhere. `DECISIONS.md` 073.
 
 This task also owns the row-writing half of 0.7's coverage, which needs the database fixture it builds: that `POST /items/upload` inserts one row per file with `status='processing'`, that `short_id` is unique across a batch and retried on collision, and cross-user isolation on `GET /items` and `GET /items/{id}`. Task 0.7 shipped the half that runs unaided — the rejection paths, with `get_db` stubbed to raise on use so that "nothing reached the database" is asserted rather than assumed. `06-TESTING-STRATEGY.md` lists collision retry under unit tests; it cannot be one, because the constraint is what detects a collision.
 
-Note on the config file: pytest 9 already reports `backend/pyproject.toml` as its `configfile`, and `DECISIONS.md` 020 put every other tool's configuration there. Register the marker under `[tool.pytest.ini_options]` in `pyproject.toml` rather than creating a separate `pytest.ini`, and correct the wording above when you do.
+Note on the config file: pytest 9 already reports `backend/pyproject.toml` as its `configfile`, and `DECISIONS.md` 020 put every other tool's configuration there. The marker is registered under `[tool.pytest.ini_options]` in `pyproject.toml` rather than in a separate `pytest.ini`, and the wording above is corrected to match.
 
 ---
 
@@ -132,12 +136,14 @@ Note on the config file: pytest 9 already reports `backend/pyproject.toml` as it
 
 - [ ] `GET /health` returns 200 with `db: "ok"`
 - [x] Register → login → `/auth/me` works end to end from the browser
-- [ ] `alembic upgrade head` and `downgrade base` both run clean
+- [x] `alembic upgrade head` and `downgrade base` both run clean
 - [x] Uploading 3 images returns `202` with 3 rows, all `status='processing'`, and 3 assets appear in Cloudinary
 - [x] Uploading a `.txt` file returns `415`; a 15 MB image returns `413`; an SVG returns `415`
 - [x] A logged-out user hitting `/wardrobe` is redirected to `/login`
 - [x] `ng version` reports Angular 22.x
-- [ ] Auth tests pass
+- [x] Auth tests pass
+
+The migration criterion was verified at 0.10 rather than 0.3, against an empty `postgres:18` container: `upgrade head` → `downgrade base` → `upgrade head`, clean each time, with `citext` and `pgcrypto` created by the migration itself and deliberately not dropped by the downgrade. It had never been run against a virgin database before — Neon already had both extensions, so 0.3 could not have distinguished a migration that creates them from one that assumes them.
 
 ## Commit checkpoints
 

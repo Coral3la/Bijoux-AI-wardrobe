@@ -13,6 +13,15 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
 
+[tool.pytest.ini_options]
+# Without this the console script `pytest` cannot import `app` at all — only
+# `python -m pytest` works, because that form puts the working directory on
+# sys.path and the script does not. 07-DEPLOYMENT.md's CI step runs `pytest`.
+pythonpath = ["."]
+markers = [
+    "eval: spends money on a real AI provider; excluded from CI with -m 'not eval'",
+]
+
 [tool.mypy]
 python_version = "3.14"
 files = ["app"]

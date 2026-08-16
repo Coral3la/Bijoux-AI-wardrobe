@@ -1,6 +1,8 @@
 # 02 — Data Model
 
-PostgreSQL 16. SQLAlchemy 2.0 ORM, Alembic migrations.
+PostgreSQL 18. SQLAlchemy 2.0 ORM, Alembic migrations.
+
+**Corrected at task 0.10, by reading the server rather than the plan.** This document, `07-DEPLOYMENT.md` and `docs/README.md` all said 16; the Neon project reports `18.4` and the local test container is `postgres:18`. Nothing in the schema depends on the difference, and it is corrected because a document that names a version the database does not run is the kind of detail that gets found during a defence. **CI still pins `postgres:16` and is task 5.5's to bring into line** — that job does not exist yet, so nothing is broken today.
 
 **This document is authoritative.** Do not add fields or enum values that are not listed here. If something is genuinely missing, stop and ask before changing the schema.
 

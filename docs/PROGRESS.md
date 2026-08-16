@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 0 — Foundation
-**Status:** in progress — 0.1 through 0.9 complete
+**Status:** 0.1 through 0.10 complete — one acceptance criterion open, see the log
 
 Claude Code updates this file at the end of every stage: tick the criteria, set the next stage, and note anything that changed relative to the plan.
 
@@ -19,7 +19,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Upload endpoint
 - [x] Frontend bootstrap
 - [x] Login and register screens
-- [ ] Test scaffolding
+- [x] Test scaffolding
 
 ## Stage 1 — Wardrobe
 `stages/STAGE-1-wardrobe.md` · target 6–7 days
@@ -90,3 +90,14 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 ## Log
 
 _Append one line per completed stage: date, what shipped, what changed from the plan._
+
+**2026-08-16 — task 0.10, test scaffolding.** 192 backend tests pass (155 before). New: `tests/conftest.py`, `tests/integration/test_auth.py`, `tests/integration/test_items_rows.py`. Both corrections 0.9 recorded are closed — `RegisterRequest.display_name` is required and trimmed, `POST /auth/login`'s `401` carries `WWW-Authenticate: Bearer`.
+
+Changed from the plan, all recorded in `DECISIONS.md` 072–075:
+
+- The `display_name` fix as specified (`Field(strip_whitespace=True)`) does nothing in Pydantic v2 and was respelled with `StringConstraints`.
+- The test database is a separate `postgres:18` container named by `TEST_DATABASE_URL`, with an import-time guard against pointing it at `DATABASE_URL`.
+- `pyproject.toml` needed `pythonpath = ["."]` as well as the `eval` marker: the bare `pytest` in `07-DEPLOYMENT.md`'s CI step could not import `app` at all.
+- Documented Postgres 16 corrected to 18 in four documents; CI's `postgres:16` pin is 5.5's.
+
+**Stage 0 is not closed.** `GET /health` returning `db: "ok"` is the one acceptance criterion never verified — it needs a running server against a reachable database, which is a manual check rather than a test. Everything else is ticked.

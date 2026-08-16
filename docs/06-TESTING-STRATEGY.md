@@ -117,6 +117,38 @@ Same shape both times: a moment sampled instead of an event observed. The genera
 
 **Mutation is what separates the two, and nothing else does.** Delete the behaviour, run the suite, and confirm a *named* test fails. Seven were run across the specs at task 0.9; **four of them exposed something** — two tests passing for the wrong reason, and two behaviours with no test at all (the `**` wildcard's destination, and the deliberate asymmetry between the two login notices). Both now have tests. Two more remain undefendable at this layer and are 5.3's — see below.
 
+### The backend mutation run, task 0.10
+
+Thirteen mutations against the new integration suite. Twelve were caught by a named test; **one survived and is recorded rather than papered over.**
+
+| # | Behaviour deleted | Caught by |
+|---|---|---|
+| 1 | `display_name` required → optional again | `test_register_requires_a_display_name` + 2 |
+| 2 | `strip_whitespace` dropped from the constraint | `test_register_trims_the_display_name` + 1 |
+| 3 | respelled as `Field(strip_whitespace=True)` | `test_register_rejects_a_display_name_that_is_only_whitespace` + 1 |
+| 4 | `WWW-Authenticate` removed from login's `401` | `test_login_401_offers_the_bearer_challenge` |
+| 5 | dummy-hash comparison skipped for an unknown email | `test_login_hashes_even_when_the_email_is_unknown` |
+| 6 | ownership dropped from `GET /items/{id}` | `test_reading_another_users_item_is_404_not_403` |
+| 7 | ownership dropped from `GET /items` | `test_list_items_returns_only_the_callers_items` + 1 |
+| 8 | `short_id` collision no longer retried | `test_upload_retries_the_batch_when_a_short_id_collides` + 1 |
+| 9 | `db.rollback()` removed from the retry | `test_upload_retries_the_batch_when_a_short_id_collides` + 1 |
+| 10 | rows inserted `ready` instead of `processing` | `test_uploaded_rows_start_as_processing` |
+| 11 | **`db.refresh` dropped after insert** | **nothing — survived** |
+| 12 | fixture: `join_transaction_mode` dropped | 3 collision tests |
+| 13 | fixture: per-test `rollback` → `commit` | the session-scoped row-count check |
+
+Three of these are worth more than a row in a table.
+
+**Number 3 is the reason mutation testing is not only about tests.** The mutation was to write the code *exactly as the stage file and `DECISIONS.md` 070 specified it*, and two named tests failed — which is how it was established that the specification was wrong rather than the implementation. `DECISIONS.md` 072.
+
+**Number 5 is an event assertion standing in for something unassertable.** The dummy bcrypt comparison on an unknown email exists to close a timing channel (037), and timing cannot be asserted reliably. Counting calls to `verify_password` can be: without the dummy hash the route returns before it is ever reached. Same rule as 0.9's `NavigationStart` counting — assert the event, not the state afterwards.
+
+**Number 13 defends the fixture rather than the application, and it is the one that would have gone unnoticed.** Turning the per-test `rollback()` into `commit()` leaves every assertion in the suite passing, because each test asserts against data it created and does not care whether the data survives. Nothing in a green suite distinguishes the two. What breaks is later runs: the database accumulates rows and eventually collides with itself. The defence is a session-scoped teardown comparing `users` and `items` counts across the run.
+
+**And the honest one: number 11 survived.** `db.refresh` after the item insert is redundant — SQLAlchemy already returns the server defaults via `RETURNING` — so there is no behaviour left to defend, and no test was written to pretend otherwise. `DECISIONS.md` 075.
+
+**A note on running mutations, learned the expensive way at this task.** The first attempt used a harness that restored each file in a `finally` block. It was killed by a timeout mid-mutation, the restore never ran, and the *entire next run* executed against a tree with `status='ready'` still baked into `_insert` — producing a table in which every mutation looked caught, by a test that was simply failing throughout. It was noticed only because one test appeared in all thirteen rows, including mutations it could not possibly relate to. **A mutation harness must verify a green baseline before it starts and after it finishes, and restore from a pristine copy rather than from memory.** A mutation table built on a red baseline is worse than no mutation table, because it reads as evidence.
+
 ---
 
 ## Layer 4 — E2E with Playwright

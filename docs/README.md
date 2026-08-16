@@ -50,7 +50,7 @@ Read these in order. Every document is the single source of truth for its area â
 |---|---|
 | Frontend | Angular 22 (standalone, signals, zoneless), Tailwind CSS |
 | Backend | Python 3.14, FastAPI, SQLAlchemy 2.0, Pydantic v2, Alembic |
-| Database | PostgreSQL 16 (Neon free tier) |
+| Database | PostgreSQL 18 (Neon free tier) |
 | Media | Cloudinary (upload, transforms, optional background removal) |
 | AI | OpenAI `gpt-4o-mini` â€” vision tagging **and** stylist reasoning, via Structured Outputs |
 | Weather | Open-Meteo (no API key required) |

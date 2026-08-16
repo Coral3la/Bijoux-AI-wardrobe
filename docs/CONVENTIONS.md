@@ -110,6 +110,10 @@ Where a limit is counted in a unit other than the one a user would count in, the
 - One assertion concept per test
 - No test may call OpenAI unless marked `@pytest.mark.eval`
 - No `waitForTimeout` in Playwright, ever
+- The backend suite runs against `TEST_DATABASE_URL` and refuses to start without it, or if it equals `DATABASE_URL` (`DECISIONS.md` 073)
+- **No test hard-codes a value that a `UNIQUE` constraint covers.** Planted `short_id`s come from `generate_short_id()`. A literal survives any run that fails to roll back and leaves the suite permanently red until someone truncates the table by hand — which is not hypothetical, it happened at 0.10
+
+**Before claiming a test defends a behaviour, delete the behaviour and run the suite.** A named test must fail. This is the practice `06-TESTING-STRATEGY.md` established at task 0.9 and applied to the backend at 0.10, where twelve of thirteen mutations were caught and the thirteenth proved a line of application code was redundant. Mutations are run from a pristine copy with a green baseline verified on both ends — a harness that leaves a mutation behind produces a table that reads as evidence and is not.
 
 ## Definition of done
 

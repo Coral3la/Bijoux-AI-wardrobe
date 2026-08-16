@@ -26,7 +26,7 @@ export class AuthService {
   // for is a credential we hold, not a session. DECISIONS.md 067.
   readonly isAuthenticated = computed(() => this.userSignal() !== null);
 
-  register(email: string, password: string, displayName: string | null): Observable<TokenResponse> {
+  register(email: string, password: string, displayName: string): Observable<TokenResponse> {
     return this.http
       .post<TokenResponse>(`${environment.apiUrl}/auth/register`, {
         email,
