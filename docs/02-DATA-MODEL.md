@@ -16,6 +16,8 @@ Free-text tagging produces `"light blue"`, `"baby blue"`, `"sky blue"`, and `"pa
 
 These live in `backend/app/enums.py` and are mirrored in `frontend/src/app/shared/models/enums.ts`. Both files are generated from this document by hand and must stay in sync.
 
+**The category-dependent rules below are the one exception, and they live in `app/enums.py` alone.** `enums.ts` mirrors the *values*, not the rules. Copying the rules into a second language would add a hand-written copy with nothing comparing it to anything, in the same position as the upload limits and the password rules `CONVENTIONS.md` records — and it would have been written before the screen that wants it existed. What the tag editor does instead is written into task 1.9. `DECISIONS.md` 085.
+
 ### `category` — 7 values
 
 ```
@@ -34,13 +36,43 @@ bag:        tote · crossbody · shoulder · clutch · backpack
 accessory:  belt · scarf · hat · sunglasses · jewelry
 ```
 
+### Category-dependent validity
+
+Five fields cannot be validated on their own, and `subcategory` above is the oldest of them. The rule is one pair applied five times: **which values the category admits, and what the category says the answer is when the value is not admitted.**
+
+Where the category determines a single answer, an inadmissible value is corrected to it. Where it does not, the vocabulary cannot answer and reports an error — which the vision path turns into one retry naming the violation, and `PATCH /items/{id}` turns into a `422`. **Nothing invents a value.**
+
+| Field | Admits | An inadmissible value becomes |
+|---|---|---|
+| `subcategory` | the parent category's list | an error — `top` does not say which of its eight |
+| `rise` | `low · mid · high`, and only beside `bottom` | `NULL` — elsewhere there is no rise to have |
+| `fit` | see below | `NULL` |
+| `length` | see below | `NULL` |
+| `layer` | see below | the category's answer, or an error for `top` alone |
+
+A value that is outside its own vocabulary altogether is dealt with first, on the terms that field already states, so nothing is reported twice.
+
+Two consequences worth having before the field sections that follow. **A value present with no `category` at all is an error for every one of the five**, because whether it is meaningful cannot be decided without one — which includes a `PATCH` against a row that is still `processing`, whose tags are all `NULL`. And **when `PATCH` changes `category`, the route clears all five** for any the same request does not supply, because there it is the stored row that became impossible rather than the request that was wrong (`DECISIONS.md` 030). The list of five is exported from `app/enums.py` as `CATEGORY_DEPENDENT_FIELDS`, so the route reads it rather than restating it.
+
 ### `fit` — the silhouette
 
 ```
 skinny · slim · straight · relaxed · oversized · wide · bodycon · a_line · flowy
 ```
 
-Always nullable. A bag has no meaningful silhouette, and a value outside this list is coerced to `NULL` rather than rejected — an absent attribute is better than a wrong one, and neither the stylist nor any filter requires it.
+Always nullable. A value outside this list is coerced to `NULL` rather than rejected — an absent attribute is better than a wrong one, and neither the stylist nor any filter requires it.
+
+**`fit` applies to `top`, `bottom`, `dress` and `outerwear`, and to nothing else.** A bag has no meaningful silhouette, and neither has a shoe or a belt — not one of the nine words above describes one. On `shoes`, `bag` and `accessory` the field is `NULL`.
+
+**Three of the nine words are narrower than the field itself.** Every word not named here applies wherever the field does.
+
+| Value | Applies to | Why |
+|---|---|---|
+| `skinny` | `bottom` | A leg word. Returned on a tank top at task 1.1, which is what opened this |
+| `wide` | `bottom` · `dress` | Wide-leg. `dress` is in the list because a wide-leg **jumpsuit** is category `dress` |
+| `bodycon` | `top` · `bottom` · `dress` | A bodycon coat is not a garment |
+
+`slim`, `straight`, `relaxed` and `oversized` describe all four categories the field applies to. `a_line` and `flowy` are left unconstrained deliberately: an A-line top is a real cut, and a rule that coerced it away would manufacture exactly the wrong answer these three rows exist to prevent. `DECISIONS.md` 085.
 
 ### `length`
 
@@ -49,7 +81,20 @@ sleeveless · short_sleeve · long_sleeve · crop · regular · longline
 mini · midi · maxi · ankle · full
 ```
 
-Always nullable, on the same terms as `fit`. One flat list covering three axes — sleeve, top length, hem — with no per-category restriction, so `maxi` on a t-shirt validates. Recorded as a known limitation in `DECISIONS.md` 029.
+Always nullable, on the same terms as `fit`. One flat list covering three axes — sleeve, top length, hem.
+
+**`length` applies to every category except `bag` and `accessory`.** `shoes` keeps it, because `ankle` is a genuine shoe length.
+
+**The two ends of the list are narrower than the field. The middle is not, and that is deliberate.**
+
+| Values | Apply to | Why |
+|---|---|---|
+| `sleeveless · short_sleeve · long_sleeve` | `top` · `dress` · `outerwear` | A pair of jeans has no sleeves |
+| `mini · midi · maxi` | `bottom` · `dress` · `outerwear` | A t-shirt has no hem length. `outerwear` is in the list because a maxi coat is a real garment |
+
+`crop`, `regular`, `longline`, `ankle` and `full` are unconstrained within the five categories the field applies to. They genuinely span the axes — cropped trousers and a cropped top, ankle boots and ankle trousers — and a rule over them would coerce correct answers away. **This is the point at which the flat list stops being enforced**, and the reason it stops here rather than earlier or later is that these five are the only words in it that describe more than one axis.
+
+`maxi` on a t-shirt no longer validates. `DECISIONS.md` 029 was the entry accepting that it did, on the premise that the three axes do not collide in practice; it is closed by this section and by the three `fit` rows above, and 085 carries the reasoning.
 
 ### `rise` — bottoms only, `NULL` elsewhere
 
@@ -58,6 +103,8 @@ low · mid · high
 ```
 
 This single field is what separates mom jeans from low-rise jeans, and it drives proportion rules in the stylist prompt.
+
+It is the second instance of category-dependent validity above and the one whose answer is plainest: outside `bottom` there is no rise to have, so an inadmissible value is `NULL` and never an error. The rule was written here before `fit`, `length` and `layer` had one, and it is the shape the other three now follow.
 
 ### `color_primary` / `color_secondary` — 17 values
 
@@ -111,6 +158,26 @@ base · mid · outer · standalone
 ```
 
 A shirt is `base`, a cardigan is `mid`, a coat is `outer`, a dress is `standalone`. Shoes, bags, and accessories are `standalone`. This field drives layering validity: the stylist may not put two `outer` items in one look.
+
+**What each category admits, and what it answers with.**
+
+| Category | Admits | Answer when the value is not admitted |
+|---|---|---|
+| `top` | `base · mid` | **none — this is an error** |
+| `bottom` | `base` | `base` |
+| `dress` | `standalone` | `standalone` |
+| `outerwear` | `mid · outer` | `outer` |
+| `shoes` | `standalone` | `standalone` |
+| `bag` | `standalone` | `standalone` |
+| `accessory` | `standalone` | `standalone` |
+
+Two rows of that table are claims rather than bookkeeping, and they are stated here in their own right so that a later reader can disagree with them by name instead of re-deriving the table.
+
+**A `bottom` admits `base` and nothing else.** Layering is a property of the torso. A pair of trousers is neither worn over another garment nor worn as an entire outfit, so `mid`, `outer` and `standalone` are all wrong for it and `base` is the only word left. That makes `bottom`'s answer determinate, and an inadmissible layer on a bottom is corrected rather than refused.
+
+**A `top` is the only category with no determinate answer.** `mid` is defined by position — worn over a base — rather than by category, and a sweater, a sweatshirt, a hoodie or an open shirt is a top that is routinely worn over a base. A top is therefore legitimately either `base` or `mid`, and the vocabulary cannot say which one a top tagged `outer` or `standalone` should have been. It does not guess. This is the one case in this document that reports an error.
+
+**The cost of that is real and it is accepted.** An item can now finish `failed` with no tags at all where it previously finished `ready` with a wrong `layer`. That is the right side of the trade: a failed tile is visible and carries a retry button, whereas a wrong `layer` surfaces two stages later as a bad look, with nothing pointing back here. The alternative — correcting a top to `base` — would push a hoodie the model answered `mid` about, correctly, down to the wrong value across a whole class of garments, silently, and far more often than the error will fire. `DECISIONS.md` 082 and 085.
 
 ### `item_status`
 

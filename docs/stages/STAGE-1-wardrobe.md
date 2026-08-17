@@ -65,11 +65,25 @@ The shape of a fix already exists in the file twice — `SUBCATEGORIES` for `sub
 
 Unit tests: every new rule, both directions, per category. No AI, no database — the property 028 bought for this module.
 
+**Settled. All three fields opted in, and the mechanism is one rule rather than three.** A category-dependent check is a pair — which values the category admits, and what the category says the answer is when the value is not admitted — so it coerces where the category determines an answer and errors where it does not. `DECISIONS.md` 085 has the argument; `02-DATA-MODEL.md` carries the rules and is authoritative.
+
+- **`layer`** — every category gets an admitted set and an answer. **`top` is the only category with no answer**, so a top tagged `outer` or `standalone` is an **error**, not a coercion: 082's open question is closed by refusing to guess rather than by picking `base`. An item can now finish `failed` where it previously finished `ready` with a wrong layer, and that trade is accepted in 085.
+- **`fit`** — applies to `top`/`bottom`/`dress`/`outerwear` only, and three words are narrower than the field: `skinny` to bottoms, `wide` to bottoms and dresses, `bodycon` to everything but outerwear. Deliberately narrower than `03-AI-CONTRACTS.md`'s "trouser words" aside, which explained one jacket rather than stating a rule.
+- **`length`** — applies to everything but `bag` and `accessory`; sleeve words to `top`/`dress`/`outerwear`, hem words to `bottom`/`dress`/`outerwear`. **The middle five stay unenforced** — `crop`, `regular`, `longline`, `ankle`, `full` describe more than one axis each. 029 is closed by this and by the `fit` rows.
+- **The rules stay server-side.** `enums.ts` mirrors values, not rules — see 1.9 for what the editor does instead.
+- **`CATEGORY_DEPENDENT_FIELDS` is exported from `enums.py`** and is five fields; `030` is amended and 1.4 reads the list rather than restating it.
+
 #### 1.2b — `validate_tags` and retry, in `vision.py`
 
 `validate_tags(raw) -> ItemTags` implementing every check and coercion in `03-AI-CONTRACTS.md`, against the rules 1.2a settled. Exactly one retry on failure, naming the violation. Second failure raises `TaggingError`. This is where `ItemTags` is defined.
 
 Unit tests: every coercion path, every rejection path, the retry, and the give-up. No AI calls in these tests.
+
+**This task also renders 1.2a's rules into the prompt, and it is the only task that opens `vision.py` this stage.** `_vocabulary_block()` currently prints `fit` as nine words with no category guidance, so the model is never told that `skinny` is a trouser word — every instance is a silent coercion nobody learns from, which is half of what `DECISIONS.md` 084 complained about. The tables are public in `enums.py` for exactly this: `FIELD_APPLIES_TO`, `VALUE_APPLIES_TO` and `LAYERS_BY_CATEGORY` render the same way `SUBCATEGORIES` already does, so prompt and validator cannot disagree (080's property, extended to the rules rather than only the values). A prompt is not a guarantee — 082 — so this reinforces the validator rather than replacing it.
+
+**One knock-on to record when it lands:** this changes the live prompt, so 1.11's baseline must record a prompt version alongside the model id.
+
+**`top` is the one new retry trigger.** It is the only category-dependent rule that produces an error rather than a coercion, so it is the only one that reaches `TaggingError`. Test the give-up against it specifically: a model that answers `standalone` for a top twice ends `failed`, which is a path no other rule in the vocabulary can reach.
 
 Three things arrived from 1.1 that belong here rather than in 1.2a, because each is about what the *service* does with the report:
 
@@ -90,6 +104,11 @@ Add a startup sweep that resets `processing` rows older than 10 minutes to `fail
 
 ### 1.4 Item endpoints
 `PATCH /items/{id}` with full closed-vocabulary validation, setting `user_edited=true`. `DELETE` as soft archive. `POST /items/{id}/retag` with the `409` / `?force=true` behaviour. `GET /items/stats`.
+
+**Two things 1.2a changed under this task, both in `DECISIONS.md` 030's amendment.**
+
+- **The category change clears five fields, not three** — `subcategory`, `rise`, `layer`, **`fit`** and **`length`** — and the list is `CATEGORY_DEPENDENT_FIELDS`, exported from `app/enums.py`. Read it; do not restate it. A field that gains a category rule in the vocabulary and not in this route is silent data loss on a `200`.
+- **A `PATCH` against a row that is still `processing` can now be a `422` where it used to be a `200`.** A processing row has every tag `NULL`, including `category`, and a category-dependent field cannot be validated without one, so `PATCH {"fit": "slim"}` on a processing item answers `422` naming `fit`. That is correct — whether a silhouette is meaningful is undecidable without the garment's category — but it is new, it is reachable from a failed tile's "Add manually" link, and it is the kind of thing that reads as a bug the first time it is met. `05-FRONTEND-SPEC.md` does not open the editor on a processing item, so the practical exposure is API clients and the retry path.
 
 **Two `GET /items` tests are written at the *start* of this task, before any of the above.** Both defend behaviour 0.7 shipped, both are cheap, and both are what 1.5 and 1.7 then build on.
 
@@ -123,7 +142,9 @@ Full-size image, tags as chips, wear stats placeholder. The editor uses a select
 
 **If 1.2 implemented the `confidence < 0.35` review flag, this screen is where it renders** — `05-FRONTEND-SPEC.md` names no surface for it and `03-AI-CONTRACTS.md`'s table row assumed one existed. If 1.2 decided not to build it, that decision is why there is nothing here, and this line is the reason a reader will not go looking. Either way, do not render `ai_confidence` as a quality score: eight live responses at 1.1 returned `0.9` including two wrong answers, so a number shown beside a tag would tell a user the opposite of the truth.
 
-**Changing the category select clears and re-prompts for `subcategory`, `rise` and `layer` — all three, not `subcategory` alone.** The server nulls whichever of them the request does not supply (`DECISIONS.md` 030), so an editor that only repopulates the subcategory select silently loses `rise` and `layer` on a `200`. The user must see three empty fields before saving.
+**Changing the category select clears and re-prompts for `subcategory`, `rise`, `layer`, `fit` and `length` — all five, not `subcategory` alone.** The server nulls whichever of them the request does not supply (`DECISIONS.md` 030, amended at 1.2a), so an editor that only repopulates the subcategory select silently loses the other four on a `200`. The user must see five empty fields before saving. It was three fields until task 1.2a gave `fit` and `length` category rules of their own.
+
+**The vocabulary's category rules are server-side, and this screen is what pays for that.** `enums.ts` mirrors the *values* only — the decision and its cost are `DECISIONS.md` 085 and they are inherited here rather than reopened. The consequence is concrete: the `fit` select can offer `skinny` while the item is a tank top, and saving it returns `422` naming `fit`. Two acceptable ways to handle that, and **it is this task's choice which**: render the server's message against the field, or filter the select client-side from a hand-written copy of the rules — which would be a second copy in a second language with nothing comparing them, the failure `CONVENTIONS.md` records three times over. The reason there is no third option is that no endpoint publishes the vocabulary; adding one needs `04-API-SPEC.md` changed first, since that document forbids inventing endpoints.
 
 ### 1.10 Seed script
 `scripts/seed_demo.py` creating `demo@bijoux.app` with 40 pre-tagged items, `status='ready'`, no AI calls. Images uploaded to Cloudinary once and their `public_id`s committed in the script.
@@ -154,11 +175,15 @@ Three things to carry in, and one to be careful about:
 - **Mine `display_name` as well as `fit`.** `flared` was discarded from the structured field and appears to have survived in the free-text one, so the words the vocabulary is missing may be recoverable from rows already written rather than only from nulls.
 - **Be careful with the prior.** Eight images, no hand-labels, and chosen by whatever was to hand. If the golden set contradicts it, the golden set is right.
 
+**Build repeated `(category, subcategory)` pairs into the set deliberately, and decide how many before you start collecting.** This is the one design property of the dataset that cannot be added afterwards. A set of thirty distinct garments can measure **accuracy** — how often the model is right — and can never measure **consistency**, because consistency is only visible when the same question is asked twice. The eight-image prior is the worked example and it is why this line exists: two tank tops came back with two different `fit` values, `None` and `skinny`, and that disagreement is what falsified the "the model returns null when the vocabulary is short a word" reading. A single tank top would have supported it. **Absence has one explanation and reads as a pattern; disagreement has to be explained and cannot be waved away** — which makes consistency the cheaper signal, because one contradiction inside the set is conclusive where a rate needs a baseline to interpret. Report per-pair agreement alongside per-field accuracy.
+
+**Record a prompt version with every run, not only the date and model id.** Task 1.2b renders 1.2a's category rules into the `{{VOCABULARY}}` block, so the prompt this dataset is measured against changes at least once before the first run. A curve measured against a prompt that moved underneath it is not reproducible, which is the same property 078 pinned the model for.
+
 If the answer is the vocabulary, note where the fix lands and how exposed it is: **`02-DATA-MODEL.md` first, `enums.py` second, `enums.ts` third, all by hand, with nothing comparing any of them.** That is the seam the generated schema at 1.1 moved rather than closed, and the one place in this project where a change has to be made three times correctly.
 
 The prompt also licenses a null `fit` without ever saying when one is appropriate, unlike `rise` and `color_secondary`, which have explicit rules — the cheapest thing to change first if the answer turns out to be the prompt.
 
-**Run the golden set twice — once on the pin, once on `gpt-5.4-mini-2026-03-17` — and record both.** Task 1.1 kept `gpt-4o-mini-2024-07-18` deliberately and deferred the model question here, because before this dataset exists the comparison is taste and after it exists it is a number (`DECISIONS.md` 078). Report the same per-field metrics for both, note the cost difference, and re-pin if the newer model wins — which is one constant in `app/core/config.py`. Both runs go in `docs/eval-results.md` with their dates and model ids, and the losing run stays in the file: the comparison is the artefact, not just the winner.
+**Run the golden set twice — once on the pin, once on `gpt-5.4-mini-2026-03-17` — and record both.** Task 1.1 kept `gpt-4o-mini-2024-07-18` deliberately and deferred the model question here, because before this dataset exists the comparison is taste and after it exists it is a number (`DECISIONS.md` 078). Report the same per-field metrics for both, note the cost difference, and re-pin if the newer model wins — which is one constant in `app/core/config.py`. Both runs go in `docs/eval-results.md` with their dates, model ids and prompt versions, and the losing run stays in the file: the comparison is the artefact, not just the winner.
 
 ---
 

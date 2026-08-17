@@ -51,7 +51,7 @@ Every boundary in the mapping table gets both sides asserted. Also unit-tested w
 - `serializer.py` — wardrobe to compact lines: null omission, field order, token budget
 - `security.py` — hash and verify round-trip, the 72-byte cap raising rather than truncating, token round-trip, expiry, bad signature, tampered payload. Pure by construction: it imports no ORM and no session (`DECISIONS.md` 038), which is what lets these run at task 0.5, before any fixture exists
 - `storage.py` — the signature table for every accepted and rejected format, truncated files, the size boundary on both sides, and the four transform URLs against `07-DEPLOYMENT.md`. Pure by the same construction as `security.py`: the accept/reject rule is a function of bytes, and the one call that would leave the process is monkeypatched — including a fake that raises if called at all, which is how "validate before uploading" is enforced rather than assumed
-- `enums.py` — `subcategory` validity per `category`, all 7 categories
+- `enums.py` — `subcategory` validity per `category`, all 7 categories; and from task 1.2a the rest of the category-dependent rules, both directions per category: `fit` and `length` applicability and their narrowed words, and `layer`'s admitted set and answer for each of the seven — including the one category, `top`, whose answer is an error rather than a value
 - `short_id` generation — alphabet excludes `0O1IL`, correct length, no repeat across a large sample. **Collision retry is not here**, and the original wording was wrong to place it: what detects a collision is the `uq_items_short_id` constraint, so the retry cannot run without a database. Task 0.7 shipped the pure half; task 0.10 owns the retry with the rest of the row-writing tests
 - `validate_tag_dict()` — every coercion and every rejection path
 - `validate_tags()` — the retry and the give-up, with the vision call mocked
@@ -119,6 +119,25 @@ Same shape both times: a moment sampled instead of an event observed. The genera
 
 **Mutation is what separates the two, and nothing else does.** Delete the behaviour, run the suite, and confirm a *named* test fails. Seven were run across the specs at task 0.9; **four of them exposed something** — two tests passing for the wrong reason, and two behaviours with no test at all (the `**` wildcard's destination, and the deliberate asymmetry between the two login notices). Both now have tests. Two more remain undefendable at this layer and are 5.3's — see below.
 
+### Two readings of one input beat one reading of two
+
+Where a check can be run twice on the same input, prefer that over running it once on two. The reason is asymmetric and it is what makes this a rule rather than a preference: **absence has one explanation and reads as a pattern, while disagreement has to be explained and cannot be waved away.**
+
+Two instances, one from each side of the project.
+
+- **The log test at task 0.10.** `test_health_logs_a_warning_when_the_database_is_unreachable` passed when its file ran alone and failed in the full suite. Neither run alone said anything; running the *same test* twice in two contexts is what located `fileConfig` disabling every application logger (`DECISIONS.md` 076). One run would have been believed.
+- **The eight live images before task 1.2.** Two tank tops came back with two different `fit` values — `None` and `skinny`. That single contradiction falsified the reading that a null `fit` means the vocabulary is short a word, and it did so conclusively, from a sample of two. The six other garments were each photographed once and could support no such conclusion, because a null with nothing to disagree with is just a null.
+
+The consequence for task 1.11 is written into that task: a golden set of thirty distinct garments can measure accuracy and can never measure consistency, so repeated `(category, subcategory)` pairs have to be designed in before the photographs are collected. Consistency is the cheaper signal to act on — one contradiction inside the set is conclusive, where a rate needs a baseline to interpret.
+
+### A test that reads its expectation from the thing under test measures nothing on its own
+
+Task 1.2a's rules live in three tables, and the behavioural tests derive what they expect from those tables — `kept = category in VALUE_APPLIES_TO["fit"][value]`. That makes them precise about whether the *validator honours the table*, and completely blind to whether the table is right: **mutate the table and the expectation moves with it, so every derived test stays green.**
+
+So the rule: **where a test's expectation is read from the thing under test, a second test states it literally, or the pair measures nothing.** `test_enums.py` pins all three tables as literals for exactly this reason, and the measurement is what proves it rather than the argument — mutation 5, dropping the sleeve words' narrowing, is caught by **exactly one test in 376**, and that test is the literal pin. Without it the mutation survives silently and the table can be edited to say anything.
+
+The same shape has a second, sharper form worth knowing: **a `@parametrize` derived from the thing under test moves the failure from a named test to collection.** The first run of task 1.2a's mutation 1 reported `CAUGHT by 0 tests` because a parametrisation indexed `LAYERS_BY_CATEGORY[Category.TOP]` at import, so deleting that row made the module fail to load rather than fail an assertion. A suite that will not collect is a worse signal than a named test failing, and it is easy to misread as a survivor. State parametrisation cases literally where the mutation set will reach them.
+
 ### The backend mutation run, task 0.10
 
 Thirteen mutations against the new integration suite. Twelve were caught by a named test; **one survived and is recorded rather than papered over.**
@@ -162,6 +181,8 @@ Worth stating plainly, because it is not what the technique is usually sold for:
 - 0.10, mutation 3: writing the code exactly as `STAGE-0` and `DECISIONS.md` 070 specified it failed two named tests, which is how the *specification* was established to be wrong rather than the implementation. `DECISIONS.md` 072.
 - 0.10, mutation 11: `db.refresh` survived, which established that a comment describing a behaviour SQLAlchemy does not have had been believed and copied. `DECISIONS.md` 075, closed at 040.
 - Before 1.1: a replacement comment for `db/base.py` claimed the naming convention is what 037, 040 and 052 match on. Mutating the convention broke nothing, which located the real load in migration `0001`'s literals — and caught the false claim *between writing it and committing it*. `DECISIONS.md` 077.
+
+- 1.2a: seven mutations plus a fatal control, all caught, baseline green at both ends — and the finding is not in the table. **The harness misreported one row.** Dropping `LAYERS_BY_CATEGORY`'s `top` entry printed `CAUGHT by 0 tests` beside a mangled filename, because the run had produced a pytest `ERROR` line and the harness only parsed `FAILED`. It was a collection error dressed as a survivor. Both halves were fixed — the parsing, and the derived `@parametrize` that caused the collection to fail at all — and the mutation now fails `test_the_layer_table_covers_every_category` by name. **A mutation table that misreports one row reads as evidence for every row in it.**
 
 The lesson generalises: the assertion under test is often a sentence in a document, not a branch in the code. Deleting the behaviour is the only way to find out whether the sentence was ever true.
 

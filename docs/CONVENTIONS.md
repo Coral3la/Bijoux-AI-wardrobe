@@ -105,6 +105,18 @@ Comment **why**, never **what**. Code that needs a comment to explain what it do
 
 The test is whether the sentence is false **now**, not whether it is about to be. Where a sentence is deliberately temporary, say what replaces it and when, so the next reader tidies it on purpose rather than by instinct. This applies to comments and to the documents alike; in this project the tidy has been the mistake more often than the comment has.
 
+## Delivering code, and what a paste cannot carry
+
+Code on this project is printed by the agent and pasted by the developer (`DECISIONS.md` 017). That transfer has a measured limit, found at task 1.2a: **a line that exceeds the display width cannot be transferred by paste with confidence, and comments are where that fails silently.**
+
+Code fails loudly. A truncated statement does not compile, an unbalanced paren is caught by the next lint run, and a printed line count catches a block that never landed. **A truncated comment leaves a working file whose reasoning has a hole in it, and nothing anywhere reports that** — the file imports, the suite is green, and the sentence explaining why a line exists simply stops mid-word. At 1.2a six comment lines arrived cut at the same visual column and one three-line comment vanished entirely, in a file whose every statement was byte-correct.
+
+So:
+
+- **A file whose delivery includes comment prose is written to disk by the agent.** Only its statements are printed for review. This costs nothing the printing rule was protecting: the developer reads the structure by pasting the code, and reads the reasoning in the explanation above the block, never by pasting the comments.
+- **Where a whole file is printed anyway, comment lines stay inside the narrowest pane the developer reads in.** The measured truncation point at 1.2a was **66 columns**; the comments that failed were written to 80. That number is a property of one pane on one day and will not survive a font change, which is the real argument for the rule above it — re-measure before trusting it, and prefer writing to disk.
+- **Printed code is read back out of the verified mirror, never retyped.** The mirror is where it was linted, type-checked and run (`verify before printing`), so retyping it into a message reintroduces exactly the class of error the mirror exists to remove. At 1.2a a retyped block lost two closing parens and would not have compiled.
+
 ## Error handling
 
 Backend returns `{ "detail": str, "code": str }`. Codes are stable strings the frontend can branch on: `wardrobe_too_small`, `stylist_failed`, `forecast_unavailable`, `rate_limited`, `tagging_failed`, `email_exists`, `invalid_credentials`, `invalid_token`, `validation_error`, `unsupported_file_type`, `file_too_large`, `not_found`, `upload_failed`.
@@ -142,6 +154,8 @@ Where a limit is counted in a unit other than the one a user would count in, the
 ## Definition of done
 
 A task is done when the code works, has tests, passes lint and type checks, and the relevant document is updated in the same commit. A stage is done when every acceptance criterion in its file passes and `PROGRESS.md` reflects it.
+
+**An artifact that has to outlive the task that produced it is written to disk in that task's commit. A conversation is not storage.** If a finding is worth revisiting, it is worth a file; if it is not worth a file, say so and drop it rather than parking it. Added at task 1.2a, from an instance that demonstrated its own lesson: a list of documentation candidates produced at 1.1 was kept "for its own session" in a conversation with an agent that starts every session holding nothing but the tree, and it did not survive the session boundary. The rule is cheap to honour — a file, a date, the exact command, and what the artifact is known **not** to cover — and the last of those is the part with a shelf life, because an audit whose known holes are not written beside it reads as a clean bill of health.
 
 Where a task's tests depend on scaffolding that a **later** task owns, that task ships the tests it can run unaided and the stage file names the task that completes the coverage. Task 0.5 is the worked example: `security.py` is pure and is unit-tested on delivery, while the register, login and `/auth/me` route tests wait for the `conftest.py` and test-database fixture that task 0.10 owns. This is a deferral with a named owner, not an exemption — a task may not simply declare itself untestable.
 

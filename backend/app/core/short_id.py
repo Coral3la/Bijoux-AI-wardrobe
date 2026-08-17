@@ -1,4 +1,3 @@
-# backend/app/core/short_id.py
 """The six-character identifier the AI layer uses instead of a UUID.
 
 Imports no ORM and no session, on the same terms as `core/security.py`

@@ -1,7 +1,8 @@
 """The closed vocabulary.
 
 Mirrors `docs/02-DATA-MODEL.md`, which is authoritative. Add a value there
-first. The frontend copy is `frontend/src/app/shared/models/enums.ts`.
+first. The frontend copy is `frontend/src/app/shared/models/enums.ts`, and it
+mirrors the *values* only — the category-dependent rules below live here alone.
 """
 
 from collections.abc import Mapping
@@ -133,6 +134,72 @@ SUBCATEGORIES: dict[Category, tuple[str, ...]] = {
     Category.ACCESSORY: ("belt", "scarf", "hat", "sunglasses", "jewelry"),
 }
 
+# Which categories a field describes at all. Outside them the attribute does not
+# exist, so the value is nulled rather than corrected: `02-DATA-MODEL.md` makes
+# all three always-nullable, and any other answer would be a substituted value.
+FIELD_APPLIES_TO: dict[str, frozenset[Category]] = {
+    "fit": frozenset({Category.TOP, Category.BOTTOM, Category.DRESS, Category.OUTERWEAR}),
+    "length": frozenset(
+        {Category.TOP, Category.BOTTOM, Category.DRESS, Category.OUTERWEAR, Category.SHOES}
+    ),
+    "rise": frozenset({Category.BOTTOM}),
+}
+
+_SLEEVED = frozenset({Category.TOP, Category.DRESS, Category.OUTERWEAR})
+_HEMMED = frozenset({Category.BOTTOM, Category.DRESS, Category.OUTERWEAR})
+
+# Words narrower than the field they belong to; a word absent from here applies
+# wherever its field does. `a_line` and `flowy` are absent deliberately — an
+# A-line top is a real cut, and nulling it would be the wrong answer this table
+# exists to prevent. Nested by field rather than keyed by value alone because
+# `mid` is a member of both Rise and Layer, so a flat map would be ambiguous the
+# moment a rule touched either.
+VALUE_APPLIES_TO: dict[str, dict[str, frozenset[Category]]] = {
+    "fit": {
+        Fit.SKINNY: frozenset({Category.BOTTOM}),
+        Fit.WIDE: frozenset({Category.BOTTOM, Category.DRESS}),
+        Fit.BODYCON: frozenset({Category.TOP, Category.BOTTOM, Category.DRESS}),
+    },
+    "length": {
+        Length.SLEEVELESS: _SLEEVED,
+        Length.SHORT_SLEEVE: _SLEEVED,
+        Length.LONG_SLEEVE: _SLEEVED,
+        Length.MINI: _HEMMED,
+        Length.MIDI: _HEMMED,
+        Length.MAXI: _HEMMED,
+    },
+}
+
+
+@dataclass(frozen=True, slots=True)
+class LayerRule:
+    admits: frozenset[Layer]
+    answer: Layer | None
+
+
+# `answer` is what `02-DATA-MODEL.md` names for the category, not what the size of
+# `admits` implies: outerwear admits two values and still answers `outer`, because
+# the document says a coat is outer. Deriving the answer from the set would make
+# outerwear an error path and break
+# test_outerwear_with_a_base_layer_is_coerced_to_outer. `top` is the one category
+# the document names no answer for, so `answer=None` is a statement rather than a
+# gap — a top is legitimately base or mid and the vocabulary will not pick.
+LAYERS_BY_CATEGORY: dict[Category, LayerRule] = {
+    Category.TOP: LayerRule(admits=frozenset({Layer.BASE, Layer.MID}), answer=None),
+    Category.BOTTOM: LayerRule(admits=frozenset({Layer.BASE}), answer=Layer.BASE),
+    Category.DRESS: LayerRule(admits=frozenset({Layer.STANDALONE}), answer=Layer.STANDALONE),
+    Category.OUTERWEAR: LayerRule(admits=frozenset({Layer.MID, Layer.OUTER}), answer=Layer.OUTER),
+    Category.SHOES: LayerRule(admits=frozenset({Layer.STANDALONE}), answer=Layer.STANDALONE),
+    Category.BAG: LayerRule(admits=frozenset({Layer.STANDALONE}), answer=Layer.STANDALONE),
+    Category.ACCESSORY: LayerRule(admits=frozenset({Layer.STANDALONE}), answer=Layer.STANDALONE),
+}
+
+# `PATCH /items/{id}` clears these when the category changes, because there it is
+# the stored row that became impossible rather than the request that was wrong
+# (`DECISIONS.md` 030). Exported so the route reads the list rather than
+# restating it in a second language's worth of rules.
+CATEGORY_DEPENDENT_FIELDS: tuple[str, ...] = ("subcategory", "rise", "fit", "length", "layer")
+
 
 @dataclass(frozen=True, slots=True)
 class TagIssue:
@@ -167,10 +234,9 @@ _STRICT_ENUM_FIELDS: tuple[tuple[str, type[Vocabulary]], ...] = (
 _NULLABLE_ENUM_FIELDS: tuple[tuple[str, type[Vocabulary]], ...] = (
     ("fit", Fit),
     ("length", Length),
+    ("rise", Rise),
     ("color_secondary", ColorPrimary),
 )
-
-_STANDALONE_CATEGORIES = (Category.DRESS, Category.SHOES, Category.BAG, Category.ACCESSORY)
 
 
 def _is_int(value: Any) -> bool:
@@ -211,6 +277,10 @@ def validate_tag_dict(d: Mapping[str, Any]) -> TagValidation:
             )
 
     category = tags.get("category")
+    # A category outside the vocabulary is already one error, and every rule below
+    # is keyed by it, so there is nothing left to look up rather than something to
+    # report a second time. `subcategory` predates this and still reports both.
+    known_category = category is not None and category in Category.values()
 
     subcategory = tags.get("subcategory")
     if subcategory is not None:
@@ -229,37 +299,60 @@ def validate_tag_dict(d: Mapping[str, Any]) -> TagValidation:
                 )
             )
 
-    rise = tags.get("rise")
-    if rise is not None:
+    for field, categories in FIELD_APPLIES_TO.items():
+        value = tags.get(field)
+        if value is None:
+            continue
         if category is None:
-            errors.append(TagIssue("rise", rise, "rise cannot be validated without category"))
-        elif category != Category.BOTTOM:
-            tags["rise"] = None
-            coerced.append(
-                TagIssue("rise", rise, f"rise does not apply to category {category!r}, set to null")
-            )
-        elif rise not in Rise.values():
-            tags["rise"] = None
+            errors.append(TagIssue(field, value, f"{field} cannot be validated without category"))
+            continue
+        if not known_category:
+            continue
+        if category not in categories:
+            tags[field] = None
             coerced.append(
                 TagIssue(
-                    "rise", rise, f"rise {rise!r} is not in the closed vocabulary, set to null"
+                    field, value, f"{field} does not apply to category {category!r}, set to null"
+                )
+            )
+            continue
+        narrowed = VALUE_APPLIES_TO.get(field, {}).get(value)
+        if narrowed is not None and category not in narrowed:
+            tags[field] = None
+            coerced.append(
+                TagIssue(
+                    field,
+                    value,
+                    f"{field} {value!r} does not describe category {category!r}, set to null",
                 )
             )
 
     layer = tags.get("layer")
     if layer is not None and layer in Layer.values():
-        if category in _STANDALONE_CATEGORIES and layer != Layer.STANDALONE:
-            tags["layer"] = Layer.STANDALONE
-            coerced.append(
-                TagIssue("layer", layer, f"category {category!r} requires layer standalone")
-            )
-        elif category == Category.OUTERWEAR and layer not in (Layer.MID, Layer.OUTER):
-            tags["layer"] = Layer.OUTER
-            coerced.append(
-                TagIssue(
-                    "layer", layer, "category outerwear requires layer mid or outer, set to outer"
-                )
-            )
+        if category is None:
+            errors.append(TagIssue("layer", layer, "layer cannot be validated without category"))
+        elif known_category:
+            rule = LAYERS_BY_CATEGORY[Category(category)]
+            if layer not in rule.admits:
+                takes = " or ".join(sorted(rule.admits))
+                if rule.answer is None:
+                    errors.append(
+                        TagIssue(
+                            "layer",
+                            layer,
+                            f"layer {layer!r} is not valid for category {category!r}, "
+                            f"which takes {takes}",
+                        )
+                    )
+                else:
+                    tags["layer"] = rule.answer
+                    coerced.append(
+                        TagIssue(
+                            "layer",
+                            layer,
+                            f"category {category!r} takes layer {takes}, set to {rule.answer}",
+                        )
+                    )
 
     for field in ("formality", "warmth"):
         value = tags.get(field)

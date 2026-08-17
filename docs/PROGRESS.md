@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 1 — Wardrobe
-**Status:** Stage 1 in progress — 1.1 complete.
+**Status:** Stage 1 in progress — 1.1 and 1.2a complete.
 
 Claude Code updates this file at the end of every stage: tick the criteria, set the next stage, and note anything that changed relative to the plan.
 
@@ -25,7 +25,8 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 `stages/STAGE-1-wardrobe.md` · target 6–7 days
 
 - [x] Vision service
-- [ ] Tag validation and retry
+- [x] Category-dependent validation — 1.2a
+- [ ] Tag validation and retry — 1.2b
 - [ ] Background tagging
 - [ ] Item endpoints
 - [ ] Wardrobe grid
@@ -124,3 +125,20 @@ Changed from the plan, recorded in `DECISIONS.md` 078–083:
 - `fit: "flared"` on a real pair of jeans — a value in no vocabulary, on one of the three fields the schema deliberately does not constrain. Coerced to null correctly and **discarded with no record**, which is a second and separate gap from the one below.
 - `fit: "skinny"` on a tank top — a legal `Fit` member, meaningless beside that category, passing with no error and no coercion. Same shape as 082's `layer` finding, which makes it one gap with three instances rather than two unrelated ones. 029's premise for leaving `length` alone is falsified by it.
 - `confidence: 0.9` on all eight responses **including both wrong ones**. The `confidence < 0.35` review rule has no settings field, no UI surface and no owning task; it would have flagged nothing. Confidence is a fluency signal, not an accuracy signal, and nothing may treat it as evidence of correctness.
+
+**2026-08-17 — task 1.2a, category-dependent validation.** 376 backend tests pass (241 before). Changed: `app/enums.py` (283 → 376 lines), `tests/unit/test_enums.py` (294 → 707). No new files. `enums.py` gains three tables and one judgement — is this value one the category it arrived beside can be described by — and `CATEGORY_DEPENDENT_FIELDS` so `PATCH` reads the list rather than restating it. `_STANDALONE_CATEGORIES` is deleted; it is four rows of `LAYERS_BY_CATEGORY` now.
+
+All three candidate fields opted in, and the three decisions turned out to be one argument, recorded in `DECISIONS.md` 085:
+
+- **`layer`** — every category gets an admitted set and an answer, and **`top` is the only category with no answer**, so a top tagged `outer` or `standalone` is an error rather than a coercion. 082's open question is closed by refusing to guess instead of by picking `base`. The cost is accepted and written down: an item can now finish `failed` with no tags where it previously finished `ready` with a wrong layer.
+- **`fit`** — applies to `top`/`bottom`/`dress`/`outerwear` only, with three narrowed words. Deliberately narrower than the "trouser words" aside in `03-AI-CONTRACTS.md`, which explained one jacket rather than stating a rule; that line is corrected.
+- **`length`** — applies to everything but `bag` and `accessory`, with the sleeve and hem ends narrowed and the middle five left alone. **029 is closed** by that and by the `fit` rows: `maxi` on a t-shirt no longer validates, which was 029's own example.
+
+Changed from the plan, and one thing that was measured rather than reasoned about:
+
+- The rules stay **server-side**. `enums.ts` mirrors values, not rules; 1.9 inherits the reasoning and the choice of what its `fit` select does about it.
+- `030` grows from three cleared fields to five and stops naming `_STANDALONE_CATEGORIES`. 1.4 gains the consequence it will actually meet: a `PATCH` against a still-`processing` row can now be a `422` where it was a `200`, because a category-dependent field cannot be validated without a category.
+- 1.2b gains the prompt-rendering item — the tables are public so `_vocabulary_block()` can render them — and 1.11 gains a prompt version alongside the model id, since that render moves the prompt before the first eval run.
+- **Predicted five failing parametrisations, measured six.** The two missed were the base fixture's `long_sleeve` riding along on a pair of jeans — the same jeans-with-sleeves case named three paragraphs earlier as the evidence for leaving the middle of the length list unenforced. The evidence and the prediction contradicted each other inside one message; the count was asserted where it could have been run.
+
+Two rules landed in the documents from how this task went rather than from what it built: `06-TESTING-STRATEGY.md` gains "two readings of one input beat one reading of two" and "a test that reads its expectation from the thing under test measures nothing on its own", and `CONVENTIONS.md` gains the paste-width limit and the rule that an artifact meant to outlive its task is written to disk in that task's commit.

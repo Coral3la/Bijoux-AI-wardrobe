@@ -6,9 +6,18 @@ from typing import Any
 import pytest
 
 from app.enums import (
+    CATEGORY_DEPENDENT_FIELDS,
+    FIELD_APPLIES_TO,
+    LAYERS_BY_CATEGORY,
     SUBCATEGORIES,
+    VALUE_APPLIES_TO,
     Category,
     ColorPrimary,
+    Fit,
+    Layer,
+    LayerRule,
+    Length,
+    Vocabulary,
     is_valid_subcategory,
     validate_tag_dict,
 )
@@ -38,6 +47,26 @@ def tags(**overrides: Any) -> dict[str, Any]:
 
 def fields_in(issues: tuple[Any, ...]) -> set[str]:
     return {issue.field for issue in issues}
+
+
+def reasons_in(issues: tuple[Any, ...]) -> list[str]:
+    return [issue.reason for issue in issues]
+
+
+def bare(category: str, **overrides: Any) -> dict[str, Any]:
+    """A category, its first legal subcategory, and nothing else but the overrides.
+
+    Deliberately minimal, where `tags()` above is deliberately complete. An absent
+    key is never invented, so a rule under test cannot be disturbed by an
+    attribute the category cannot have — which is exactly what went wrong with
+    `tags()` when the category-dependent rules landed: it built a shirt, and the
+    multi-category tests were asserting against a tote bag with long sleeves.
+    """
+    return {"category": category, "subcategory": SUBCATEGORIES[Category(category)][0], **overrides}
+
+
+_GARMENTS = (Category.TOP, Category.BOTTOM, Category.DRESS, Category.OUTERWEAR)
+_CARRIED = (Category.SHOES, Category.BAG, Category.ACCESSORY)
 
 
 # --- the vocabularies themselves -------------------------------------------
@@ -143,14 +172,20 @@ def test_rise_on_a_non_bottom_is_coerced_to_null() -> None:
 
 
 def test_invalid_rise_on_a_bottom_is_coerced_to_null() -> None:
-    result = validate_tag_dict(tags(category="bottom", subcategory="jeans", rise="ultra_high"))
+    # length is overridden because the base helper is a shirt: `long_sleeve` on a
+    # pair of jeans is now a coercion of its own and not this test's subject.
+    result = validate_tag_dict(
+        tags(category="bottom", subcategory="jeans", rise="ultra_high", length="full")
+    )
     assert result.ok
     assert result.tags["rise"] is None
     assert fields_in(result.coerced) == {"rise"}
 
 
 def test_valid_rise_on_a_bottom_is_kept() -> None:
-    result = validate_tag_dict(tags(category="bottom", subcategory="jeans", rise="high"))
+    result = validate_tag_dict(
+        tags(category="bottom", subcategory="jeans", rise="high", length="full")
+    )
     assert result.ok
     assert result.tags["rise"] == "high"
     assert result.coerced == ()
@@ -161,7 +196,12 @@ def test_valid_rise_on_a_bottom_is_kept() -> None:
     [("dress", "dress"), ("shoes", "boots"), ("bag", "tote"), ("accessory", "belt")],
 )
 def test_standalone_categories_coerce_the_layer(category: str, subcategory: str) -> None:
-    result = validate_tag_dict(tags(category=category, subcategory=subcategory, layer="base"))
+    # fit and length are nulled because a bag has neither, and carrying the base
+    # helper's shirt attributes into one is what made this test fail when the
+    # category-dependent rules landed. The subject here is `layer` alone.
+    result = validate_tag_dict(
+        tags(category=category, subcategory=subcategory, layer="base", fit=None, length=None)
+    )
     assert result.ok
     assert result.tags["layer"] == "standalone"
     assert fields_in(result.coerced) == {"layer"}
@@ -183,7 +223,9 @@ def test_outerwear_keeps_a_layer_the_rule_already_permits(layer: str) -> None:
 
 
 def test_an_invalid_layer_is_an_error_and_is_not_also_coerced() -> None:
-    result = validate_tag_dict(tags(category="shoes", subcategory="boots", layer="underlayer"))
+    result = validate_tag_dict(
+        tags(category="shoes", subcategory="boots", layer="underlayer", fit=None, length=None)
+    )
     assert fields_in(result.errors) == {"layer"}
     assert result.coerced == ()
 
@@ -292,3 +334,374 @@ def test_the_caller_s_mapping_is_not_mutated() -> None:
     original = tags(fit="baggy")
     validate_tag_dict(original)
     assert original["fit"] == "baggy"
+
+
+# --- the tables, pinned literally -------------------------------------------
+#
+# Every behavioural test below derives what it expects from these tables, which
+# means a mutation *to a table* would leave all of them green: the expectation
+# moves with the rule. These are the tests that fail instead. `02-DATA-MODEL.md`
+# is authoritative for all four and is what they are transcribed from.
+
+
+def test_fit_applies_to_the_four_garment_categories() -> None:
+    assert FIELD_APPLIES_TO["fit"] == frozenset(
+        {Category.TOP, Category.BOTTOM, Category.DRESS, Category.OUTERWEAR}
+    )
+
+
+def test_length_applies_to_everything_except_bags_and_accessories() -> None:
+    assert FIELD_APPLIES_TO["length"] == frozenset(Category) - {Category.BAG, Category.ACCESSORY}
+
+
+def test_rise_applies_to_bottoms_only() -> None:
+    assert FIELD_APPLIES_TO["rise"] == frozenset({Category.BOTTOM})
+
+
+def test_the_narrowed_fit_words_are_the_three_agreed_at_1_2a() -> None:
+    assert VALUE_APPLIES_TO["fit"] == {
+        Fit.SKINNY: frozenset({Category.BOTTOM}),
+        Fit.WIDE: frozenset({Category.BOTTOM, Category.DRESS}),
+        Fit.BODYCON: frozenset({Category.TOP, Category.BOTTOM, Category.DRESS}),
+    }
+
+
+def test_the_narrowed_lengths_are_the_sleeve_words_and_the_hem_words() -> None:
+    sleeved = frozenset({Category.TOP, Category.DRESS, Category.OUTERWEAR})
+    hemmed = frozenset({Category.BOTTOM, Category.DRESS, Category.OUTERWEAR})
+    assert VALUE_APPLIES_TO["length"] == {
+        Length.SLEEVELESS: sleeved,
+        Length.SHORT_SLEEVE: sleeved,
+        Length.LONG_SLEEVE: sleeved,
+        Length.MINI: hemmed,
+        Length.MIDI: hemmed,
+        Length.MAXI: hemmed,
+    }
+
+
+def test_the_middle_of_the_length_list_is_left_unenforced() -> None:
+    # The five words that describe more than one axis: cropped trousers and a
+    # cropped top, ankle boots and ankle trousers. A rule over them would coerce
+    # correct answers away, which is where 029's cost argument still holds.
+    assert set(VALUE_APPLIES_TO["length"]).isdisjoint(
+        {Length.CROP, Length.REGULAR, Length.LONGLINE, Length.ANKLE, Length.FULL}
+    )
+
+
+def test_the_layer_table_is_the_one_in_the_data_model() -> None:
+    standalone = LayerRule(admits=frozenset({Layer.STANDALONE}), answer=Layer.STANDALONE)
+    expected = {
+        Category.TOP: LayerRule(admits=frozenset({Layer.BASE, Layer.MID}), answer=None),
+        Category.BOTTOM: LayerRule(admits=frozenset({Layer.BASE}), answer=Layer.BASE),
+        Category.DRESS: standalone,
+        Category.OUTERWEAR: LayerRule(
+            admits=frozenset({Layer.MID, Layer.OUTER}), answer=Layer.OUTER
+        ),
+        Category.SHOES: standalone,
+        Category.BAG: standalone,
+        Category.ACCESSORY: standalone,
+    }
+
+    # dict() rather than the bare name so that the table stays on the left: ruff's
+    # SIM300 reads an upper-case name as a constant and would have this flipped,
+    # and pytest labels the left side as the actual in the diff this test exists
+    # to produce under mutation.
+    assert dict(LAYERS_BY_CATEGORY) == expected
+
+
+def test_category_dependent_fields_is_every_field_with_a_category_rule() -> None:
+    # `PATCH /items/{id}` clears exactly this list when the category changes (030),
+    # so a field that gains a rule here and not there is silent data loss.
+    assert set(CATEGORY_DEPENDENT_FIELDS) == {"subcategory", "layer"} | set(FIELD_APPLIES_TO)
+
+
+# --- the tables' own invariants ----------------------------------------------
+
+
+def test_the_layer_table_covers_every_category() -> None:
+    # validate_tag_dict indexes this with every category it accepts, so a missing
+    # row is a KeyError on real model output rather than a rule that is merely lax.
+    assert set(LAYERS_BY_CATEGORY) == set(Category)
+
+
+def test_every_layer_answer_is_admitted_by_its_own_rule() -> None:
+    # An answer its own rule refuses would coerce a value into one the same rule
+    # rejects, and nothing runs twice to notice.
+    for category, rule in LAYERS_BY_CATEGORY.items():
+        assert rule.answer is None or rule.answer in rule.admits, category
+
+
+def test_top_is_the_only_category_with_no_layer_answer() -> None:
+    # 082's question, pinned as an answer: base and mid are both legitimate for a
+    # top, so the vocabulary refuses rather than guessing. Every other category
+    # names one, which is why every other category coerces instead of erroring.
+    assert {c for c, rule in LAYERS_BY_CATEGORY.items() if rule.answer is None} == {Category.TOP}
+
+
+@pytest.mark.parametrize("field,vocabulary", [("fit", Fit), ("length", Length)])
+def test_narrowed_values_are_members_of_their_own_vocabulary(
+    field: str, vocabulary: type[Vocabulary]
+) -> None:
+    # A typo would be silent in both directions: an unreachable key narrows
+    # nothing, and the value it was meant to narrow stays unconstrained.
+    assert set(VALUE_APPLIES_TO[field]) <= set(vocabulary.values())
+
+
+def test_a_narrowed_value_never_applies_where_its_field_does_not() -> None:
+    for field, values in VALUE_APPLIES_TO.items():
+        for value, categories in values.items():
+            assert categories <= FIELD_APPLIES_TO[field], (field, value)
+
+
+# --- fit, both directions, per category -------------------------------------
+
+
+@pytest.mark.parametrize("category", _CARRIED)
+def test_fit_is_nulled_on_a_category_with_no_silhouette(category: Category) -> None:
+    result = validate_tag_dict(bare(category, fit="oversized"))
+
+    assert result.ok
+    assert result.tags["fit"] is None
+    assert fields_in(result.coerced) == {"fit"}
+
+
+@pytest.mark.parametrize("category", _GARMENTS)
+def test_an_unnarrowed_fit_survives_on_every_garment_category(category: Category) -> None:
+    result = validate_tag_dict(bare(category, fit="relaxed"))
+
+    assert result.ok
+    assert result.tags["fit"] == "relaxed"
+    assert result.coerced == ()
+
+
+@pytest.mark.parametrize("value", sorted(VALUE_APPLIES_TO["fit"]))
+@pytest.mark.parametrize("category", _GARMENTS)
+def test_a_narrowed_fit_survives_exactly_where_the_table_says(
+    category: Category, value: str
+) -> None:
+    kept = category in VALUE_APPLIES_TO["fit"][value]
+    result = validate_tag_dict(bare(category, fit=value))
+
+    assert result.ok
+    assert (result.tags["fit"] == value) is kept
+    assert (result.coerced == ()) is kept
+
+
+# --- length, both directions, per category ----------------------------------
+
+
+@pytest.mark.parametrize("category", (Category.BAG, Category.ACCESSORY))
+def test_length_is_nulled_on_a_category_that_has_no_length(category: Category) -> None:
+    result = validate_tag_dict(bare(category, length="regular"))
+
+    assert result.ok
+    assert result.tags["length"] is None
+    assert fields_in(result.coerced) == {"length"}
+
+
+@pytest.mark.parametrize("value", ["crop", "regular", "longline", "ankle", "full"])
+@pytest.mark.parametrize("category", sorted(FIELD_APPLIES_TO["length"]))
+def test_an_unnarrowed_length_survives_wherever_the_field_applies(
+    category: Category, value: str
+) -> None:
+    result = validate_tag_dict(bare(category, length=value))
+
+    assert result.ok
+    assert result.tags["length"] == value
+    assert result.coerced == ()
+
+
+@pytest.mark.parametrize("value", sorted(VALUE_APPLIES_TO["length"]))
+@pytest.mark.parametrize("category", sorted(FIELD_APPLIES_TO["length"]))
+def test_a_narrowed_length_survives_exactly_where_the_table_says(
+    category: Category, value: str
+) -> None:
+    kept = category in VALUE_APPLIES_TO["length"][value]
+    result = validate_tag_dict(bare(category, length=value))
+
+    assert result.ok
+    assert (result.tags["length"] == value) is kept
+    assert (result.coerced == ()) is kept
+
+
+def test_maxi_on_a_t_shirt_no_longer_validates() -> None:
+    # 029's own example, which that entry accepted on the premise that the axes do
+    # not collide in practice. `skinny` on a tank falsified the premise at 1.1.
+    result = validate_tag_dict({"category": "top", "subcategory": "t_shirt", "length": "maxi"})
+
+    assert result.ok
+    assert result.tags["length"] is None
+    assert fields_in(result.coerced) == {"length"}
+
+
+def test_maxi_on_a_coat_still_validates() -> None:
+    # Which is why outerwear is in the hem set: a maxi coat is a real garment, and
+    # nulling it would be the false coercion the narrow tables exist to avoid.
+    result = validate_tag_dict({"category": "outerwear", "subcategory": "coat", "length": "maxi"})
+
+    assert result.ok
+    assert result.tags["length"] == "maxi"
+    assert result.coerced == ()
+
+
+# --- layer, both directions, per category -----------------------------------
+
+_ADMITTED_LAYERS = [
+    (category, layer)
+    for category, rule in LAYERS_BY_CATEGORY.items()
+    for layer in sorted(rule.admits)
+]
+_REFUSED_LAYERS = [
+    (category, layer)
+    for category, rule in LAYERS_BY_CATEGORY.items()
+    for layer in sorted(set(Layer) - rule.admits)
+]
+
+
+@pytest.mark.parametrize("category,layer", _ADMITTED_LAYERS)
+def test_a_category_keeps_a_layer_it_admits(category: Category, layer: Layer) -> None:
+    result = validate_tag_dict(bare(category, layer=layer))
+
+    assert result.ok
+    assert result.tags["layer"] == layer
+    assert result.coerced == ()
+
+
+@pytest.mark.parametrize(
+    "category,layer",
+    [pair for pair in _REFUSED_LAYERS if LAYERS_BY_CATEGORY[pair[0]].answer is not None],
+)
+def test_a_category_with_an_answer_coerces_a_layer_it_refuses(
+    category: Category, layer: Layer
+) -> None:
+    result = validate_tag_dict(bare(category, layer=layer))
+
+    assert result.ok
+    assert result.tags["layer"] == LAYERS_BY_CATEGORY[category].answer
+    assert fields_in(result.coerced) == {"layer"}
+
+
+@pytest.mark.parametrize("layer", [Layer.OUTER, Layer.STANDALONE])
+def test_a_top_refusing_a_layer_is_an_error_and_the_value_is_left_alone(layer: Layer) -> None:
+    # The two layers stated rather than derived from the table. Deriving them
+    # indexes LAYERS_BY_CATEGORY at import, so dropping the `top` row turned this
+    # module into a collection error under mutation — the suite refusing to run
+    # instead of a named test failing, which is a weaker thing to have measured.
+    # The whole content of 082's fix: no answer exists, so none is substituted.
+    # 1.2b retries on this; `PATCH /items/{id}` returns 422 naming the field.
+    result = validate_tag_dict(bare("top", layer=layer))
+
+    assert fields_in(result.errors) == {"layer"}
+    assert result.coerced == ()
+    assert result.tags["layer"] == layer
+
+
+def test_the_layer_error_names_what_the_category_takes() -> None:
+    # 1.2b puts `reason` into the retry prompt, so naming the admitted values is
+    # the difference between a retry that can succeed and one that guesses again.
+    result = validate_tag_dict(bare("top", layer="standalone"))
+
+    assert result.reason == (
+        "layer 'standalone' is not valid for category 'top', which takes base or mid"
+    )
+
+
+def test_the_layer_coercion_names_the_answer_it_used() -> None:
+    result = validate_tag_dict(bare("outerwear", layer="base"))
+
+    assert reasons_in(result.coerced) == [
+        "category 'outerwear' takes layer mid or outer, set to outer"
+    ]
+
+
+# --- which sentence each rise case produces ---------------------------------
+#
+# Membership now runs before applicability, so an unknown value beside a
+# non-bottom is reported as unknown rather than as inapplicable. Both null the
+# field, so no earlier test could tell them apart — and 1.2b turns both into
+# retry text, which makes the wording contract rather than cosmetics.
+
+
+def test_an_invalid_rise_beside_a_non_bottom_reports_membership() -> None:
+    result = validate_tag_dict(bare("top", rise="ultra_high"))
+
+    assert reasons_in(result.coerced) == [
+        "rise 'ultra_high' is not in the closed vocabulary, set to null"
+    ]
+
+
+def test_a_valid_rise_beside_a_non_bottom_reports_applicability() -> None:
+    result = validate_tag_dict(bare("top", rise="high"))
+
+    assert reasons_in(result.coerced) == ["rise does not apply to category 'top', set to null"]
+
+
+# --- no category, and a category outside the vocabulary ---------------------
+
+
+@pytest.mark.parametrize("field,value", [("fit", "slim"), ("length", "regular"), ("layer", "base")])
+def test_a_category_dependent_field_without_a_category_is_an_error(field: str, value: str) -> None:
+    result = validate_tag_dict({field: value})
+
+    assert fields_in(result.errors) == {field}
+    assert result.coerced == ()
+
+
+def test_no_category_dependent_rule_fires_on_an_unrecognised_category() -> None:
+    # The category is the one fault. Every rule below it is keyed by the category,
+    # so there is nothing to look up — and reporting four consequences of one
+    # fault would bury it in the retry text 1.2b builds from `reason`.
+    raw = {
+        "category": "kaftan",
+        "fit": "skinny",
+        "length": "maxi",
+        "rise": "high",
+        "layer": "standalone",
+    }
+    result = validate_tag_dict(raw)
+
+    assert fields_in(result.errors) == {"category"}
+    assert result.coerced == ()
+    assert result.tags == raw
+
+
+# --- the eight responses task 1.1 actually observed -------------------------
+#
+# Each row carries only the fields `STAGE-1` 1.11 recorded — category,
+# subcategory, fit — because an absent key is never invented, so nothing here is
+# filled in to make a point. Two of the eight were wrong and both are now caught,
+# by two different mechanisms; the other six must stay untouched.
+
+_OBSERVED_WRONG = [
+    # A value in no vocabulary at all: caught by membership, which already worked.
+    ({"category": "bottom", "subcategory": "jeans", "fit": "flared"}, "fit"),
+    # A legal member beside a category it cannot describe: 084's gap, closed here.
+    ({"category": "top", "subcategory": "tank", "fit": "skinny"}, "fit"),
+]
+
+_OBSERVED_RIGHT = [
+    {"category": "top", "subcategory": "tank", "fit": None},
+    {"category": "top", "subcategory": "bodysuit", "fit": "bodycon"},
+    {"category": "bottom", "subcategory": "jeans", "fit": "wide"},
+    {"category": "shoes", "subcategory": "heels", "fit": None},
+    {"category": "outerwear", "subcategory": "jacket", "fit": None, "length": "regular"},
+]
+
+
+@pytest.mark.parametrize("raw,field", _OBSERVED_WRONG)
+def test_a_wrong_answer_observed_at_task_1_1_is_now_caught(raw: dict[str, Any], field: str) -> None:
+    result = validate_tag_dict(raw)
+
+    assert result.tags[field] is None
+    assert fields_in(result.coerced) == {field}
+
+
+@pytest.mark.parametrize("raw", _OBSERVED_RIGHT)
+def test_a_right_answer_observed_at_task_1_1_is_left_untouched(raw: dict[str, Any]) -> None:
+    # `bodycon` on a bodysuit and `wide` on jeans are the two that matter: the
+    # narrow tables must not reach them, or they cost more than they catch.
+    result = validate_tag_dict(raw)
+
+    assert result.ok
+    assert result.coerced == ()
+    assert result.tags == raw

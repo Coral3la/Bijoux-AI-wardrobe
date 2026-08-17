@@ -90,6 +90,8 @@ The enum lists are rendered from `app/enums.py` into a `{{VOCABULARY}}` placehol
 
 `subcategory` is typed as a plain string because its valid values depend on `category`, which JSON Schema cannot express cleanly. `fit` and `length` are plain strings for a different reason: an out-of-vocabulary value there is coerced to null rather than retried, so constraining them in the schema would buy nothing. All three are validated in Python instead.
 
+**Task 1.2a strengthened that reason rather than weakening it.** `fit` and `length` now carry per-category rules of their own, and JSON Schema cannot express those either — so the schema is not merely no worse than Python here, it is structurally incapable of the check. The same limit is what makes `layer` interesting in the other direction: `layer` **is** a constrained enum in the schema, and strict mode still cannot stop the model returning `standalone` for a top, because `standalone` is a legal member of the enum. See the table below.
+
 Notes on the strict subset, because the block above is easy to get subtly wrong:
 
 - **Every property carries a `type`.** A bare `{ "enum": [...] }` does not appear anywhere in the supported subset; the documented form is always `type` plus `enum`.
@@ -110,7 +112,9 @@ Notes on the strict subset, because the block above is easy to get subtly wrong:
 
 **The vocabulary block demonstrably reached the model.** `subcategory` and `length` carry no `enum` in the schema, so the rendered prompt is their only source, and both came back as exact in-vocabulary tokens — `"jacket"` from `SUBCATEGORIES[outerwear]`, a category-dependent list whose shape the model could not have guessed, and `"regular"` from `Length`. `rise: null` follows the prompt's bottoms-only rule.
 
-**`fit` came back `null`, and one image cannot say why.** Three readings are open: the model declined honestly, the model had the list and did not use it, or the vocabulary has no good member for outerwear at all — of the nine values, `skinny`, `slim`, `straight` and `wide` are trouser words and `bodycon`, `a_line` and `flowy` are dress words, leaving `relaxed` and `oversized`. Note also that the prompt licenses a null `fit` without ever saying when one is appropriate, unlike `rise` and `color_secondary`, which have explicit rules. Task 1.11 can discriminate where this cannot: if `fit` nulls cluster on outerwear, bags and accessories the vocabulary or the prompt is the problem, and if they spread evenly across categories the model is.
+**`fit` came back `null`, and one image cannot say why.** Three readings are open: the model declined honestly, the model had the list and did not use it, or the vocabulary has no good member for outerwear at all — of the nine values, `skinny`, `slim`, `straight` and `wide` are trouser words and `bodycon`, `a_line` and `flowy` are dress words, leaving `relaxed` and `oversized`.
+
+**That sentence was written to explain why one jacket came back with no `fit`, and it is not a vocabulary rule — read as one it is wrong.** Task 1.2a narrowed only three of the nine, deliberately: `skinny` to bottoms, `wide` to bottoms and dresses, `bodycon` to everything but outerwear. `slim` and `straight` stayed unconstrained because a slim-fit shirt and a straight-cut coat are ordinary garments, and `a_line` and `flowy` stayed unconstrained because an A-line top is a real cut. A deny list is a claim that a word is *wrong* for a category, which is a much stronger claim than that it is *unlikely* — and the wider version above would coerce correct answers away on garments this wardrobe will actually contain. `02-DATA-MODEL.md` carries the three that survived. Note also that the prompt licenses a null `fit` without ever saying when one is appropriate, unlike `rise` and `color_secondary`, which have explicit rules. Task 1.11 can discriminate where this cannot: if `fit` nulls cluster on outerwear, bags and accessories the vocabulary or the prompt is the problem, and if they spread evenly across categories the model is.
 
 **The block above is now a description of generated output, not the source.** `app/services/vision.py` builds the same structure with its enum arrays taken from `app/enums.py` and `required` derived from the properties, so prompt, schema and validator cannot disagree with each other. What they can still disagree with is `02-DATA-MODEL.md`, which is authoritative over `enums.py` by hand and is compared to it by nothing — see the note in `06-TESTING-STRATEGY.md`. `DECISIONS.md` 080.
 
@@ -128,15 +132,28 @@ Two layers, and the table below spans both. Every row except the last is `app/en
 | `fit` / `length` in the global enum, or null | coerce to null |
 | `color_secondary` in the global colour enum, or null | coerce to null |
 | `rise` present only when `category == "bottom"`, and in the enum | coerce to null |
+| `fit` present only for `top` / `bottom` / `dress` / `outerwear` | coerce to null |
+| `fit` describes its category — `skinny` bottoms only, `wide` bottoms and dresses, `bodycon` not outerwear | coerce to null |
+| `length` present for every category except `bag` and `accessory` | coerce to null |
+| `length` describes its category — sleeve words for `top`/`dress`/`outerwear`, hem words for `bottom`/`dress`/`outerwear` | coerce to null |
 | `layer == "standalone"` for shoes/bag/accessory/dress | coerce |
 | `layer` is `mid` or `outer` when `category == "outerwear"` | coerce to `outer` |
+| `layer` is `base` when `category == "bottom"` | coerce to `base` |
+| `layer` is `base` or `mid` when `category == "top"` | **retry once** |
+| any category-dependent field present with no `category` at all | retry once |
 | `confidence < 0.35` | accept, but set `status='ready'` and flag for review in UI |
+
+**Seven of those rows are task 1.2a's and they are one rule, not seven.** A category-dependent check is a pair — which values the category admits, and what the category says the answer is when the value is not admitted. Where the category determines a single answer the rule coerces to it; where it does not, the vocabulary reports an error and this layer retries once, naming the violation. `top` is the only category in the whole vocabulary for which no answer exists, which is why exactly one of the seven says *retry* — a top is legitimately `base` or `mid`, and substituting either would be a guess wearing a correction's clothes. `02-DATA-MODEL.md` is authoritative for all seven and `DECISIONS.md` 085 has the reasoning; 029 and 082 are both closed by them.
+
+**One consequence for this layer specifically.** The `top`/`layer` row is the first check in this table that can fire on **model output** and end in `TaggingError`. An item can now finish `failed` with no tags where it previously finished `ready` with a wrong `layer`, and that is the accepted trade: a failed tile is visible and carries a retry button, where a wrong `layer` surfaces two stages later as a bad look with nothing pointing back here.
 
 **This last row is specified, owned by nobody, and — on the only evidence that exists — close to inert.** Three things were traced before task 1.2 and none of them is built: there is **no settings field** for the threshold, although `DECISIONS.md` 028 describes the comparison as being made "against `settings`"; **`05-FRONTEND-SPEC.md` never mentions confidence or a review state**, so "flag for review in UI" names a surface that no screen and no task creates; and **no stage file mentions confidence at all.** This is the same shape as the unowned rate-limit table in `04-API-SPEC.md`, and it is recorded here rather than discovered at 1.9.
 
 **More importantly, `confidence` is not evidence of correctness.** Eight live responses at task 1.1 — one HEIC plus seven JPEGs — returned `confidence: 0.9` every time, **including the two that were wrong**: `fit: "flared"`, a value in no vocabulary, and `fit: "skinny"` on a tank top. The 0.35 threshold would have flagged neither, and would have flagged nothing at all in eight images. Whatever the model reports is a fluency signal, not an accuracy signal. **Nothing in this project may treat a high `confidence` as a reason to trust a tag**, and the review threshold — if 1.2 builds it — should be understood as catching blurred or multi-item photographs, which is what the prompt actually asks for, rather than catching wrong answers.
 
 The first and third rows cannot fire on model output — Structured Outputs with `strict: true` makes them impossible — but they are not dead checks: `PATCH /items/{id}` runs the same validator on a hand-built request body, where they are the difference between a `422` and a `CHECK` violation surfacing as a `500`.
+
+**The category-dependent rows are the opposite case and it is worth being exact about why.** Strict mode guarantees membership and nothing else, so every value in those rows is a legal member of its own enum arriving beside a category it cannot describe. `layer: "standalone"` on a top passes the schema perfectly. That is the whole reason these checks exist in Python rather than in the schema, and it is why the vocabulary block in the prompt is worth extending too — **task 1.2b renders these rules into `{{VOCABULARY}}`**, so the model is told rather than merely corrected. Until it does, every one of them is a silent coercion nobody learns from.
 
 Retry policy: **one** retry, appending `Your previous response was invalid: {reason}. Correct it.` A second failure sets `status='failed'` and stores `error_message`. Never retry more than once — a model that fails twice on a strict schema is failing on the image, and a third call only spends money.
 
