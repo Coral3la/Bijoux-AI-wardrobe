@@ -52,7 +52,7 @@ Read these in order. Every document is the single source of truth for its area �
 | Backend | Python 3.14, FastAPI, SQLAlchemy 2.0, Pydantic v2, Alembic |
 | Database | PostgreSQL 18 (Neon free tier) |
 | Media | Cloudinary (upload, transforms, optional background removal) |
-| AI | OpenAI `gpt-4o-mini` — vision tagging **and** stylist reasoning, via Structured Outputs |
+| AI | OpenAI `gpt-4o-mini-2024-07-18` — vision tagging **and** stylist reasoning, via Structured Outputs. Dated snapshot, pinned once in `app/core/config.py`; `DECISIONS.md` 078 |
 | Weather | Open-Meteo (no API key required) |
 | Testing | pytest + httpx (backend), Vitest (Angular unit), Playwright + TypeScript (E2E) |
 | CI/CD | GitHub Actions → Render (API) + Vercel (web) |

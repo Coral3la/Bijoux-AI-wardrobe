@@ -32,6 +32,8 @@
 
 The backend is the only component that holds secrets. The browser never touches the OpenAI key, and never talks to Cloudinary directly (see "Upload path" below).
 
+The diagram names the model family. **The pin is a dated snapshot, `gpt-4o-mini-2024-07-18`**, held once as `OPENAI_MODEL` in `app/core/config.py` and defaulting both the vision and stylist settings — `DECISIONS.md` 078.
+
 ---
 
 ## Flow 1 — Adding a garment
@@ -44,7 +46,7 @@ The backend is the only component that holds secrets. The browser never touches 
 5. Backend returns 202 with the item rows immediately
 6. Angular renders skeleton tiles in the grid at once
 7. BackgroundTask per item:
-     a. build Cloudinary transform URL (800px, auto format)
+     a. build Cloudinary transform URL (800px, JPEG — pinned, not negotiated)
      b. call OpenAI vision with the strict JSON schema
      c. validate against enums
      d. on success → UPDATE item SET status='ready', tags…

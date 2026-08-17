@@ -64,17 +64,19 @@ Every boundary in the mapping table gets both sides asserted. Also unit-tested w
 The AI can only return what the schema permits, but the schema itself must be correct and must stay aligned with the database.
 
 ```python
-def test_vision_schema_enums_match_database_enums():
-    schema_colors = set(VISION_SCHEMA["schema"]["properties"]["color_primary"]["enum"])
-    assert schema_colors == set(ColorPrimary.values())
-
 def test_every_subcategory_maps_to_a_valid_category():
     for category, subs in SUBCATEGORIES.items():
         assert category in Category.values()
         assert len(subs) == len(set(subs))
 ```
 
-This is the test that catches the classic failure: someone adds `"burgundy"` to the prompt but not to the enum, and tagging starts failing in production a week later.
+**This section used to open with a second example and a claim that is no longer true, and both are corrected at task 1.1 rather than left to mislead.** The example compared `VISION_SCHEMA["schema"]["properties"]["color_primary"]["enum"]` against `ColorPrimary.values()`, and the claim was that it catches the classic failure — someone adds `"burgundy"` to the prompt but not to the enum, and tagging starts failing a week later.
+
+It cannot catch that any more, because **both sides now come from `enums.py`**. `vision.py` builds the schema's enum arrays from the vocabulary classes and renders the prompt's `{{VOCABULARY}}` block from the same ones, so prompt, schema and validator cannot disagree — the drift is closed structurally rather than detected. A comparison between two expressions of one source is a tautology, and a tautology whose docstring claims it is a drift detector is worse than no test: someone reads the green tick and believes a class of error is covered.
+
+**The real remaining seam is `02-DATA-MODEL.md` → `enums.py`.** That document declares itself authoritative, `enums.py` is a hand-written mirror of it, and **nothing compares them.** Add `burgundy` to the document and forget `enums.py` and every test in this project still passes; the vocabulary is simply narrower than the specification says. That is the same shape as the `MAX_UPLOAD_MB` and `MIN_PASSWORD_LENGTH` mirrors `CONVENTIONS.md` records, with the same honest answer: it is stated in prose in one place and honoured in code in another, and no test can bridge it without parsing markdown. `frontend/src/app/shared/models/enums.ts` is a third copy of the same vocabulary and is in exactly the same position.
+
+What task 1.1 does test about the schema is the part that is not a tautology: that `required` covers every property, that `additionalProperties` is `false`, that every property carries a `type`, that `color_secondary` keeps `null` in the **type union and out of the `enum` array** — the vendor-specific shape a tidy-up would "fix" into plain JSON Schema and break — and that the four deliberately unconstrained fields carry no `enum` at all.
 
 ---
 
@@ -148,6 +150,20 @@ Three of these are worth more than a row in a table.
 **And the honest one: number 11 survived.** `db.refresh` after the item insert is redundant — SQLAlchemy already returns the server defaults via `RETURNING` — so there is no behaviour left to defend, and no test was written to pretend otherwise. `DECISIONS.md` 075.
 
 **A note on running mutations, learned the expensive way at this task.** The first attempt used a harness that restored each file in a `finally` block. It was killed by a timeout mid-mutation, the restore never ran, and the *entire next run* executed against a tree with `status='ready'` still baked into `_insert` — producing a table in which every mutation looked caught, by a test that was simply failing throughout. It was noticed only because one test appeared in all thirteen rows, including mutations it could not possibly relate to. **A mutation harness must verify a green baseline before it starts and after it finishes, and restore from a pristine copy rather than from memory.** A mutation table built on a red baseline is worse than no mutation table, because it reads as evidence.
+
+**A second harness failure, found before task 1.1, and it is the opposite shape.** A mutation was applied to migration `0001` — renaming `uq_users_email` — and nothing failed. Read as a row in a table that says *survived*, and it would have supported exactly the wrong conclusion. The migration never ran: `conftest.py` calls `alembic upgrade head` once per session against a container that ordinarily already holds the revision, so the edited file was never executed by anything.
+
+**A mutation that cannot execute is not a mutation that survived, and a table that conflates them reads as evidence for a claim nobody tested.** Before recording a survivor, establish that the mutated line runs at all — the cheapest check is a deliberately fatal mutation in the same file, which must fail loudly. Anything that is genuinely unreachable by the suite gets recorded as **inconclusive**, with the reason, and never as a row implying coverage was measured.
+
+### What mutation testing has actually found on this project
+
+Worth stating plainly, because it is not what the technique is usually sold for: **on this project mutation testing has found more false claims than bugs.**
+
+- 0.10, mutation 3: writing the code exactly as `STAGE-0` and `DECISIONS.md` 070 specified it failed two named tests, which is how the *specification* was established to be wrong rather than the implementation. `DECISIONS.md` 072.
+- 0.10, mutation 11: `db.refresh` survived, which established that a comment describing a behaviour SQLAlchemy does not have had been believed and copied. `DECISIONS.md` 075, closed at 040.
+- Before 1.1: a replacement comment for `db/base.py` claimed the naming convention is what 037, 040 and 052 match on. Mutating the convention broke nothing, which located the real load in migration `0001`'s literals — and caught the false claim *between writing it and committing it*. `DECISIONS.md` 077.
+
+The lesson generalises: the assertion under test is often a sentence in a document, not a branch in the code. Deleting the behaviour is the only way to find out whether the sentence was ever true.
 
 ---
 

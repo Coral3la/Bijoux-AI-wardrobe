@@ -1,8 +1,12 @@
 # 03 — AI Contracts
 
-Provider: **OpenAI**, model `gpt-4o-mini` for both vision tagging and stylist reasoning.
+Provider: **OpenAI**, model `gpt-4o-mini-2024-07-18` for both vision tagging and stylist reasoning.
 
-Both calls use **Structured Outputs** (`response_format: {"type": "json_schema", "strict": true}`). With `strict: true` the API guarantees the response conforms to the schema, including enum membership. This eliminates most parsing and retry logic — but it does **not** guarantee semantic correctness, so validation still runs on top.
+The model is one constant — `OPENAI_MODEL` in `app/core/config.py` — defaulting both `OPENAI_VISION_MODEL` and `OPENAI_STYLIST_MODEL`. It is a **dated snapshot rather than the moving `gpt-4o-mini` alias**, because every eval run records its model and a curve measured against a pointer that can move is not reproducible. Task 1.11 compares it against `gpt-5.4-mini-2026-03-17` and records both. `DECISIONS.md` 078.
+
+Both calls use **Structured Outputs**. The wire shape is `response_format: {"type": "json_schema", "json_schema": {…}}`, and `strict` lives **inside** `json_schema` beside `name` and `schema` — this line said `{"type": "json_schema", "strict": true}` through task 0.10, which is not a shape the SDK accepts and would not have worked if copied. The block printed under *Response schema* below is the `json_schema` **value**, not the whole `response_format`. Corrected at 1.1 against the installed SDK's own type definitions.
+
+With `strict: true` the API guarantees the response conforms to the schema, including enum membership. This eliminates most parsing and retry logic — but it does **not** guarantee semantic correctness, so validation still runs on top.
 
 All prompts live in `backend/app/prompts/*.md` and are loaded at import time.
 
@@ -10,9 +14,11 @@ All prompts live in `backend/app/prompts/*.md` and are loaded at import time.
 
 ## Contract 1 — Vision tagging
 
-**Service:** `app/services/vision.py` → `tag_item(image_url: str) -> ItemTags`
-**Input:** a Cloudinary transform URL at 800px wide, `f_auto,q_auto`
-**Model:** `gpt-4o-mini`, `detail: "low"` — sufficient for garment classification and roughly four times cheaper than `high`
+**Service:** `app/services/vision.py` → `async tag_item(image_url: str) -> dict[str, Any]`
+
+**Corrected at task 1.1 — this said `-> ItemTags`, and three documents gave three signatures.** `STAGE-1` 1.1 said `-> dict`, `06-TESTING-STRATEGY.md` said `async … -> ItemTags`, and `ItemTags` existed in no file. Only one reading is consistent with 1.2's `validate_tags(raw) -> ItemTags` and with `DECISIONS.md` 028's split: **`tag_item` returns the model's raw dict, unvalidated, and `ItemTags` is defined at task 1.2** as the validated result. That is also what keeps the key named `confidence` all the way to persistence, as 028 requires. `async` because it is an HTTP client, per `CONVENTIONS.md`.
+**Input:** a Cloudinary transform URL at 800px wide, `f_jpg,q_auto` — the format is pinned rather than negotiated because OpenAI's fetcher sends an `Accept` header we cannot observe (`DECISIONS.md` 083)
+**Model:** `settings.OPENAI_VISION_MODEL`, `detail: "low"` — sufficient for garment classification and roughly four times cheaper than `high`
 
 ### System prompt (`prompts/vision_system.md`)
 
@@ -47,7 +53,7 @@ layer — base (worn against skin), mid (worn over a base),
         bags, accessories)
 ```
 
-The enum lists from `02-DATA-MODEL.md` are appended programmatically so the prompt and the schema can never drift apart.
+The enum lists are rendered from `app/enums.py` into a `{{VOCABULARY}}` placeholder at the end of the prompt file, so prompt, schema and validator cannot drift apart — "appended" was the earlier wording and understated it, since a missing placeholder now raises at import rather than shipping a prompt with no vocabulary. `DECISIONS.md` 080.
 
 ### Response schema
 
@@ -91,7 +97,24 @@ Notes on the strict subset, because the block above is easy to get subtly wrong:
 - **`minimum` / `maximum` are supported** on `integer` and `number` for the base models, which is what `formality`, `warmth` and `confidence` rely on. They are **not** supported for fine-tuned models — if this project ever fine-tunes, those three bounds move into Python.
 - Every property must appear in `required`, and `additionalProperties: false` is mandatory. Optionality is expressed only through a `null` union, never by omission from `required`.
 
-This schema has not yet been sent to the API. It is a paper contract until task 1.1 makes the first live call, and the first thing to suspect if that call returns a 400.
+**The schema has been sent to the API and it was accepted.** Task 1.1, 2026-08-17, `gpt-4o-mini-2024-07-18`, one HEIC photographed on an iPhone and delivered through the `vision` transform. No `400`. The two constructs this document flagged as the things to suspect both survived: the `color_secondary` nullable union — `{"type": ["string", "null"], "enum": [...]}` with `null` outside the array — and the `minimum`/`maximum` bounds on `formality`, `warmth` and `confidence`. The response carried all fifteen fields, and `validate_tag_dict` reported no errors and no coercions.
+
+```json
+{ "category": "outerwear", "subcategory": "jacket", "fit": null, "length": "regular",
+  "rise": null, "color_primary": "brown", "color_secondary": "beige", "pattern": "solid",
+  "material": "leather", "formality": 3, "warmth": 4, "layer": "outer",
+  "water_resistant": false, "display_name": "brown shearling jacket", "confidence": 0.9 }
+```
+
+**Two things this call did not establish, stated so nobody reads more into it than it holds.** The nullable union was accepted *as a schema*, but the model returned `"beige"`, so a `null` `color_secondary` has never actually been emitted under strict mode — that branch is still untested. And one image is one image: nothing here says anything about accuracy, which is task 1.11's to measure against thirty.
+
+**The vocabulary block demonstrably reached the model.** `subcategory` and `length` carry no `enum` in the schema, so the rendered prompt is their only source, and both came back as exact in-vocabulary tokens — `"jacket"` from `SUBCATEGORIES[outerwear]`, a category-dependent list whose shape the model could not have guessed, and `"regular"` from `Length`. `rise: null` follows the prompt's bottoms-only rule.
+
+**`fit` came back `null`, and one image cannot say why.** Three readings are open: the model declined honestly, the model had the list and did not use it, or the vocabulary has no good member for outerwear at all — of the nine values, `skinny`, `slim`, `straight` and `wide` are trouser words and `bodycon`, `a_line` and `flowy` are dress words, leaving `relaxed` and `oversized`. Note also that the prompt licenses a null `fit` without ever saying when one is appropriate, unlike `rise` and `color_secondary`, which have explicit rules. Task 1.11 can discriminate where this cannot: if `fit` nulls cluster on outerwear, bags and accessories the vocabulary or the prompt is the problem, and if they spread evenly across categories the model is.
+
+**The block above is now a description of generated output, not the source.** `app/services/vision.py` builds the same structure with its enum arrays taken from `app/enums.py` and `required` derived from the properties, so prompt, schema and validator cannot disagree with each other. What they can still disagree with is `02-DATA-MODEL.md`, which is authoritative over `enums.py` by hand and is compared to it by nothing — see the note in `06-TESTING-STRATEGY.md`. `DECISIONS.md` 080.
+
+Two consequences of generating rather than transcribing, both deliberate. `06-TESTING-STRATEGY.md`'s contract test comparing the schema's colours to `ColorPrimary.values()` is now a tautology and is recorded there as one. And this document must be updated by hand if `enums.py` changes, exactly as before — the generation removed a copy from the code, not from the documentation.
 
 ### Validation and retry — `validate_tag_dict()` and `validate_tags()`
 

@@ -97,6 +97,14 @@ Comment **why**, never **what**. Code that needs a comment to explain what it do
 # Loop over the items
 ```
 
+**A sentence that is true and about to stop being true is not a stale sentence.** Both instances turned up at task 1.1, pointing opposite ways, and both looked identical at a glance.
+
+`app/db/base.py`'s comment described a `create_all` test fixture that cannot exist and never could. Genuinely stale; correcting it was right, and it had survived two tasks because 074 flagged the document and not the code.
+
+`03-AI-CONTRACTS.md`'s "this schema has not yet been sent to the API" reads exactly as stale and was not. It was accurate right up to the moment the live call ran, and deleting it while writing the code that would eventually falsify it would have removed the only marker saying the contract was still unverified — replacing a true statement with an implied and false one.
+
+The test is whether the sentence is false **now**, not whether it is about to be. Where a sentence is deliberately temporary, say what replaces it and when, so the next reader tidies it on purpose rather than by instinct. This applies to comments and to the documents alike; in this project the tidy has been the mistake more often than the comment has.
+
 ## Error handling
 
 Backend returns `{ "detail": str, "code": str }`. Codes are stable strings the frontend can branch on: `wardrobe_too_small`, `stylist_failed`, `forecast_unavailable`, `rate_limited`, `tagging_failed`, `email_exists`, `invalid_credentials`, `invalid_token`, `validation_error`, `unsupported_file_type`, `file_too_large`, `not_found`, `upload_failed`.

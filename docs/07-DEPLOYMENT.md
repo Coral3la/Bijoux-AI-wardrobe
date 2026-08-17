@@ -8,7 +8,7 @@ Everything below runs on free tiers. Total cost is the OpenAI usage — a few do
 | Backend | Render | Web Service, free tier — sleeps after 15 min idle |
 | Frontend | Vercel | Static Angular build |
 | Media | Cloudinary | Free tier: 25 monthly credits, far beyond this project's needs |
-| AI | OpenAI | `gpt-4o-mini`, pay as you go |
+| AI | OpenAI | `gpt-4o-mini-2024-07-18`, pay as you go. Pinned once in `app/core/config.py` (078) |
 | Weather | Open-Meteo | No key, no account, free for non-commercial use |
 
 **Render free-tier cold starts take 30–50 seconds.** Do not discover this during the defence. Either hit `/health` a few minutes beforehand, or upgrade to the paid tier for that week.
@@ -33,8 +33,10 @@ CLOUDINARY_UPLOAD_FOLDER=bijoux
 CLOUDINARY_REMOVE_BACKGROUND=false
 
 OPENAI_API_KEY=
-OPENAI_VISION_MODEL=gpt-4o-mini
-OPENAI_STYLIST_MODEL=gpt-4o-mini
+# Both default to OPENAI_MODEL in app/core/config.py, the single pin.
+# Uncomment only to override; set-but-empty would override it with "".
+#OPENAI_VISION_MODEL=
+#OPENAI_STYLIST_MODEL=
 OPENAI_TIMEOUT_SECONDS=30
 
 USE_FAKE_AI=false        # true in CI and E2E — returns recorded fixtures
@@ -130,7 +132,7 @@ Build these in `services/storage.py` and in the frontend `cloudinaryUrl` pipe. N
 ```
 thumbnail  w_300,h_300,c_pad,b_white,f_auto,q_auto
 detail     w_800,c_limit,f_auto,q_auto
-vision     w_800,c_limit,f_auto,q_auto        # what the AI sees
+vision     w_800,c_limit,f_jpg,q_auto         # what the AI sees
 lookcard   w_400,h_500,c_pad,b_transparent,f_auto,q_auto
 ```
 
@@ -138,9 +140,9 @@ lookcard   w_400,h_500,c_pad,b_transparent,f_auto,q_auto
 
 Three things to know about this table, all established at task 0.6:
 
-- **`detail` and `vision` hold the same string and are still two entries.** The vision transform is free to move when task 1.11's golden-set run says the model wants something different, without changing what a person sees on the item screen. `DECISIONS.md` 046.
+- **`detail` and `vision` held the same string until task 1.1, and now differ.** That is precisely what the split existed to allow: `vision` moved to `f_jpg` without changing what a person sees on the item screen. `DECISIONS.md` 046 and 083.
 - **`lookcard`'s `b_transparent` does nothing useful yet.** Padding to transparent around a photograph that still has its own background produces a transparent border and an unchanged photo. It becomes correct only if background removal is ever switched on.
-- **`f_auto` on a HEIC original is unverified.** Cloudinary documents the fallback as "the format specified by the file extension", and these URLs carry no extension. It matters for the `vision` transform in particular, because that URL is fetched by OpenAI rather than by a browser and OpenAI may send no `Accept` header. Task 1.1 owns settling it before the first live vision call; if it fails, the fix is `f_jpg` on `vision` alone.
+- **`f_auto` on a HEIC original was settled at task 1.1 and the fix was applied.** One real iPhone HEIC, fetched three ways: no `Accept` header and `Accept: */*` both returned `image/jpeg`, a browser-like `Accept` returned `image/webp`. Nothing broken — but `f_auto`'s answer depends on a header OpenAI's fetcher sends and we cannot observe, so `vision` is pinned to `f_jpg`. `DECISIONS.md` 083 records what was and was not caught.
 
 The backend builds these URLs with an f-string rather than with `cloudinary.utils.cloudinary_url`, which returns a tuple and emits `http://` unless `secure=True` is configured. The frontend pipe hand-formats the identical string. Both must agree byte for byte, which is the reason neither uses a library.
 

@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 1 — Wardrobe
-**Status:** Stage 0 closed, all acceptance criteria verified. Stage 1 not started.
+**Status:** Stage 1 in progress — 1.1 complete.
 
 Claude Code updates this file at the end of every stage: tick the criteria, set the next stage, and note anything that changed relative to the plan.
 
@@ -24,7 +24,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 ## Stage 1 — Wardrobe
 `stages/STAGE-1-wardrobe.md` · target 6–7 days
 
-- [ ] Vision service
+- [x] Vision service
 - [ ] Tag validation and retry
 - [ ] Background tagging
 - [ ] Item endpoints
@@ -103,3 +103,18 @@ Changed from the plan, all recorded in `DECISIONS.md` 072–075:
 **Stage 0 is closed.** The last open criterion — `GET /health` returning `db: "ok"` — was verified manually after the 0.10 commit, against a running server on the Neon database: `{"status":"ok","db":"ok","version":"0.1.0"}`. It is a manual check rather than a test because it needs a live server and a reachable database; nothing in the suite covers it.
 
 **2026-08-16 — before task 1.1, four behaviours reassigned across stages.** The `status` filter, the `created_at DESC, short_id` ordering, the `include_archived` exclusion and `limit`'s default and cap all shipped at 0.7 and were left undefended at 0.10, implicitly falling to task 5.2. They now belong to 1.4 (status filter, archived exclusion — both written at that task's start), 1.5 (limit) and 1.7 (ordering). Recorded here rather than only in the stage files because it is a change to the plan, not a change to the code.
+
+**2026-08-17 — task 1.1, vision service.** 241 backend tests pass (208 before). New: `app/services/vision.py`, `app/prompts/vision_system.md`, `tests/unit/test_vision.py`. `tag_item` returns the model's raw dict; 1.2 owns validation.
+
+Both questions 1.1 was given to settle are settled, and neither went the way the stage file predicted:
+
+- **The schema works.** First live call to `gpt-4o-mini-2024-07-18`, no `400`. The nullable `color_secondary` union and the `minimum`/`maximum` bounds were both accepted, and the response passed `validate_tag_dict` with no errors and no coercions. The null branch of that union is still unexercised — the model returned a value.
+- **`f_auto` on a HEIC did not fail.** Three `Accept` headers: `image/jpeg`, `image/jpeg`, `image/webp`. `vision` is pinned to `f_jpg` anyway, because the header OpenAI's fetcher sends is unobservable. 083 is careful that this removed a variable rather than fixed a fault.
+
+Changed from the plan, recorded in `DECISIONS.md` 078–083:
+
+- Model re-pinned to the dated `gpt-4o-mini-2024-07-18`, one constant in `config.py`; 1.11 gains a comparison run against `gpt-5.4-mini-2026-03-17`.
+- The OpenAI client is built lazily — `AsyncOpenAI(api_key="")` raises in the constructor, and a module-level client would stop the suite collecting in CI from 1.3.
+- `03-AI-CONTRACTS.md`'s `tag_item` signature and its `response_format` shorthand were both wrong and are corrected.
+- `06-TESTING-STRATEGY.md`'s contract test is now a tautology and says so; the real seam is `02-DATA-MODEL.md` → `enums.py`.
+- Found by mutation and deferred to 1.2: the vocabulary's `layer` rules run in one direction only (082).

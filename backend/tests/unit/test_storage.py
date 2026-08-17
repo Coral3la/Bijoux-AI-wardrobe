@@ -146,7 +146,7 @@ def test_has_one_member_per_documented_transform() -> None:
     [
         (Transform.THUMBNAIL, "w_300,h_300,c_pad,b_white,f_auto,q_auto"),
         (Transform.DETAIL, "w_800,c_limit,f_auto,q_auto"),
-        (Transform.VISION, "w_800,c_limit,f_auto,q_auto"),
+        (Transform.VISION, "w_800,c_limit,f_jpg,q_auto"),
         (Transform.LOOKCARD, "w_400,h_500,c_pad,b_transparent,f_auto,q_auto"),
     ],
     ids=["thumbnail", "detail", "vision", "lookcard"],
@@ -159,6 +159,19 @@ def test_builds_each_transform_exactly_as_deployment_documents_it(
     assert (
         url == f"https://res.cloudinary.com/test-cloud/image/upload/{expected}/bijoux/a-user/asset"
     )
+
+
+def test_the_vision_transform_pins_the_format_rather_than_negotiating(cloud_name: str) -> None:
+    # f_auto picks a delivery format from the client's Accept header, and the
+    # client here is OpenAI's fetcher, whose header we cannot observe or
+    # control. Measured on one HEIC original: no Accept header and `*/*` both
+    # returned image/jpeg, a browser-like Accept returned image/webp. Named
+    # separately from the table above so the reason survives a reader who is
+    # only checking that the strings match the document. `DECISIONS.md` 083.
+    url = build_url("bijoux/a-user/asset", Transform.VISION)
+
+    assert "f_jpg" in url
+    assert "f_auto" not in url
 
 
 def test_keeps_the_folder_separators_in_a_public_id(cloud_name: str) -> None:

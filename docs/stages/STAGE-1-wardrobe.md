@@ -33,18 +33,20 @@ They are reassigned into this stage, to the task that first depends on each — 
 ### 1.1 Vision service
 `services/vision.py` → `tag_item(image_url) -> dict`, using OpenAI Structured Outputs with the schema in `03-AI-CONTRACTS.md`, `detail: "low"`.
 
-Prompt lives in `app/prompts/vision_system.md`. Enum lists are appended programmatically from `enums.py` so the two can never diverge.
+Prompt lives in `app/prompts/vision_system.md`, which carries a `{{VOCABULARY}}` placeholder rendered from `enums.py` at import — a missing placeholder raises there rather than shipping a prompt with no vocabulary. The schema's enum arrays come from the same source, so prompt, schema and validator cannot diverge. What that does *not* close is `02-DATA-MODEL.md` → `enums.py`, which stays hand-maintained; `06-TESTING-STRATEGY.md` says so where the contract test used to claim otherwise. `DECISIONS.md` 080.
 
 Include the `USE_FAKE_AI` branch from day one, not as an afterthought — Stage 5 depends on it and retrofitting it is annoying.
 
-**Settle the HEIC question before the first live call.** The `vision` transform is `f_auto`, and `f_auto` on a HEIC original delivered to a client that sends no `Accept` header is not confirmed to produce a format OpenAI can read — Cloudinary documents the fallback as the format given by the file extension, and these URLs have no extension (`DECISIONS.md` 046). Upload one HEIC through `upload_image`, fetch its `vision` URL with no `Accept` header, and check the `content-type`. If it comes back `image/heic`, change the `vision` transform to `f_jpg` and correct `07-DEPLOYMENT.md`. This costs two minutes here and is very hard to see through a `BackgroundTask`.
+**The HEIC question is settled.** Measured on one real iPhone HEIC through the `vision` transform, three ways: no `Accept` header and `Accept: */*` both returned `image/jpeg`, a browser-like `Accept` returned `image/webp`. **`f_auto` did not fall back to HEIC** — the failure 046 suspected did not occur, and the live call below ran successfully against the `f_auto` URL. `vision` is pinned to `f_jpg` regardless, because `f_auto`'s answer depends on an `Accept` header OpenAI's fetcher sends and we cannot observe, and negotiation has no upside for a machine consumer. The single-header test this paragraph used to specify would have passed and closed the question with the variable still live; three headers is what surfaced it. `DECISIONS.md` 083.
 
-**The response schema is unverified until this task runs.** It was written against the documented strict subset but has never been sent to the API, so a `400` on the first live call is a schema problem, not a prompt problem — check the nullable `color_secondary` union and the `minimum`/`maximum` bounds first, and correct `03-AI-CONTRACTS.md` in the same commit. Make one live call with a single image before wiring up the background task; debugging a schema rejection through `BackgroundTasks` is considerably worse.
+**The response schema is verified.** One live call, `gpt-4o-mini-2024-07-18`, no `400`: the nullable `color_secondary` union and the `minimum`/`maximum` bounds — the two constructs this paragraph named as the things to suspect — were both accepted, and the response passed `validate_tag_dict` with no errors and no coercions. Two limits on that, recorded in `03-AI-CONTRACTS.md` rather than glossed: the model returned a *value* for `color_secondary`, so the null branch of that union has still never been emitted, and one image says nothing about accuracy. Making the call before wiring up the background task was the right order and stays the advice for 1.2 and 1.3.
 
 ### 1.2 Validation and retry
 `validate_tags(raw) -> ItemTags` implementing every check and coercion in `03-AI-CONTRACTS.md`. Exactly one retry on failure, naming the violation. Second failure raises `TaggingError`.
 
 Unit tests: every coercion path, every rejection path, the retry, and the give-up. No AI calls in these tests.
+
+**The layer rules are one-directional, and this task decides whether that is right.** Found by mutation at 1.1: `validate_tag_dict` forces `layer` to `standalone` for the standalone categories and to `outer` for outerwear, and never rejects a `standalone` where it is nonsense — so `{"category": "top", "layer": "standalone"}` validates with no error and no coercion. `layer` is what the stylist's layering rule keys on (`02-DATA-MODEL.md`), so a top mis-tagged `standalone` would sit silently outside base/mid/outer reasoning from Stage 2 onward. Structured Outputs cannot catch it — `standalone` is a legal enum member — and `PATCH /items/{id}` runs the same validator (030), so a hand-built body reaches it too. Either add the reverse rule here and say what it coerces to, or record that the asymmetry is deliberate. Do not leave it as it is without a sentence. **`DECISIONS.md` 082** holds the finding and is the number Stage 2 will cite either way.
 
 ### 1.3 Background tagging
 Wire `BackgroundTasks` into `POST /items/upload`. One task per item. On success, update the row to `ready` with tags and `display_name`. On `TaggingError`, set `failed` with `error_message`.
@@ -99,6 +101,10 @@ Cover every category, a spread of formality 1–5 and warmth 1–5, and enough v
 30 hand-labelled photos in `tests/fixtures/golden/`. Include deliberately hard cases. Write `test_vision_accuracy_on_golden_set` marked `eval`, run it once, and record the result in `docs/eval-results.md`.
 
 This is the first accuracy datapoint. Every prompt change from here gets measured against it.
+
+**Look at where `fit` nulls fall.** Task 1.1's single live call returned `fit: null` on a leather jacket, and one image cannot say whether that is the model declining honestly, the model ignoring a vocabulary it was given, or a vocabulary with no good member for outerwear — of the nine values, four are trouser words and three are dress words, leaving `relaxed` and `oversized`. Thirty images can discriminate: **if `fit` nulls cluster on outerwear, bags and accessories, the vocabulary or the prompt is the problem; if they spread evenly across categories, the model is.** The prompt also licenses a null `fit` without saying when one is appropriate, unlike `rise` and `color_secondary`, which have explicit rules — that is the cheapest thing to change first if the answer is the prompt.
+
+**Run the golden set twice — once on the pin, once on `gpt-5.4-mini-2026-03-17` — and record both.** Task 1.1 kept `gpt-4o-mini-2024-07-18` deliberately and deferred the model question here, because before this dataset exists the comparison is taste and after it exists it is a number (`DECISIONS.md` 078). Report the same per-field metrics for both, note the cost difference, and re-pin if the newer model wins — which is one constant in `app/core/config.py`. Both runs go in `docs/eval-results.md` with their dates and model ids, and the losing run stays in the file: the comparison is the artefact, not just the winner.
 
 ---
 

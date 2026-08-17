@@ -369,6 +369,8 @@ configured api_key after     : 'k'
 ```
 
 To change a credential in a test, call `cloudinary.config(api_key=…)` or monkeypatch `cloudinary.uploader.upload` outright, which is what `test_storage.py` does.
+**Settled at task 1.1 — the HEIC question below is closed, and the two entries no longer hold the same string.** `f_auto` did *not* fall back to HEIC; measured three ways, it returned `image/jpeg` with no `Accept` header and with `*/*`, and `image/webp` to a browser-like one. `vision` is pinned to `f_jpg` anyway, because the header OpenAI's fetcher sends is not observable and format negotiation has no upside for a machine consumer. `DECISIONS.md` 083 has the measurement and is careful about what it does and does not claim.
+
 **Trade-off accepted:** Two entries in the transform table, `detail` and `vision`, hold identical strings today, which reads as duplication. They are two entries so the vision transform can move when task 1.11's golden-set run says the model wants something different, without changing what a person sees on the item screen. Also unresolved at 0.6 and owned by task 1.1: `f_auto` on a **HEIC** original, delivered to a client that sends no `Accept` header, is not confirmed to produce a browser-renderable format — Cloudinary documents the fallback as "the format specified by the file extension", and these URLs deliberately carry no extension. It matters because the `vision` URL is fetched by OpenAI, not by a browser. If it fails, the fix is `f_jpg` on the `vision` transform alone.
 
 ## 047 — One Cloudinary folder per user, and the media is world-readable
@@ -653,3 +655,90 @@ uq convention changed in db/base.py    nothing failed
 
 So the behaviour is well defended and the **agreement between the two artefacts is not defended at all**: rename a constraint in `0001` and the convention still emits the old name, or change the convention and `0001` still emits the old name, and in both cases the model and the database describe one constraint under two names with a green suite. **The suite also cannot notice by running.** `conftest.py` migrates once per session with `alembic upgrade head`, against a container that ordinarily already holds revision `0001` — so an edited migration is simply never executed, and a mutation to `0001` produces no failure and no information. That was nearly written into a mutation table as a surviving mutation, which is the shape of mistake 0.10 recorded at length.
 **Trade-off accepted:** A test that reads another file's source as a string, which is unusual and looks brittle. It is the only layer that can see this: the behavioural half is already covered four times over, and the running half is structurally blind. `EXPECTED_NAMES` is also a hand-maintained list, so migration `0002` at Stage 2 must extend it — deliberately, since a new table whose constraint names nobody checked against the convention is exactly the drift this exists to catch. It will fail loudly rather than silently when `looks` and `look_items` land.
+
+## 078 — The vision model stays `gpt-4o-mini`, re-pinned to a dated snapshot
+
+**Decision:** `OPENAI_MODEL = "gpt-4o-mini-2024-07-18"`, a module constant in `app/core/config.py` beside `APP_VERSION`, defaulting both `OPENAI_VISION_MODEL` and `OPENAI_STYLIST_MODEL`. The two environment variables remain overridable and are commented out in `.env.example`. Task 1.11 gains a comparison run against `gpt-5.4-mini-2026-03-17`, recorded in `docs/eval-results.md` alongside the 4o-mini numbers.
+**Alternative:** Move to the current line now — the account serves `gpt-5.4-nano`, `gpt-5.4-mini`, the 5.5 line and `gpt-5.6` in three variants (`-sol`, `-terra`, `-luna`). Or keep the moving `gpt-4o-mini` alias, which is what every document said.
+**Reasoning:** Three reasons to stay, and one honest reason the newer line deserves a hearing.
+
+**One variable at a time.** Task 1.1 exists to turn `03-AI-CONTRACTS.md`'s schema from a paper contract into a verified one; the stage file says a `400` on the first live call is a schema problem and names the two constructs to suspect. Changing the model in the same commit gives a `400` two candidate causes, and the newer lines are precisely where strict-mode support is most likely to differ.
+
+**There is no instrument yet.** Task 1.11 builds the golden dataset — 30 hand-labelled photographs with per-field targets. Before it exists, "is 5.4-mini better at tagging clothes?" is taste; after it exists it is a number, and `06-TESTING-STRATEGY.md` already makes the improvement curve the artefact of the defence. *I measured both and here are the two numbers* is a better answer under questioning than *I picked the newer one*, and it costs about six cents.
+
+**Cost cannot decide it and was not allowed to pretend to.** Vision runs at roughly $0.0002 per image at `detail: "low"`; the golden set is 30 images and the 40-item seed wardrobe makes no AI calls at all. A tenfold price difference would be invisible here.
+
+**Against all that:** garment tagging at `detail: "low"` is coarse classification, which favours a small older model, but 1.11's deliberately hard cases — dark on dark, layered, a shoe at an angle — are where a newer vision model would be expected to pull ahead. That is a reason to test it, which is what 1.11 now does.
+
+**Dated rather than aliased** because `06-TESTING-STRATEGY.md` records the model with every eval run, and an accuracy curve measured against a pointer that can move underneath it is not reproducible — which is the single property that makes the curve worth showing.
+**Trade-off accepted:** **The pin is roughly two generations old and a 2024 snapshot can be retired.** That is foreseen rather than discovered: if the snapshot stops being served, the swap is one constant in `config.py` and one eval run at 1.11, and the two environment variables are already there to override it without a code change in the meantime. Also accepted: this entry rests on a limitation worth stating, which is that the newer models postdate the assistant's knowledge cutoff, so nothing here claims anything about their pricing, their vision quality or their Structured Outputs behaviour. The bake-off exists because those claims could not be made, not merely because measurement is tidy.
+
+## 079 — The OpenAI client is built on first use, never at import
+
+**Decision:** `vision.py` exposes `_client()`, an `lru_cache(maxsize=1)` function returning `AsyncOpenAI`. No client exists at module scope.
+**Alternative:** `client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)` at module level, which is what `storage.py` does one line down from its imports and what almost every example shows.
+**Reasoning:** Measured before it was written:
+
+```
+AsyncOpenAI(api_key='')   RAISED openai.OpenAIError: Missing credentials.
+AsyncOpenAI()             RAISED openai.OpenAIError: Missing credentials.
+```
+
+`Settings.OPENAI_API_KEY` defaults to `""`, and `07-DEPLOYMENT.md` states plainly that the API keys default to empty strings *so that CI can run without an OpenAI account*. A module-level client therefore raises on **import**, not on call — and from task 1.3 `vision.py` sits on the import path to `app.main`, so the entire backend suite would stop collecting in CI with an error about credentials, on a run that never intended to make an AI call. `USE_FAKE_AI` cannot save it, because the flag is read inside `tag_item` and import happens first.
+
+This is 046's lesson arriving through a second door. There, `cloudinary.config()` at import means monkeypatching `settings.CLOUDINARY_API_KEY` afterwards changes nothing, and the cost was an hour of confusion in a test. Here the same shape fails harder and earlier, and the difference is only that the SDK validates its credentials in the constructor rather than at call time.
+**Trade-off accepted:** A cached factory where a reader expects a module constant, and a client that outlives a settings change — a test that needs a different key must call `_client.cache_clear()`. That is explicit, which is the point: `storage.py`'s equivalent staleness is invisible and had to be written down in 046 for anyone to find it.
+
+## 080 — The schema is the document's, the vocabulary is generated, and the placeholder is asserted
+
+**Decision:** `VISION_SCHEMA` is a literal JSON Schema dict sent through `response_format`, not a Pydantic model through `chat.completions.parse`. Its enum arrays are built from `app/enums.py`. `required` is derived from the properties rather than restated. The prompt file carries a `{{VOCABULARY}}` placeholder that `_load_system_prompt` replaces, raising at import if it is absent.
+**Alternative:** A Pydantic model and `.parse()`, which is idiomatic in openai 2.x and gives a typed result. Enum arrays written out as `03-AI-CONTRACTS.md` prints them. The vocabulary block appended to the end of the prompt file with no placeholder.
+**Reasoning:** On `.parse()`: it generates a schema from the model, and **the schema this task exists to verify is the one the document wrote down** — including a nullable enum expressed as `{"type": ["string", "null"], "enum": [...]}`, where Pydantic emits `anyOf`. Verifying a generated variant would prove nothing about the contract, and the strict-subset notes in `03` are specifically about hand-written JSON Schema. On deriving `required`: strict mode rejects a schema where `required` and `properties` differ, so a second hand-written list is one forgotten edit from a `400` that reads as a model fault.
+
+On generating the enum arrays, the cost is real and is recorded rather than glossed. **`06-TESTING-STRATEGY.md`'s Layer 2 contract test becomes a tautology.** Its stated purpose was to catch someone adding `burgundy` to the prompt but not to the enum; with prompt, schema and validator all rendered from `enums.py`, that drift is structurally impossible and a comparison between two expressions of one source proves nothing. The trade is still right — a structural guarantee beats a test — but a test whose docstring claims a coverage it no longer has is worse than no test, so `06` is corrected in the same commit and names the real remaining seam: `02-DATA-MODEL.md` → `enums.py` → `enums.ts`, hand-maintained, three copies, nothing comparing them.
+
+On the placeholder: appending would work identically, and the placeholder makes the prompt file honest about what it becomes — someone reading it alone otherwise sees a prompt with no vocabulary and no sign one is coming. The guard raises at import because a prompt that silently lost its vocabulary still returns plausible tags. **`fit`, `length` and `rise` are plain strings in the schema** — an out-of-vocabulary value there is coerced to null rather than retried, so constraining them would buy nothing — which means the rendered block is the *only* place the model ever learns those three vocabularies. Losing it degrades exactly the three fields nothing else would catch. The guard is covered by `test_a_prompt_file_without_the_placeholder_raises_at_load`, not merely intended.
+**Trade-off accepted:** No typed result object — `tag_item` returns `dict[str, Any]` and 1.2's `ItemTags` is where types arrive. And `03-AI-CONTRACTS.md`'s printed schema is now a *description* of generated output rather than the literal source, so the two can drift if `enums.py` changes and the document is not updated. That is the same seam named above and it is the one this project has always had.
+
+## 081 — `USE_FAKE_AI` returns a hand-written placeholder, breaking 06's recorded-fixtures rule on purpose
+
+**Decision:** `_FAKE_TAGS` is a hand-written constant returned by `tag_item` when `settings.USE_FAKE_AI` is true. Task 5.1 replaces it with responses recorded from the live API and keyed by input.
+**Alternative:** Have the flag raise `NotImplementedError` until 5.1 records real fixtures, which is the only way to honour `06-TESTING-STRATEGY.md` literally from day one. Or defer the branch entirely to 5.1.
+**Reasoning:** `06-TESTING-STRATEGY.md` says fixtures are "**real recorded responses**, captured once from the live API and committed. Hand-written fixtures drift from reality; recorded ones do not." That rule is right and it is broken here knowingly.
+
+A flag that raises is useless for four stages — and `STAGE-1` 1.1 requires the branch "from day one, not as an afterthought", because 1.3's background task, 1.5's grid, 1.7's polling and every Playwright journey need *some* deterministic tagging long before 5.1 exists. Deferring the branch means retrofitting it through a `BackgroundTask`, which the stage file specifically warns against.
+
+What the rule is actually protecting against is a fixture that *claims* to represent model output and does not. The mitigation is that this one says so: `display_name` reads **"placeholder white shirt"**, so a demo accidentally run with the flag on is visible on screen rather than passing for a real tagging result. **A rule broken on purpose with a name on it is fine; one broken quietly is not.**
+**Trade-off accepted:** Between 1.1 and 5.1 every fake-tagged item is the same white shirt, so nothing exercises tag variety — 1.10's seed script is what provides a varied wardrobe, and it makes no AI calls, so the two do not collide. The fake is asserted to pass `validate_tag_dict` with no errors and no coercions, so a tightening at 1.2 breaks it loudly here rather than at 5.1. **That assertion does not cover the fake being *sensible*, only valid**: found by mutation, `layer: "standalone"` on a `top` validates just as cleanly, because the vocabulary's layer rules only force `standalone` where it is required and never reject it where it is nonsense. The gap is the validator's and belongs to 1.2.
+
+## 082 — The vocabulary's `layer` rules run in one direction only
+
+**Decision:** Recorded here and **not fixed at task 1.1**. `validate_tag_dict` forces `layer` to `standalone` for `dress`, `shoes`, `bag` and `accessory`, and to `outer` for `outerwear`. It does not reject `standalone` on a category that cannot have it: `{"category": "top", "subcategory": "shirt", "layer": "standalone"}` validates with **no error and no coercion**. Task 1.2 owns the validator and owns the choice — either add the reverse rule and say what it coerces to, or record the asymmetry as deliberate and cite this entry.
+**Alternative:** Fix it at 1.1, which means editing `enums.py` from a task that owns neither the validator nor the vocabulary. Or leave it as a note in `STAGE-1-wardrobe.md` alone.
+**Reasoning:** Found by mutation, and by accident. The mutation was to the *fake tags* in `vision.py` — changing `layer` from `base` to `standalone` to confirm that `test_the_fake_is_valid_input_to_the_validator` defended the choice. It did not fail, because there is nothing to fail: the rule does not exist.
+
+**This is a Stage 2 problem discovered at Stage 1, which is the only reason it is worth a number.** `layer` is the field the stylist's layering constraint keys on — `02-DATA-MODEL.md` states that the stylist may not put two `outer` items in one look, and `03-AI-CONTRACTS.md`'s prompt gives the base → mid → outer ordering as a styling principle. A top mis-tagged `standalone` is therefore not a cosmetic error: it sits outside that reasoning entirely, and the look it appears in will be silently wrong rather than visibly invalid.
+
+Nothing upstream catches it. Structured Outputs cannot — `standalone` is a legal member of the `layer` enum and the schema has no way to express "legal, but not for this category", which is the same limitation that made `subcategory` a plain string. The prompt says which categories are standalone, but a prompt is not a guarantee. `PATCH /items/{id}` runs the same validator (030), so a hand-built request can set it too, and there the failure is a `200` rather than a `422`.
+
+It is left for 1.2 rather than taken here because `CONVENTIONS.md`'s one-task-at-a-time rule is what keeps scope from riding into a task's orientation, and because the fix is a genuine choice rather than an obvious repair: the reverse rule has to decide what a `top` tagged `standalone` *becomes*, and `base` is a guess dressed as a correction.
+**Trade-off accepted:** An entry that describes a defect and defers the decision, which is not what this log is normally for. It is numbered anyway, so that 2.x can cite a number when it either relies on the invariant or works around its absence — a stage-file note would have been read once, by whoever built 1.2, and never found again from Stage 2.
+
+## 083 — The `vision` transform pins the format, and what that did and did not catch
+
+**Decision:** `Transform.VISION` moves from `w_800,c_limit,f_auto,q_auto` to `w_800,c_limit,f_jpg,q_auto`. `detail` keeps `f_auto` and is unchanged. `07-DEPLOYMENT.md`'s table, `03-AI-CONTRACTS.md`'s input line and `01-ARCHITECTURE.md`'s flow step 7a are corrected to match.
+**Alternative:** Keep `f_auto`, which the measurement below does not disprove.
+**Reasoning — and the first thing to say is what was *not* found.** 046 left this open as a suspected failure: `f_auto` on a HEIC original, delivered to a client sending no `Accept` header, might fall back to the format named by the file extension, and these URLs deliberately carry none. **That failure did not occur.** One real iPhone HEIC, 2,047,391 bytes, uploaded and fetched three ways through the `vision` transform:
+
+```
+no Accept header         image/jpeg
+*/*                      image/jpeg
+browser-like             image/webp
+```
+
+The two requests that most resemble what a non-browser fetcher sends both returned JPEG, and only a browser-like `Accept` produced WebP — which OpenAI reads anyway. **The live vision call in task 1.1 was then made against the `f_auto` URL and it worked**, returning fifteen valid fields. So on this sample the path OpenAI most likely took was already safe, and nothing was broken at the moment the change was made.
+
+**What was caught is an unobservable variable, not a live failure.** `f_auto`'s answer is a function of the `Accept` header of whoever fetches the URL. For every other transform in the table that client is a browser, which is what `f_auto` exists to serve. For `vision` it is OpenAI's fetcher — we cannot see the header it sends, we cannot control it, and it can change without notice on their side or on Cloudinary's. **Format negotiation cannot help us here: OpenAI is not a browser and gains nothing from a smaller modern format, so the only thing negotiation can do on this URL is one day return something the model cannot read.** Removing a variable that only has a downside is worth one word in a string, and it is worth it *before* the golden-set run at 1.11 rather than in the middle of it, where a silent format change would look like an accuracy regression.
+
+**This is exactly why the criterion was three requests rather than one.** The stage file's original test — "if it comes back `image/heic`, change it" — would have passed on the first line and closed the question with `f_auto` still in place and the real variable undisturbed. The three-header form is what surfaced the disagreement, and the disagreement is the finding.
+**Trade-off accepted:** `vision` no longer benefits from any future format Cloudinary adds, which for a machine consumer is no loss. Delivery is marginally larger than a negotiated WebP, on one fetch per item, which is invisible next to the model call it feeds. And the split between `detail` and `vision` that 046 defended as hypothetical is now load-bearing: they hold different strings, so anyone tidying them back into one entry breaks this. `test_the_vision_transform_pins_the_format_rather_than_negotiating` exists to say so by name rather than only through the table-comparison test, which would fail with a message about a string.

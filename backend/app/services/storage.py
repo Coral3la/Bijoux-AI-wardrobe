@@ -47,14 +47,15 @@ class Transform(StrEnum):
     LOOKCARD = "lookcard"
 
 
-# The table in `07-DEPLOYMENT.md`. `detail` and `vision` are the same string
-# today and are still two entries: the vision transform is free to move when
-# the golden-set run says the model wants something else, without changing
-# what a person sees on the item screen.
+# The table in `07-DEPLOYMENT.md`. `detail` and `vision` were the same string
+# until task 1.1, and this is exactly the move the split existed to allow:
+# `vision` is fetched by OpenAI rather than by a browser, so f_auto would pick
+# a format from an Accept header we cannot observe. Pinned to JPEG instead.
+# `DECISIONS.md` 083.
 _TRANSFORMS: dict[Transform, str] = {
     Transform.THUMBNAIL: "w_300,h_300,c_pad,b_white,f_auto,q_auto",
     Transform.DETAIL: "w_800,c_limit,f_auto,q_auto",
-    Transform.VISION: "w_800,c_limit,f_auto,q_auto",
+    Transform.VISION: "w_800,c_limit,f_jpg,q_auto",
     Transform.LOOKCARD: "w_400,h_500,c_pad,b_transparent,f_auto,q_auto",
 }
 

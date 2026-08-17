@@ -5,6 +5,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_VERSION = "0.1.0"
 
+# One pin, in one place, defaulting both knobs below. Dated rather than the
+# moving `gpt-4o-mini` alias: `06-TESTING-STRATEGY.md` records the model with
+# every eval run, and an accuracy curve measured against a pointer that can
+# move underneath it is not reproducible. `DECISIONS.md` 078.
+OPENAI_MODEL = "gpt-4o-mini-2024-07-18"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -26,8 +32,8 @@ class Settings(BaseSettings):
     CLOUDINARY_REMOVE_BACKGROUND: bool = False
 
     OPENAI_API_KEY: str = ""
-    OPENAI_VISION_MODEL: str = "gpt-4o-mini"
-    OPENAI_STYLIST_MODEL: str = "gpt-4o-mini"
+    OPENAI_VISION_MODEL: str = OPENAI_MODEL
+    OPENAI_STYLIST_MODEL: str = OPENAI_MODEL
     OPENAI_TIMEOUT_SECONDS: int = 30
 
     USE_FAKE_AI: bool = False
