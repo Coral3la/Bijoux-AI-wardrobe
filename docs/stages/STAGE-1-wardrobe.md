@@ -41,28 +41,43 @@ Include the `USE_FAKE_AI` branch from day one, not as an afterthought — Stage 
 
 **The response schema is verified.** One live call, `gpt-4o-mini-2024-07-18`, no `400`: the nullable `color_secondary` union and the `minimum`/`maximum` bounds — the two constructs this paragraph named as the things to suspect — were both accepted, and the response passed `validate_tag_dict` with no errors and no coercions. Two limits on that, recorded in `03-AI-CONTRACTS.md` rather than glossed: the model returned a *value* for `color_secondary`, so the null branch of that union has still never been emitted, and one image says nothing about accuracy. Making the call before wiring up the background task was the right order and stays the advice for 1.2 and 1.3.
 
-### 1.2 Validation and retry
-`validate_tags(raw) -> ItemTags` implementing every check and coercion in `03-AI-CONTRACTS.md`. Exactly one retry on failure, naming the violation. Second failure raises `TaggingError`.
+### 1.2 Validation and retry — **split into 1.2a and 1.2b**
+
+Task 1.1 handed this task five things, four of which are decisions rather than implementations, and they belong to two different arguments in two different modules. Splitting on the boundary `DECISIONS.md` 028 already drew — `enums.py` decides what is valid, `vision.py` decides what to do about it — gives each half one argument, one commit and one orientation.
+
+**Lettered rather than renumbered, deliberately.** Inserting a task and shifting 1.3–1.11 would rewrite around ninety cross-references, and a good number of them are *statements about the past* — "found at task 0.7 and assigned here", "amended before task 1.2", "deferred to 1.3". Renumbering would make those sentences false rather than stale, which is the worse of the two failures (`CONVENTIONS.md`, on tidying). Every existing reference to "task 1.2" still resolves: 1.2 is the umbrella and both halves are inside it. **They are two tasks for the purposes of the one-commit-per-task rule.**
+
+#### 1.2a — Category-dependent validation, in `enums.py`
+
+One question: **what does the closed vocabulary consider valid, given the category the value arrived beside — and what does an invalid value become?**
+
+**The gap is one rule with three instances — `DECISIONS.md` 084.** `validate_tag_dict` tests membership in a flat vocabulary and never tests appropriateness, so a legal member sitting beside a category it cannot describe passes with no error and no coercion:
+
+- `{"category": "top", "layer": "standalone"}` — found by mutation at 1.1. `layer` is what the stylist's layering rule keys on, so the resulting look is silently wrong rather than visibly invalid. `PATCH /items/{id}` runs the same validator (030), so a hand-built body reaches it too.
+- `{"category": "top", "subcategory": "tank", "fit": "skinny"}` — observed on a real image. `skinny` is a trouser word.
+- `length` is the third candidate. 029 accepted the risk on the premise that "the vision model does not offer `maxi` for a t-shirt", and that premise is falsified by the second bullet; the entry is amended.
+
+The shape of a fix already exists in the file twice — `SUBCATEGORIES` for `subcategory`, the bottoms-only gate for `rise` — so this is not new machinery. But the mappings are not equally writable. `layer`'s is close to total. `fit`'s is fuzzy, and a fuzzy allow-map manufactures false coercions; a per-category **deny** list is a smaller and more defensible claim there. **Decide the mechanism once and record which of the three fields opt in, including the ones that do not.**
+
+**082's open question is part of this and is a decision, not a deferral.** What a `top` tagged `standalone` *becomes* is the whole content of the fix — `base` is a guess wearing a correction's clothes. **"The asymmetry stays" is an acceptable answer** and has to be chosen and written down as one.
+
+**Two things to check before you start.** `02-DATA-MODEL.md` is authoritative over `enums.py` and the copy is made by hand, so any vocabulary change lands there first. And if the rules become data the UI needs — 1.9's tag editor has to populate a `fit` select for the chosen category — then `enums.ts` becomes a **fourth** hand-maintained copy, with nothing comparing any of them. Decide whether the rules stay server-side before you write them.
+
+Unit tests: every new rule, both directions, per category. No AI, no database — the property 028 bought for this module.
+
+#### 1.2b — `validate_tags` and retry, in `vision.py`
+
+`validate_tags(raw) -> ItemTags` implementing every check and coercion in `03-AI-CONTRACTS.md`, against the rules 1.2a settled. Exactly one retry on failure, naming the violation. Second failure raises `TaggingError`. This is where `ItemTags` is defined.
 
 Unit tests: every coercion path, every rejection path, the retry, and the give-up. No AI calls in these tests.
 
-**Five things arrived from 1.1 for this task, and four of them require a decision rather than an implementation.** They are listed in the order they should be taken.
+Three things arrived from 1.1 that belong here rather than in 1.2a, because each is about what the *service* does with the report:
 
-**1. The validator checks membership and never checks category-appropriateness — `DECISIONS.md` 084.** One gap, three instances:
+**1. A coerced value leaves no record, and it is a separate problem from 1.2a's.** `fit: "flared"` came back on a real pair of jeans — a value in no vocabulary. The membership check worked and coerced it to null, exactly as designed. What is missing is any trace: `TagValidation.coerced` carries the discarded value at validation time and nothing persists it, so a garment attribute the model observed is dropped, the item screen shows an empty field, and nobody learns the vocabulary was short a word. Logging it is this task's; persisting it — `items.attributes` is a `JSONB` column that exists for exactly this — is 1.3's. **At minimum, log the coercion with the field and the rejected value**, or 1.11 has nothing to mine but nulls.
 
-- `{"category": "top", "layer": "standalone"}` validates with no error and no coercion. Found by mutation at 1.1. `layer` is what the stylist's layering rule keys on, so the resulting look is silently wrong rather than visibly invalid. `PATCH /items/{id}` runs the same validator (030), so a hand-built body reaches it too.
-- `{"category": "top", "subcategory": "tank", "fit": "skinny"}` validates the same way. Observed on a real image, not constructed. `skinny` is a trouser word.
-- `length` is the third candidate; 029 accepted the risk on a premise that has now been falsified in the neighbouring field, and is amended.
+**2. The null `color_secondary` branch has still never been emitted.** Strict mode accepted `{"type": ["string", "null"], "enum": [...]}` as a schema at 1.1, but every live response so far returned a colour. This task reads that field constantly. Either produce a real null from the API and say so, or state plainly in `03-AI-CONTRACTS.md` that the null branch of the only nullable enum in the schema remains unproven.
 
-The shape of a fix exists in `enums.py` twice already — `SUBCATEGORIES` for `subcategory`, the bottoms-only gate for `rise` — so this is not new machinery. But the mappings are not equally writable: `layer`'s is close to total, `fit`'s is fuzzy, and a fuzzy allow-map manufactures false coercions. A per-category **deny** list is a smaller claim than an allow-map and may be the right shape for `fit` alone. **Decide once, for all three, and record which of them opt in.**
-
-**2. 082's open question is a decision, not a deferral.** What a `top` tagged `standalone` *becomes* is the whole content of the fix — `base` is a guess wearing a correction's clothes. **"The asymmetry stays" is an acceptable answer** and has to be chosen and written down as one; it is not the same as leaving it unpicked.
-
-**3. A coerced value leaves no record, and that is a separate problem from the one above.** `fit: "flared"` came back on a real pair of jeans — a value in no vocabulary. The membership check worked and coerced it to null, exactly as designed. What is missing is any trace: `TagValidation.coerced` carries the discarded value at validation time and nothing persists it, so a garment attribute the model observed is dropped, the item screen shows an empty field, and nobody learns the vocabulary was short a word. Logging it is this task's; persisting it — `items.attributes` is a `JSONB` column that exists for exactly this — is 1.3's. **At minimum, log the coercion with the field and the rejected value**, or 1.11 has nothing to mine but nulls.
-
-**4. The null `color_secondary` branch has still never been emitted.** Strict mode accepted `{"type": ["string", "null"], "enum": [...]}` as a schema at 1.1, but every live response so far returned a colour. This task reads that field constantly. Either produce a real null from the API and say so, or state plainly in `03-AI-CONTRACTS.md` that the null branch of the only nullable enum in the schema remains unproven.
-
-**5. The `confidence < 0.35` rule has no owner and no settings field.** `DECISIONS.md` 028 describes the comparison as being made "against `settings`" and no such field exists; `05-FRONTEND-SPEC.md` names no review surface; no stage file mentions confidence. Decide here whether `validate_tags` implements it — and if it does, add the setting. **Know what it is worth first:** eight live responses at 1.1 returned `confidence: 0.9` every time, including both wrong ones, so the threshold would have flagged nothing in eight images. It is a fluency signal, not an accuracy signal.
+**3. The `confidence < 0.35` rule has no owner and no settings field.** `DECISIONS.md` 028 describes the comparison as being made "against `settings`" and no such field exists; `05-FRONTEND-SPEC.md` names no review surface; no stage file mentions confidence. Decide here whether `validate_tags` implements it — and if it does, add the setting. **Know what it is worth first:** eight live responses at 1.1 returned `confidence: 0.9` every time, including both wrong ones, so the threshold would have flagged nothing in eight images. It is a fluency signal, not an accuracy signal.
 
 ### 1.3 Background tagging
 Wire `BackgroundTasks` into `POST /items/upload`. One task per item. On success, update the row to `ready` with tags and `display_name`. On `TaggingError`, set `failed` with `error_message`.
@@ -161,7 +176,7 @@ The prompt also licenses a null `fit` without ever saying when one is appropriat
 
 ## Commit checkpoints
 
-`feat(ai): vision tagging service` · `feat(ai): tag validation and retry` · `feat(api): background tagging` · `feat(api): item crud and retag` · `feat(web): wardrobe grid` · `feat(web): upload sheet` · `feat(web): filters` · `feat(web): tag editor` · `chore: demo seed data` · `test: golden dataset and accuracy eval`
+`feat(ai): vision tagging service` · `feat(core): category-dependent validation` · `feat(ai): tag validation and retry` · `feat(api): background tagging` · `feat(api): item crud and retag` · `feat(web): wardrobe grid` · `feat(web): upload sheet` · `feat(web): filters` · `feat(web): tag editor` · `chore: demo seed data` · `test: golden dataset and accuracy eval`
 
 ## If you fall behind
 
