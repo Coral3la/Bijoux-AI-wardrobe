@@ -54,7 +54,8 @@ Every boundary in the mapping table gets both sides asserted. Also unit-tested w
 - `enums.py` — `subcategory` validity per `category`, all 7 categories; and from task 1.2a the rest of the category-dependent rules, both directions per category: `fit` and `length` applicability and their narrowed words, and `layer`'s admitted set and answer for each of the seven — including the one category, `top`, whose answer is an error rather than a value
 - `short_id` generation — alphabet excludes `0O1IL`, correct length, no repeat across a large sample. **Collision retry is not here**, and the original wording was wrong to place it: what detects a collision is the `uq_items_short_id` constraint, so the retry cannot run without a database. Task 0.7 shipped the pure half; task 0.10 owns the retry with the rest of the row-writing tests
 - `validate_tag_dict()` — every coercion and every rejection path
-- `validate_tags()` — the retry and the give-up, with the vision call mocked
+- `validate_tags()` — the retry and the give-up, with the vision call mocked. From task 1.2b that means: a clean answer accepted without a call at all, every coercion accepted and never retried, the `top`/`layer` error retried once with the violation in the correction, the give-up after exactly one retry, the eleven required fields each missing in turn, and the coercion log. The signature is `async validate_tags(raw, image_url)` — the URL is there because the retry is a second call to the model
+- `vision.py`'s rendered prompt — the category rules, **pinned literally**. Every other prompt assertion in that file derives its expectation from `enums.py` and would move with a mutated table; these are transcribed from `02-DATA-MODEL.md`, for the reason two subsections below
 - `validate_look_response()` — all eight rules, each failing independently, including anchor present and locked items preserved
 
 ---
@@ -174,6 +175,36 @@ Three of these are worth more than a row in a table.
 
 **A mutation that cannot execute is not a mutation that survived, and a table that conflates them reads as evidence for a claim nobody tested.** Before recording a survivor, establish that the mutated line runs at all — the cheapest check is a deliberately fatal mutation in the same file, which must fail loudly. Anything that is genuinely unreachable by the suite gets recorded as **inconclusive**, with the reason, and never as a row implying coverage was measured.
 
+### The vision-service mutation run, task 1.2b
+
+Sixteen mutations plus a fatal control, against `validate_tags`, the required-field check and the rendered rules. Run from a pristine copy, baseline green at both ends (353 passed before and after). **All seventeen caught, none survived** — with one caught in a way that is worth more than the row.
+
+| # | Behaviour deleted | Caught by |
+|---|---|---|
+| 1 | `validate_tags` never retries; the first answer is accepted as-is | 12 tests |
+| 2 | the give-up retries a third time instead of raising | 4 tests |
+| 3 | the coercion log is dropped | 2 tests |
+| 4 | the discarded values are dropped from the result | `test_the_discarded_value_survives_on_the_result` |
+| 5 | both attempts' coercions are carried, not the accepted answer's | `test_only_the_accepted_answers_coercions_are_carried` |
+| 6 | `_missing_fields` tests falsiness instead of `is None` | 16 tests |
+| 7 | the blank `display_name` check is dropped | `test_a_blank_display_name_counts_as_missing` |
+| 8 | `layer` dropped from `_REQUIRED_FIELDS` | 3 tests, incl. the literal pin |
+| 9 | the narrowed words are not rendered into the prompt | 3 tests |
+| 10 | the per-category `layer` table is dropped from the prompt | `test_the_layer_table_reaches_the_prompt_for_every_category` |
+| 11 | `_categories` renders set order instead of declaration order | 3 tests |
+| 12 | `PROMPT_VERSION` hashes the file instead of the rendered prompt | `test_the_prompt_version_covers_the_generated_vocabulary` |
+| 13 | the correction no longer names the violation | 5 tests |
+| 14 | `TaggingError` carries the first violation, not the second | `test_the_tagging_error_carries_the_second_violation` |
+| 15 | the retry's `ValueError` is relabelled as a `TaggingError` | `test_a_retry_that_returns_nothing_usable_is_not_relabelled` |
+| 16 | the prompt file loses its `{{VOCABULARY}}` placeholder | **the suite, at collection — no named test** |
+| — | fatal control: `_build` reads the wrong report | 16 tests |
+
+**Number 16 is a real limit on the guard 1.1 built, and it is not a defect.** Deleting the placeholder from the actual prompt file makes `app.services.vision` raise at import, so `test_vision.py` never collects and the run reports one `ERROR` and no failures. That is the guard working exactly as `DECISIONS.md` 080 intended — loud at import rather than silent at call time — but it means **`test_a_prompt_file_without_the_placeholder_raises_at_load` does not defend the real file.** It monkeypatches `PROMPT_PATH` to a stripped copy, so what it proves is that the guard's logic is right, not that the shipped prompt still has a placeholder. Nothing can prove the second by a test, because the import that would fail is the import the test file needs. Recorded because the previous subsection's rule — a suite that will not collect is a worse signal than a named test failing — has an exception here, and this is it: collection failure *is* the intended signal, and the harness must say so rather than print `CAUGHT by 0 tests` and let a reader guess.
+
+**Number 6 is the falsy trap and it is why `is None` is spelled out.** `water_resistant: false` is legitimate on most of a wardrobe, so a truthiness test retries and then fails every garment that is not waterproof — sixteen tests catch it, which makes it look obvious. It was not: the same line reads correctly at a glance, and only `test_a_false_water_resistant_is_not_missing` states the case on purpose.
+
+**Numbers 4, 5 and 14 are each caught by exactly one test, and all three are decisions rather than mechanisms.** Whether the discarded value survives, whose coercions `ItemTags` carries, and which of two violations reaches `error_message` are all choices a later reader could reverse while leaving the module working. One named test each is the whole defence, which is the argument for naming them after the decision rather than after the code.
+
 ### What mutation testing has actually found on this project
 
 Worth stating plainly, because it is not what the technique is usually sold for: **on this project mutation testing has found more false claims than bugs.**
@@ -183,6 +214,8 @@ Worth stating plainly, because it is not what the technique is usually sold for:
 - Before 1.1: a replacement comment for `db/base.py` claimed the naming convention is what 037, 040 and 052 match on. Mutating the convention broke nothing, which located the real load in migration `0001`'s literals — and caught the false claim *between writing it and committing it*. `DECISIONS.md` 077.
 
 - 1.2a: seven mutations plus a fatal control, all caught, baseline green at both ends — and the finding is not in the table. **The harness misreported one row.** Dropping `LAYERS_BY_CATEGORY`'s `top` entry printed `CAUGHT by 0 tests` beside a mangled filename, because the run had produced a pytest `ERROR` line and the harness only parsed `FAILED`. It was a collection error dressed as a survivor. Both halves were fixed — the parsing, and the derived `@parametrize` that caused the collection to fail at all — and the mutation now fails `test_the_layer_table_covers_every_category` by name. **A mutation table that misreports one row reads as evidence for every row in it.**
+
+- 1.2b: seventeen mutations, all caught — and the finding is again about a claim rather than a bug. Number 16 established that `test_a_prompt_file_without_the_placeholder_raises_at_load` does not defend the shipped prompt file, only the guard's logic, because the real failure happens at import and takes the test module with it. The test's name does not say that and its docstring implied otherwise; both now do.
 
 The lesson generalises: the assertion under test is often a sentence in a document, not a branch in the code. Deleting the behaviour is the only way to find out whether the sentence was ever true.
 
@@ -198,11 +231,13 @@ The backend reads an environment flag. When `USE_FAKE_AI=true`, `vision.py` and 
 
 ```python
 # app/services/vision.py
-async def tag_item(image_url: str) -> ItemTags:
+async def tag_item(image_url: str, correction: str | None = None) -> dict[str, Any]:
     if settings.USE_FAKE_AI:
-        return _fake_tags_for(image_url)   # deterministic, keyed by filename
-    return await _call_openai(image_url)
+        return dict(_FAKE_TAGS)
+    ...
 ```
+
+**Corrected at task 1.2b against the file.** This block printed `-> ItemTags`, `_fake_tags_for(image_url)` and `_call_openai(image_url)`, none of which have ever existed: `tag_item` returns the model's raw dict and `ItemTags` is `validate_tags`'s return type. `03-AI-CONTRACTS.md` named this document as one of the three that disagreed about the signature and only its own prose was fixed at 1.1, which is how a corrected claim outlived the code sample making it. The fake is one hand-written dict until task 5.1 (`DECISIONS.md` 081), not one per filename.
 
 This makes the entire E2E suite deterministic, free, and fast. It is also exactly what a real QA engineer does with any third-party dependency, and it is a strong thing to be able to explain in an interview.
 

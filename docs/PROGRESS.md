@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 1 — Wardrobe
-**Status:** Stage 1 in progress — 1.1 and 1.2a complete.
+**Status:** Stage 1 in progress — 1.1, 1.2a and 1.2b complete.
 
 Claude Code updates this file at the end of every stage: tick the criteria, set the next stage, and note anything that changed relative to the plan.
 
@@ -26,7 +26,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 
 - [x] Vision service
 - [x] Category-dependent validation — 1.2a
-- [ ] Tag validation and retry — 1.2b
+- [x] Tag validation and retry — 1.2b
 - [ ] Background tagging
 - [ ] Item endpoints
 - [ ] Wardrobe grid
@@ -142,3 +142,20 @@ Changed from the plan, and one thing that was measured rather than reasoned abou
 - **Predicted five failing parametrisations, measured six.** The two missed were the base fixture's `long_sleeve` riding along on a pair of jeans — the same jeans-with-sleeves case named three paragraphs earlier as the evidence for leaving the middle of the length list unenforced. The evidence and the prediction contradicted each other inside one message; the count was asserted where it could have been run.
 
 Two rules landed in the documents from how this task went rather than from what it built: `06-TESTING-STRATEGY.md` gains "two readings of one input beat one reading of two" and "a test that reads its expectation from the thing under test measures nothing on its own", and `CONVENTIONS.md` gains the paste-width limit and the rule that an artifact meant to outlive its task is written to disk in that task's commit.
+
+**2026-08-17 — task 1.2b, `validate_tags` and the retry.** 419 backend tests pass (376 before); 353 of them are unit tests, run with no database. Changed: `app/services/vision.py` (248 → 503 lines), `tests/unit/test_vision.py` (303 → 845, 32 tests → 75), `app/prompts/vision_system.md` (29 → 28). No new files. `vision.py` gains `ItemTags`, `TaggingError`, `validate_tags`, `PROMPT_VERSION` and a `correction` parameter on `tag_item`; `_vocabulary_block()` gains 1.2a's three tables.
+
+Four decisions, two entries — `DECISIONS.md` 086 and 087:
+
+- **The documented signature could not do what the documents said it did.** `validate_tags(raw)` appears in `03`, `06` and `STAGE-1`, and a retry is a second call to the model, so it is `async validate_tags(raw, image_url)`. No orchestrator was added: `TaggingError` (the model answered unacceptably) and `ValueError`/provider errors (no answer arrived) are different facts and 1.3 wants both, so 1.3 calls the two functions in sequence and catches both. `vision.py`'s claim that "task 1.2 wraps both" was never achievable and is corrected.
+- **A new retry trigger nobody had specified.** `validate_tag_dict` reads every field with `.get`, so `{}` is a clean report — correct for `PATCH`, and a `TypeError` escaping a background task when a typed object is built from it. The eleven fields the schema types with no `null` are now checked in `vision.py`, and a blank `display_name` counts as missing.
+- **No confidence branch, and no setting.** Both sides of `confidence < 0.35` produce `status='ready'`, so the branch could only set a flag nothing reads. 028 said the comparison was made "against `settings`" and named a field nobody had written; it is struck there and in `03`'s table. The number is still persisted at 1.3 and mined at 1.11.
+- **`ItemTags.coerced` carries the accepted answer's discarded values only.** The rejected attempt's describe tags that were never written. Both attempts are logged, with field, value and category — the record 084 found missing.
+
+Changed from the plan, and the two things that were measured rather than argued:
+
+- **1.11 was checked rather than assumed** and already required a prompt version in three places; what did not exist was anything producing one. `PROMPT_VERSION` hashes the **rendered** prompt, so it moves when `enums.py` does. Persisting it beside the tags is added to 1.3.
+- **The prompt grew about 40% and nothing measures whether that helped.** More instruction is more to ignore, and the `top`/`layer` error may now fire rarely enough that the give-up path is exercised only by tests. Written into 1.11 as something only the golden set can answer.
+- **Seventeen mutations, all caught, baseline green at both ends.** The finding is that deleting the real `{{VOCABULARY}}` placeholder fails at *collection* — the 1.1 guard raises at import and takes the test module with it — so `test_a_prompt_file_without_the_placeholder_raises_at_load` defends the guard's logic and **not** the shipped prompt file. Its comment now says so. `06-TESTING-STRATEGY.md` has the table.
+- **`06`'s `USE_FAKE_AI` code sample was still wrong.** It printed `tag_item(...) -> ItemTags`, `_fake_tags_for` and `_call_openai`, none of which have existed; `03` named that document as one of the three that disagreed at 1.1 and only its prose was fixed. Corrected against the file.
+- `CONVENTIONS.md` gains one carve-out: prompt and template files under `backend/app/` are written to disk, not printed. A prompt truncated mid-sentence loads, renders, returns plausible tags and is invisible to every test that reads it.

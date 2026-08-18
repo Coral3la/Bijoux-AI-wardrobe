@@ -5,7 +5,6 @@ Rules:
 - Describe ONLY the main garment in the image. If a person is wearing several
   items, describe the item that is most prominent and centred.
 - Use ONLY values from the provided enumerations. Never invent a value.
-- `rise` applies only when category is "bottom". Otherwise return null.
 - `color_secondary` is null unless a second colour covers at least 20% of
   the garment.
 - `display_name` is 2-4 lowercase words a person would use to refer to this
@@ -24,7 +23,6 @@ formality — 1 loungewear, 2 casual, 3 smart casual, 4 business/dressy,
              5 formal evening
 
 layer — base (worn against skin), mid (worn over a base),
-        outer (worn over everything), standalone (dresses, shoes,
-        bags, accessories)
+        outer (worn over everything), standalone (not layered at all)
 
 {{VOCABULARY}}
