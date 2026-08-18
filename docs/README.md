@@ -26,6 +26,7 @@ Read these in order. Every document is the single source of truth for its area �
 | `05-FRONTEND-SPEC.md` | Screens, components, state management |
 | `06-TESTING-STRATEGY.md` | Unit, integration, E2E, and how to test non-deterministic AI |
 | `07-DEPLOYMENT.md` | Environment variables, hosting, CI |
+| `AUDITS.md` | Documentation audits — what was read against what, what was fixed, what is open |
 | `CONVENTIONS.md` | Coding standards and definition of done |
 | `DECISIONS.md` | Architecture decision log — why things are the way they are |
 | `PROGRESS.md` | Live build tracker. Update it as work completes. |

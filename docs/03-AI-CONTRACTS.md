@@ -32,7 +32,6 @@ Rules:
 - Describe ONLY the main garment in the image. If a person is wearing several
   items, describe the item that is most prominent and centred.
 - Use ONLY values from the provided enumerations. Never invent a value.
-- `rise` applies only when category is "bottom". Otherwise return null.
 - `color_secondary` is null unless a second colour covers at least 20% of
   the garment.
 - `display_name` is 2-4 lowercase words a person would use to refer to this
@@ -51,11 +50,14 @@ formality — 1 loungewear, 2 casual, 3 smart casual, 4 business/dressy,
              5 formal evening
 
 layer — base (worn against skin), mid (worn over a base),
-        outer (worn over everything), standalone (dresses, shoes,
-        bags, accessories)
+        outer (worn over everything), standalone (not layered at all)
+
+{{VOCABULARY}}
 ```
 
-The enum lists are rendered from `app/enums.py` into a `{{VOCABULARY}}` placeholder at the end of the prompt file, so prompt, schema and validator cannot drift apart — "appended" was the earlier wording and understated it, since a missing placeholder now raises at import rather than shipping a prompt with no vocabulary. `DECISIONS.md` 080.
+**Transcribed from `app/prompts/vision_system.md` at the 2026-08-18 audit, which is when the drift was found.** The block above still carried the pre-1.2b file: a `rise` bullet and a `layer` gloss naming the standalone categories, both deleted from the file when `_vocabulary_block()` began generating the same rules from `enums.py` (`DECISIONS.md` 087). The `{{VOCABULARY}}` line is part of the file and is shown for that reason — it is the token `_load_system_prompt()` raises on when it is absent.
+
+The enum lists are rendered from `app/enums.py` into that `{{VOCABULARY}}` placeholder at the end of the prompt file, so prompt, schema and validator cannot drift apart — "appended" was the earlier wording and understated it, since a missing placeholder now raises at import rather than shipping a prompt with no vocabulary. `DECISIONS.md` 080.
 
 ### Response schema
 
