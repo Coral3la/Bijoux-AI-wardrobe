@@ -54,6 +54,26 @@ def stored(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 # --- what upload writes -----------------------------------------------------
 
 
+def test_upload_queues_one_tagging_task_per_row(
+    client: TestClient,
+    db: Session,
+    stored: list[str],
+    queued: list[uuid.UUID],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    user = make_user()
+
+    client.post(
+        UPLOAD_URL,
+        files=[_part("a.jpg"), _part("b.jpg"), _part("c.jpg")],
+        headers=authorization(user),
+    )
+
+    rows = db.scalars(select(Item).where(Item.user_id == user.id)).all()
+    assert sorted(queued) == sorted(row.id for row in rows)
+
+
 def test_upload_inserts_one_row_per_file(
     client: TestClient,
     db: Session,

@@ -55,12 +55,14 @@ from sqlalchemy import Connection, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from alembic import command  # noqa: E402
+from app.api.v1.routes import items as items_route  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.core.deps import get_db  # noqa: E402
 from app.core.security import create_access_token, hash_password  # noqa: E402
 from app.db.session import engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.user import User  # noqa: E402
+from app.services import vision  # noqa: E402
 
 # The copy above is only load-bearing if environment really does beat dotenv.
 # Asserting it here turns that assumption into an import-time failure instead of
@@ -82,6 +84,60 @@ def _row_counts() -> dict[str, int]:
             table: conn.scalar(text(f"SELECT count(*) FROM {table}")) or 0
             for table in ("users", "items")
         }
+
+
+@pytest.fixture(autouse=True)
+def _no_live_openai(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`CONVENTIONS.md` allows no test to call OpenAI unless it is marked
+    `eval`, and until task 1.3 nothing enforced that — every fake was a
+    per-test monkeypatch and a test that missed one simply spent money.
+
+    One did. A tagging test faked `tag_item` at the name `tagging.py` imported
+    and left `vision`'s own binding alone, so `validate_tags` retried against
+    the live API on the developer's real key. It answered `400` and cost
+    nothing, which is luck rather than a mechanism.
+
+    `_client` rather than `tag_item`, because it is the single door: every call
+    in this project goes through it, and a fake installed here cannot be routed
+    around by importing the function from somewhere else."""
+    if request.node.get_closest_marker("eval"):
+        return
+
+    def _refuse() -> Any:
+        raise AssertionError(
+            "this test reached for the OpenAI client. Fake the call, or mark "
+            "the test @pytest.mark.eval if it is meant to spend money."
+        )
+
+    monkeypatch.setattr(vision, "_client", _refuse)
+
+
+@pytest.fixture(autouse=True)
+def queued(monkeypatch: pytest.MonkeyPatch) -> list[uuid.UUID]:
+    """The tagging task, recorded instead of run. Task 1.3 put one behind every
+    successful upload, and `TestClient` awaits background tasks before
+    `client.post` returns — so without this, every test that uploads runs the
+    real task, which opens a second connection outside the transaction these
+    fixtures roll back.
+
+    Autouse and in `conftest.py` rather than in one test file, because two of
+    them drive the upload route: `test_items_rows.py` and
+    `test_server_defaults.py`. Ask for it by name to assert on what was queued.
+
+    **`test_uploaded_rows_start_as_processing` passed by accident in the window
+    between 1.3 landing and this fixture existing, and that is worth writing
+    down rather than quietly fixing.** The real task ran to completion and would
+    have written `ready` — except that its own session cannot see a row the test
+    has not committed, so it found nothing and returned, and the assertion held
+    for a reason that has nothing to do with what it claims to measure. A test
+    that passes for the wrong reason is a finding, not a near miss."""
+    item_ids: list[uuid.UUID] = []
+
+    async def record(item_id: uuid.UUID) -> None:
+        item_ids.append(item_id)
+
+    monkeypatch.setattr(items_route, "tag_and_store", record)
+    return item_ids
 
 
 @pytest.fixture(scope="session")

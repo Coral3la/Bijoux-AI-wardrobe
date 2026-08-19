@@ -2,7 +2,7 @@ import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile, status
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -23,6 +23,7 @@ from app.services.storage import (
     upload_image,
     validate_image_type,
 )
+from app.services.tagging import tag_and_store
 
 router = APIRouter(prefix="/items", tags=["items"])
 
@@ -110,6 +111,7 @@ def upload_items(
     files: Annotated[
         list[UploadFile], File(min_length=1, max_length=settings.MAX_FILES_PER_REQUEST)
     ],
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ItemUploadResponse:
@@ -128,6 +130,12 @@ def upload_items(
     except SQLAlchemyError:
         _log_orphans(public_ids, current_user.id)
         raise
+
+    for item in items:
+        # Queued after the commit, so the task's own session can find the
+        # row. Starlette awaits these in order once the response is sent,
+        # which makes a batch tag serially — see 1.7 in STAGE-1.
+        background_tasks.add_task(tag_and_store, item.id)
 
     return ItemUploadResponse(items=[ItemResponse.model_validate(item) for item in items])
 

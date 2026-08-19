@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 1 — Wardrobe
-**Status:** Stage 1 in progress — 1.1, 1.2a and 1.2b complete.
+**Status:** Stage 1 in progress — 1.1, 1.2a, 1.2b and 1.3 complete.
 
 Claude Code updates this file at the end of every stage: tick the criteria, set the next stage, and note anything that changed relative to the plan.
 
@@ -27,7 +27,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Vision service
 - [x] Category-dependent validation — 1.2a
 - [x] Tag validation and retry — 1.2b
-- [ ] Background tagging
+- [x] Background tagging
 - [ ] Item endpoints
 - [ ] Wardrobe grid
 - [ ] Upload sheet (camera + gallery)
@@ -159,3 +159,20 @@ Changed from the plan, and the two things that were measured rather than argued:
 - **Seventeen mutations, all caught, baseline green at both ends.** The finding is that deleting the real `{{VOCABULARY}}` placeholder fails at *collection* — the 1.1 guard raises at import and takes the test module with it — so `test_a_prompt_file_without_the_placeholder_raises_at_load` defends the guard's logic and **not** the shipped prompt file. Its comment now says so. `06-TESTING-STRATEGY.md` has the table.
 - **`06`'s `USE_FAKE_AI` code sample was still wrong.** It printed `tag_item(...) -> ItemTags`, `_fake_tags_for` and `_call_openai`, none of which have existed; `03` named that document as one of the three that disagreed at 1.1 and only its prose was fixed. Corrected against the file.
 - `CONVENTIONS.md` gains one carve-out: prompt and template files under `backend/app/` are written to disk, not printed. A prompt truncated mid-sentence loads, renders, returns plausible tags and is invisible to every test that reads it.
+
+**2026-08-18 — task 1.3, background tagging.** 440 backend tests pass (419 before). New: `app/services/tagging.py` (277 lines), `tests/integration/test_tagging.py` (504 lines, 20 tests). Changed: `app/models/item.py` (one line), `app/api/v1/routes/items.py` (a `BackgroundTasks` parameter and a three-line loop), `app/main.py` (a `lifespan`), `tests/conftest.py` (two autouse fixtures), `tests/integration/test_items_rows.py` (one test). One entry, `DECISIONS.md` 088.
+
+Four decisions:
+
+- **The task opens its own session, and the obvious reason for that is false.** FastAPI is widely said to close a yield dependency before background tasks run — the 0.106 behaviour. Checked against the installed fastapi 0.141: yield dependencies go into `request_stack`, and the response, which is where Starlette runs background tasks, is awaited inside it. **The request's session is still open.** The conclusion did not move, because the reasons that decide it survive: sharing it pins a Neon connection for a whole batch rather than one item, and it couples a service function to a request lifetime. The wrong reason is written into 088 *as wrong*, so nobody inherits it and "fixes" the code back.
+- **Three `error_message` texts, not one.** The model answered unacceptably; no usable answer arrived; the process that started the work is gone. 086 kept the first two apart and this is where the distinction becomes readable in a column.
+- **`attributes["tagging"]` on both paths.** `prompt_version` is written on a failed row too — a 1.11 baseline that records only successes measures a biased sample. `coerced` is `[]` when nothing was discarded and absent when there was no accepted answer to discard from.
+- **The sweep keys on `updated_at`, which only works because of the `onupdate` fix.** `created_at` looks equivalent and breaks at 1.4, where `retag` puts a week-old row back to `processing`. The two halves are one decision; neither survives the other's removal.
+
+Changed from the plan, and the two things that were measured rather than argued:
+
+- **A test called the live OpenAI API, on the real key.** `tagging.py` does `from app.services.vision import tag_item`, so faking that binding intercepts the first call — and `validate_tags` resolves `tag_item` from **`vision`'s** globals when it retries, which went out to the network. It answered `400` and cost nothing, which is luck and not a mechanism. Two fixes: the fake is installed at both bindings, and `tests/conftest.py` gained an autouse guard that replaces `vision._client` with one that raises unless the test is marked `eval`. `CONVENTIONS.md` has forbidden this since Stage 0 and nothing enforced it. `06-TESTING-STRATEGY.md`'s Layer-3 fixture — which is where the wrong pattern was written down — is corrected, and it is the first thing to fall out of the audit's "documents not read" boundary.
+- **`test_uploaded_rows_start_as_processing` passed by accident**, in the window between the route queuing a task and the recorder fixture existing. The real task ran, could not see a row the test had not committed, found nothing and returned — so the assertion held for a reason unrelated to what it claims to measure. The recorder now lives in `conftest.py` and is autouse, because a second file (`test_server_defaults.py`) drives the same route and had the same hole. Recorded in the fixture's docstring: a test that passes for the wrong reason is a finding.
+- **Thirteen mutations plus a fatal control, all caught, baseline green at both ends.** Every one was caught by the test named for it. Two were more interesting than the rest: removing the missing-row guard failed three tests rather than one, which is what exposed the `test_server_defaults.py` hole above; and dropping `onupdate` failed exactly the two tests that assert the column moved, one through a flush and one through a Core `update()`, which is the pair that proves it applies to both.
+- **`asyncio.gather` was not built.** One task per item means a batch tags serially. Five photographs — the acceptance criterion — fit comfortably; twenty do not. Recorded in `STAGE-1` at **1.7**, where the polling that will notice it gets built, rather than in a note nobody re-reads.
+- **`error_message` is not cleared on a successful write**, because at 1.3 a row is only ever `processing` when the task runs and the line would be dead code. 1.4's retag must clear it, and that is written into 1.4.

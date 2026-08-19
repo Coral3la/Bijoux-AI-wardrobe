@@ -87,18 +87,35 @@ FastAPI `TestClient`, a real PostgreSQL test database, AI services replaced by f
 
 ```python
 @pytest.fixture
-def fake_vision(monkeypatch):
-    def _tag(image_url: str) -> dict:
-        return load_fixture("vision/white_shirt.json")
-    monkeypatch.setattr("app.services.vision.tag_item", _tag)
+def answers(monkeypatch):
+    def _answer(raw: dict) -> None:
+        async def fake_tag_item(image_url: str, correction: str | None = None) -> dict:
+            return dict(raw)
+
+        monkeypatch.setattr(tagging, "tag_item", fake_tag_item)
+        monkeypatch.setattr(vision, "tag_item", fake_tag_item)
+
+    return _answer
 ```
+
+**Corrected at task 1.3, against the code rather than against intent.** The sample here was a *synchronous* one-argument `_tag` returning `load_fixture("vision/white_shirt.json")`, patched at the string `"app.services.vision.tag_item"`. Four things were wrong with it and every one of them is load-bearing:
+
+- `tag_item` has been `async` with a `correction` parameter since 1.2b, so the fake had the wrong signature and the wrong callable kind.
+- `load_fixture` has never existed and `tests/fixtures/` holds only a `.gitkeep`. Recorded fixtures are task **5.1**'s (`DECISIONS.md` 081); until then a fake answer is a dict written in the test.
+- Patching the definition in `vision` does not reach a name another module has already imported. `app/services/tagging.py` does `from app.services.vision import tag_item`, so the fake has to be installed at **both** bindings.
+- And the reason both matter: `validate_tags` resolves `tag_item` from `vision`'s own module globals when it **retries**. A fake installed at one binding intercepts the first call and lets the second one out to the live API. That is not hypothetical — it happened while 1.3's tests were being written, on the developer's real key. It answered `400` and cost nothing, which is luck.
+
+**So `tests/conftest.py` gained an autouse guard at 1.3.** Unless a test carries `@pytest.mark.eval`, `vision._client` is replaced with one that raises. The rule "no test may call OpenAI unless marked `eval`" has been in `CONVENTIONS.md` since Stage 0 and was enforced by nothing but per-test discipline; `_client` is the single door every call goes through, so a fake installed there cannot be routed around by importing the function from somewhere else.
+
+**This document was named out of scope by the 2026-08-18 audit**, which called it "the largest unaudited document and the one most likely to describe tests that no longer match the suite". This is the first thing to fall out of that boundary, one task later, and it is evidence the boundary was drawn accurately rather than a gap to apologise for. Audit 2's scope is unchanged.
 
 What gets covered:
 
 - **Upload returns 202 before tagging completes.** Assert `status == 'processing'` in the response body — this is the core UX promise and it should be enforced by a test.
 - **The upload rejection paths, without a database.** Task 0.7 covers `415` (text, SVG, empty, truncated), `413`, `415`-before-`413` on an over-large non-image, one bad file rejecting a whole batch, the `422` on 0 and on 21 files, the `502` on a storage failure, and `401` on every route — with `get_db` overridden by a stub that raises on *attribute access* and `cloudinary.uploader.upload` monkeypatched to raise if called. That stub is the assertion: it is what proves "every file is decided before any file is uploaded" rather than assuming it. It raises on use rather than on call because FastAPI resolves every dependency before the handler runs, so a call-raising stub would fail requests the route rejects first.
-- **Background task transitions the row** to `ready` with populated tags.
-- **Tagging failure** sets `status='failed'` and `error_message`, and does not raise into the request.
+- **Background task transitions the row** to `ready` with populated tags. Task 1.3, `tests/integration/test_tagging.py`.
+- **Tagging failure** sets `status='failed'` and `error_message`, and does not raise into the request. Task 1.3 splits this into four: an answer that cannot be accepted, no answer at all, a provider failure, and one nobody predicted — the first two must not read the same in the column, and the last is why `_tagged` ends in `except Exception`.
+- **The startup sweep** fails a `processing` row past the threshold, leaves a recent one and a `ready` one alone, and never raises at boot. Tested by planting an explicitly backdated `updated_at` and calling the sweep directly — no clock is manipulated and nothing waits ten minutes.
 - **Hallucination guard:** feed a stylist fixture containing an ID that is not in the wardrobe and assert a `502`, not a partially rendered look. This is the single most important integration test in the project.
 - **Cross-user isolation:** user A cannot `GET`, `PATCH`, or `DELETE` user B's items. Test every item endpoint.
 - **`user_edited` protection:** `POST /items/{id}/retag` returns `409` after a manual edit, and succeeds with `?force=true`.

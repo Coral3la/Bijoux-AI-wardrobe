@@ -1,4 +1,6 @@
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,13 +14,23 @@ from app.core.deps import get_db
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.schemas.health import HealthResponse
+from app.services.tagging import run_startup_sweep
 
 configure_logging()
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Bijoux API", version=APP_VERSION)
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # A BackgroundTask dies with its process, so a row still tagging when
+    # this one starts belongs to nobody. run_startup_sweep decides which
+    # are old enough to say so about, and never raises.
+    run_startup_sweep()
+    yield
+
+
+app = FastAPI(title="Bijoux API", version=APP_VERSION, lifespan=lifespan)
 register_error_handlers(app)
 app.include_router(api_router)
 
