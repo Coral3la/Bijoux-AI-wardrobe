@@ -163,6 +163,7 @@ def _store(item: Item, tags: ItemTags | None, error_message: str | None) -> None
         return
 
     item.status = ItemStatus.READY
+    item.error_message = None
     item.category = tags.category
     item.subcategory = tags.subcategory
     item.fit = tags.fit

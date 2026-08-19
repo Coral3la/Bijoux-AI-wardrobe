@@ -22,9 +22,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.short_id import generate_short_id
 from app.models.item import Item
-from app.models.user import User
 from app.services import tagging, vision
 from app.services.storage import Transform, build_url
 from app.services.tagging import (
@@ -55,22 +53,6 @@ CLEAN: dict[str, Any] = {
     "display_name": "light blue straight jeans",
     "confidence": 0.9,
 }
-
-
-@pytest.fixture
-def make_item(db: Session, make_user: Callable[..., User]) -> Callable[..., Item]:
-    def _make(**columns: Any) -> Item:
-        item = Item(
-            user_id=columns.pop("user_id", None) or make_user().id,
-            short_id=generate_short_id(),
-            image_public_id=f"bijoux/test/{uuid.uuid4().hex[:20]}",
-            **columns,
-        )
-        db.add(item)
-        db.commit()
-        return item
-
-    return _make
 
 
 @pytest.fixture
@@ -502,3 +484,26 @@ def test_the_startup_sweep_does_not_raise_when_the_database_is_unreachable() -> 
     run_startup_sweep(lambda: _DeadSession())  # type: ignore[arg-type,return-value]
 
     assert closed == [True]
+
+
+@pytest.mark.asyncio
+async def test_a_successful_retag_clears_the_previous_failure_message(
+    db: Session,
+    make_item: Callable[..., Item],
+    session_factory: Callable[[], Session],
+    answers: Callable[[dict[str, Any]], None],
+    cloud_name: None,
+) -> None:
+    # The line 1.3 left for 1.4. Unreachable until retag existed, because a
+    # row only ever reached this task as `processing` with no message; now a
+    # row that failed once can succeed on its second attempt, and a `ready`
+    # row carrying last time's error is a lie `ItemResponse` shows a client.
+    item = make_item(status="failed", error_message="No usable answer arrived: ValueError")
+    answers(CLEAN)
+
+    await tag_and_store(item.id, session_factory)
+
+    row = db.get(Item, item.id)
+    assert row is not None
+    assert row.status == "ready"
+    assert row.error_message is None

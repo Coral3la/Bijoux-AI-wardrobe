@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 1 — Wardrobe
-**Status:** Stage 1 in progress — 1.1, 1.2a, 1.2b and 1.3 complete.
+**Status:** Stage 1 in progress — 1.1, 1.2a, 1.2b, 1.3 and 1.4 complete.
 
 Claude Code updates this file at the end of every stage: tick the criteria, set the next stage, and note anything that changed relative to the plan.
 
@@ -28,7 +28,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Category-dependent validation — 1.2a
 - [x] Tag validation and retry — 1.2b
 - [x] Background tagging
-- [ ] Item endpoints
+- [x] Item endpoints
 - [ ] Wardrobe grid
 - [ ] Upload sheet (camera + gallery)
 - [ ] Polling
@@ -176,3 +176,20 @@ Changed from the plan, and the two things that were measured rather than argued:
 - **Thirteen mutations plus a fatal control, all caught, baseline green at both ends.** Every one was caught by the test named for it. Two were more interesting than the rest: removing the missing-row guard failed three tests rather than one, which is what exposed the `test_server_defaults.py` hole above; and dropping `onupdate` failed exactly the two tests that assert the column moved, one through a flush and one through a Core `update()`, which is the pair that proves it applies to both.
 - **`asyncio.gather` was not built.** One task per item means a batch tags serially. Five photographs — the acceptance criterion — fit comfortably; twenty do not. Recorded in `STAGE-1` at **1.7**, where the polling that will notice it gets built, rather than in a note nobody re-reads.
 - **`error_message` is not cleared on a successful write**, because at 1.3 a row is only ever `processing` when the task runs and the line would be dead code. 1.4's retag must clear it, and that is written into 1.4.
+
+**2026-08-19 — task 1.4, item endpoints.** 477 backend tests pass (440 before). New: `tests/integration/test_items_edit.py` (28 tests), `test_items_stats.py` (6). Changed: `app/schemas/item.py` (`ItemUpdate`, `ItemStatsResponse`), `app/api/v1/routes/items.py` (four endpoints and three helpers), `app/services/tagging.py` (one line), `tests/conftest.py` (`make_item` moved in from `test_tagging.py`), `test_items_rows.py` and `test_tagging.py` (one test each). One entry, `DECISIONS.md` 089. Audit **O-1 closed**.
+
+Four decisions:
+
+- **One validator, two policies, and the difference is whether there is anyone to tell.** `validate_tag_dict` applies no policy; it reports `errors` and `coerced` and the caller decides. The vision path accepts a coercion because the source is a model and rejecting fifteen fields over one word throws away fourteen good tags. `PATCH` refuses it because the source is a person with a form open, and a `200` whose body differs from what was typed is the worst answer an editing UI gives.
+- **030's clearing happens before validation, and the ordering is what makes "any coercion is a 422" exception-free.** Clear first and the impossible values never reach the validator, so every coercion that fires is about a value this request sent. Clearing afterwards would need coercions sorted into "caused by the stored row" and "caused by the request" — the `kind` on `TagIssue` that 086 refused.
+- **`user_edited` is never cleared**, and the cost is written into `02` beside the column rather than left to be reconstructed: a hand-corrected item needs `force` on every later retag, forever.
+- **A retag against a `processing` row is allowed.** Two tasks can write the same row, last write winning, for a fraction of a cent. Refusing would strand a row whose owning process died for up to ten minutes with the one fixing action unavailable — the worse failure, and the one a user meets.
+
+Changed from the plan, and the things that were measured rather than argued:
+
+- **`04` described `PATCH` as validating the request, and a literal reading of that produces the wrong endpoint.** A category change would pass with `subcategory` and `rise` still describing the old garment. Corrected to say the *merged* row before any code was written, and it is the finding the audit did not reach — O-1 named the missing success contracts and not this.
+- **A message written for one policy is wrong under the other, and nothing had noticed.** The vocabulary's coercion reasons end `", set to null"` — true for the vision path, false in a `422` where nothing was set to anything. The route cuts the clause; the vocabulary keeps it, because the log and `attributes` still want it. This is a real cost of sharing one report across two callers and it was invisible until both existed.
+- **A test passed for the wrong reason and a mutation found it.** `test_an_unknown_key_is_422` sent only the typo, so with `extra="ignore"` the key was dropped, the dump was empty, and the *empty-body* branch answered `422` — the test stayed green with the guard removed. It now sends a valid field alongside, so only Pydantic can produce the answer. Second instance of this class in two tasks, both caught by mutation rather than by reading.
+- **Twenty-two mutations plus a fatal control, baseline green at both ends.** Declaring `GET /items/stats` below `/{item_id}` fails six tests rather than one, which is the audit's "noted in passing" turning out to be load-bearing rather than tidy.
+- **One property is untested and named rather than assumed**: the `db.commit()` before `add_task`. It cannot be asserted under `conftest.py`'s fixtures, where the route's session is the test's session and the task is recorded rather than run. Written into `STAGE-1` 1.4.

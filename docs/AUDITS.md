@@ -89,7 +89,7 @@ table.
 
 Ordered by how soon the answer is needed.
 
-#### O-1 · `POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response — task 1.4
+#### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
 `04` gives both endpoints a failure contract and no success contract: retag has
 no status code and no body, `DELETE` says only "soft-deletes by setting
@@ -114,6 +114,18 @@ condition, not the endpoint (`email_exists`, `file_too_large`,
 anywhere.** `tagging_failed` should either be struck from `CONVENTIONS.md` at
 1.4 or deliberately assigned to a synchronous retag; it cannot stay as a code
 with no producer.
+
+**Closed at task 1.4, and the recommendation was taken in full.** `PATCH` and
+`DELETE` answer `200` with the full `ItemResponse`, retag answers `202` with
+`status: "processing"`, and the `409` carries `item_edited`. `tagging_failed`
+was struck rather than assigned: assigning it needs a synchronous retag, which
+contradicts the `202`. The audit found two endpoints missing a success
+contract; there were three — `PATCH` had none either — and all three are now
+in `04`. One thing the audit did not reach: `04` also described `PATCH` as
+validating *the request*, which passes a category change that leaves
+`subcategory` and `rise` describing a different garment. That is corrected in
+the same commit and is the finding 1.4 would not have made from the audit
+alone.
 
 #### O-2 · `03`'s validation table is missing three checks the validator performs — tasks 1.3 and 1.4
 

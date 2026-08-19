@@ -124,14 +124,32 @@ Pagination defaults to 100, and `05-FRONTEND-SPEC.md` filters client-side "over 
 
 ### `GET /items/{id}` · `PATCH /items/{id}` · `DELETE /items/{id}`
 
-`PATCH` accepts any tag field. It sets `user_edited = true` and validates every value against the closed vocabulary — the same validator the AI output passes through. `422` with the offending field on an invalid value.
+`PATCH` accepts any tag field. It sets `user_edited = true` and validates against the closed vocabulary using the same validator the AI output passes through. `422` with the offending field on an invalid value.
 
-`DELETE` soft-deletes by setting `is_archived = true`. The Cloudinary asset is retained; deleted items may still be referenced by historical looks.
+**What is validated is the request merged over the stored row, not the request alone** — corrected at task 1.4, where this document said "validates every value" and a literal reading of it produced the wrong endpoint. Under request-only validation `PATCH {"category": "top"}` on a pair of jeans passes, because nothing in the request is invalid, and writes a row whose stored `subcategory` is `jeans` and whose stored `rise` is `high` — both now describing a garment the item is not. The route therefore loads the row, merges the body over it, and validates the result; and because a category change invalidates the *stored* values rather than the request, it first clears the five fields listed in `CATEGORY_DEPENDENT_FIELDS` for any of them the same request does not supply. `DECISIONS.md` 030, amended at 1.2a from three fields to five, has the reasoning and the accepted cost.
+
+```json
+← 200 { …full item… }
+```
+
+**All three answer with the full item**, added at task 1.4 — this document gave `PATCH` and `DELETE` a failure contract and no success contract at all, which the 2026-08-18 audit recorded as O-1. One shape for one resource (`DECISIONS.md` 034, 050), so a client replaces a row rather than merging a special case; `204` on the `DELETE` was rejected because it leaves the client guessing at `is_archived` and `updated_at`, both of which have just changed.
+
+`DELETE` soft-deletes by setting `is_archived = true`. The Cloudinary asset is retained; deleted items may still be referenced by historical looks. It is **idempotent**: archiving an already-archived row is another `200` carrying the same object, because the row stays readable by id and a `404` on the second call would contradict the `GET` that still answers.
+
+`PATCH` returns `422` `validation_error` on an empty body. A body with no fields would otherwise be a `200` that set `user_edited` on a request which edited nothing.
 
 An item that exists but belongs to another user returns `404` with `code: "not_found"` on every one of these — not `403`. One code for every resource, because telling a caller that a row exists but is not theirs is an existence oracle for other people's wardrobes (`DECISIONS.md` 043).
 
 ### `POST /items/{id}/retag`
-Re-runs vision tagging. `409` if `user_edited` is true unless `?force=true` is passed — a manual correction must not be silently overwritten.
+```json
+← 202 { …full item…, "status": "processing" }
+```
+
+Re-runs vision tagging. `409` with `code: "item_edited"` if `user_edited` is true, unless `?force=true` is passed — a manual correction must not be silently overwritten. The status code and the body were added at task 1.4 (audit O-1), along with the error code, which this document had left as the only failure in it with no code at all. `202` rather than `200` because retag starts exactly the background work `POST /items/upload` answers `202` for, and the body carries `status: "processing"` so a client can put the tile straight back into its polling set.
+
+**`user_edited` is never cleared** — not by a forced retag, not by the tagging that follows one. `02-DATA-MODEL.md` gives the column a second job, and the accepted cost is that a hand-corrected item needs `?force=true` on every later retag.
+
+**A retag against a row that is already `processing` is allowed**, and answers `202` like any other. Two tasks can then write the same row and the last write wins, at a cost of one wasted pair of model calls. Refusing was the alternative and is worse: a row whose owning process died sits `processing` until the startup sweep clears it, up to ten minutes, and refusing would make the one action that fixes it unavailable for exactly that window. `?force=true` keeps its single meaning. `DECISIONS.md` 089.
 
 ### `GET /items/stats`
 ```json
@@ -142,7 +160,9 @@ Re-runs vision tagging. `409` if `user_edited` is true unless `?force=true` is p
   "never_worn": 34, "most_worn": [ { item } ]
 }
 ```
-Drives the wardrobe dashboard. `never_worn` and `most_worn` return zeros until Stage 3.
+Drives the wardrobe dashboard. `never_worn` and `most_worn` return zeros until Stage 3 — `wear_count` and `last_worn_at` arrive with migration `0003`. Zero rather than the arithmetic truth: with no wear data at all, *every* item is unworn, and reporting `never_worn = total` would be correct today and would silently change meaning when the columns land.
+
+Counts exclude archived rows, matching `GET /items`, so a dashboard cannot keep counting deleted garments. `total` is every non-archived row including `processing` and `failed`; `by_category` and `by_color` omit rows whose tag is still `null`, so their values do not sum to `total` and a category with no items is absent rather than zero.
 
 ---
 

@@ -51,6 +51,51 @@ def stored(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return public_ids
 
 
+# --- GET /items behaviours 0.7 shipped and 0.10 left undefended -------------
+#
+# Reassigned into Stage 1 by STAGE-1's "Coverage inherited from Stage 0", to
+# the task that first depends on each. Both plant their rows directly rather
+# than going through DELETE, so a broken archive and a broken filter cannot
+# alibi each other.
+
+
+def test_archived_items_are_excluded_unless_asked_for(
+    client: TestClient,
+    make_item: Callable[..., Item],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    user = make_user()
+    make_item(user_id=user.id)
+    make_item(user_id=user.id, is_archived=True)
+
+    default = client.get(LIST_URL, headers=authorization(user))
+    asked = client.get(f"{LIST_URL}?include_archived=true", headers=authorization(user))
+
+    assert default.json()["total"] == 1
+    assert asked.json()["total"] == 2
+
+
+def test_the_status_filter_narrows_the_result_set(
+    client: TestClient,
+    make_item: Callable[..., Item],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # 1.7's polling loop empties only if this really filters. The one test
+    # that existed proves a bad value is a 422 and says nothing about
+    # filtering, so a query that stopped narrowing would present as slow
+    # tagging rather than as a broken filter.
+    user = make_user()
+    make_item(user_id=user.id)
+    make_item(user_id=user.id, status="ready", category="top", layer="base")
+
+    processing = client.get(f"{LIST_URL}?status=processing", headers=authorization(user))
+
+    assert processing.json()["total"] == 1
+    assert [row["status"] for row in processing.json()["items"]] == ["processing"]
+
+
 # --- what upload writes -----------------------------------------------------
 
 

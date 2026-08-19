@@ -230,7 +230,7 @@ CREATE TABLE items (
   image_public_id TEXT NOT NULL,          -- Cloudinary public_id, not a full URL
   status          item_status NOT NULL DEFAULT 'processing',
 
-  -- AI-extracted, all NULL until tagging completes
+  -- AI-extracted, NULL until tagging first completes
   category        item_category,
   subcategory     TEXT,
   fit             TEXT,
@@ -265,9 +265,10 @@ CREATE INDEX idx_items_wardrobe ON items (user_id, status, category)
 
 Notes worth understanding:
 
+- **A `failed` row can carry tags, and the DDL comment above is about the first tagging rather than every one.** A row is created with every tag `NULL` and stays that way until tagging succeeds — but from task 1.4, `POST /items/{id}/retag` puts an already-tagged row back to `processing` **without clearing the tag columns**, and a retag that then fails writes `status='failed'` without touching them either. So a previously-good item keeps the tags it had through a failed retag, which is the point: nulling them at enqueue would destroy good data to make a failure look tidier. The consumer that must know is the wardrobe grid — `STAGE-1` 1.5's failed tile cannot assume the tags are null. `DECISIONS.md` 089.
 - **All tag fields are nullable except `water_resistant`**, which is `NOT NULL DEFAULT FALSE` in the DDL above, in migration `0001` and in `app/models/item.py` — so on a `processing` row it reads as *not water resistant* rather than *unknown*, and `ItemResponse.water_resistant` is typed `bool` rather than `bool | None`. The exception was found at the 2026-08-18 audit; the code has always been this way. The row is created the moment the image lands, with `status='processing'`, so the grid can render a tile immediately. Tags fill in seconds later.
 - **`image_public_id`, not a URL.** URLs are constructed at read time with the transform needed for that context — thumbnail, full view, or the 800px version sent to the vision model. Storing a URL would freeze one transform forever.
-- **`user_edited`** guards against a retag overwriting a manual correction, and gives the testing story a hook: it measures how often the AI got it wrong.
+- **`user_edited`** guards against a retag overwriting a manual correction, and gives the testing story a hook: it measures how often the AI got it wrong. **It is set by `PATCH /items/{id}` and never cleared** — not by `?force=true`, and not by the tagging that follows one. The cost is stated here rather than left to be rediscovered: **a hand-corrected item needs `force` on every later retag, for the rest of its life.** That is accepted because the column's second job is historical — an item this user has corrected at some point — and a reset destroys it; because clearing it on a successful write would fire on the upload path too, where it is a no-op today and a silent eraser the moment anything else writes; and because it would open a race in which a `PATCH` against a still-`processing` row is overwritten by the background task *and* loses the flag saying an edit ever happened. `DECISIONS.md` 089.
 - **`attributes JSONB`** absorbs future fields (brand, purchase price, embellishments) without a migration. Task 1.3 is its first writer and is a **guest in one key**: everything tagging leaves behind lives under `attributes["tagging"]`, so a future `brand` is never a sibling of a machine-written record, and the write is a merge rather than a replacement so a retag cannot eat one. The shape:
 
 ```json

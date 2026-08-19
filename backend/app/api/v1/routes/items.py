@@ -1,20 +1,33 @@
 import logging
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile, status
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db
 from app.core.errors import ApiError
 from app.core.short_id import generate_short_id
-from app.enums import Category, ColorPrimary, ItemStatus
+from app.enums import (
+    CATEGORY_DEPENDENT_FIELDS,
+    Category,
+    ColorPrimary,
+    ItemStatus,
+    TagIssue,
+    validate_tag_dict,
+)
 from app.models.item import Item
 from app.models.user import User
-from app.schemas.item import ItemListResponse, ItemResponse, ItemUploadResponse
+from app.schemas.item import (
+    ItemListResponse,
+    ItemResponse,
+    ItemStatsResponse,
+    ItemUpdate,
+    ItemUploadResponse,
+)
 from app.services.storage import (
     SIGNATURE_BYTES,
     FileTooLargeError,
@@ -106,6 +119,58 @@ def _insert(db: Session, user_id: uuid.UUID, public_ids: list[str]) -> list[Item
             return items
 
 
+# Derived from the request schema rather than restated, so a field
+# cannot be patchable and un-mergeable at the same time.
+_TAG_FIELDS: tuple[str, ...] = tuple(ItemUpdate.model_fields)
+
+# The vocabulary's coercion reasons end ", set to null" because
+# they describe what the vision path does with a value it cannot
+# keep. PATCH does not coerce, it refuses, so that clause is false
+# here and is cut. One report, two policies, and the message has
+# to be re-framed by whichever is reading it (089). Error reasons
+# carry no such clause and pass through unchanged.
+_COERCION_SUFFIX = ", set to "
+
+
+def _owned(db: Session, item_id: uuid.UUID, user_id: uuid.UUID) -> Item:
+    item = db.scalar(select(Item).where(Item.id == item_id, Item.user_id == user_id))
+    if item is None:
+        raise ApiError(status.HTTP_404_NOT_FOUND, "not_found", "Item not found.")
+    return item
+
+
+def _rejection(issue: TagIssue) -> str:
+    return issue.reason.split(_COERCION_SUFFIX)[0]
+
+
+def _merged(item: Item, changes: dict[str, Any]) -> dict[str, Any]:
+    """
+    The stored row with the request laid over it.
+
+    The whole row rather than the request alone, because a
+    category change invalidates values the client never sent:
+    `PATCH {"category": "top"}` on a pair of jeans leaves a stored
+    `subcategory` of `jeans` behind, and request-only validation
+    calls that request clean (`04-API-SPEC.md`).
+
+    The five category-dependent fields are cleared **before**
+    validation, not after. That is what keeps "any coercion is a
+    422" a rule with no exceptions: a coercion the category change
+    would have caused never fires, so every coercion that does
+    fire concerns a value this request actually sent. Sorting them
+    out afterwards would need a `kind` on `TagIssue`, which is the
+    field 086 refused to add. `DECISIONS.md` 030.
+    """
+    merged = {field: getattr(item, field) for field in _TAG_FIELDS}
+    merged |= changes
+
+    if "category" in changes and changes["category"] != item.category:
+        for field in CATEGORY_DEPENDENT_FIELDS:
+            if field not in changes:
+                merged[field] = None
+    return merged
+
+
 @router.post("/upload", status_code=status.HTTP_202_ACCEPTED)
 def upload_items(
     files: Annotated[
@@ -190,6 +255,42 @@ def list_items(
     return ItemListResponse(items=[ItemResponse.model_validate(row) for row in rows], total=total)
 
 
+# Declared above /{item_id}: FastAPI matches in declaration order,
+# so `stats` below it is parsed as a UUID and answers 422.
+@router.get("/stats")
+def item_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ItemStatsResponse:
+    # Archived rows are excluded, matching GET /items. A dashboard
+    # that kept counting deleted garments would make DELETE look
+    # like it did nothing.
+    filters: list[ColumnElement[bool]] = [
+        Item.user_id == current_user.id,
+        Item.is_archived.is_(False),
+    ]
+
+    def _counts(column: InstrumentedAttribute[Any]) -> dict[str, int]:
+        rows = db.execute(
+            select(column, func.count()).where(*filters, column.is_not(None)).group_by(column)
+        ).all()
+        return {str(value): count for value, count in rows}
+
+    # Grouping by status answers three of these numbers at once,
+    # and `total` comes from the sum rather than a fourth query.
+    by_status = _counts(Item.status)
+
+    return ItemStatsResponse(
+        total=sum(by_status.values()),
+        by_category=_counts(Item.category),
+        by_color=_counts(Item.color_primary),
+        processing=by_status.get(ItemStatus.PROCESSING, 0),
+        failed=by_status.get(ItemStatus.FAILED, 0),
+        never_worn=0,
+        most_worn=[],
+    )
+
+
 @router.get("/{item_id}")
 def get_item(
     item_id: uuid.UUID,
@@ -201,4 +302,109 @@ def get_item(
     item = db.scalar(select(Item).where(Item.id == item_id, Item.user_id == current_user.id))
     if item is None:
         raise ApiError(status.HTTP_404_NOT_FOUND, "not_found", "Item not found.")
+    return ItemResponse.model_validate(item)
+
+
+@router.patch("/{item_id}")
+def update_item(
+    item_id: uuid.UUID,
+    changes: ItemUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ItemResponse:
+    # exclude_unset is what separates "clear this field" from
+    # "leave it alone": without it the first PATCH nulls every
+    # field the client did not send. It also defines "supplied"
+    # for the clearing rule above — a field present as null counts
+    # as supplied and is not cleared a second time.
+    supplied = changes.model_dump(exclude_unset=True)
+    if not supplied:
+        # Otherwise an empty body is a 200 that sets user_edited
+        # on a request which edited nothing, and the column stops
+        # meaning what 02 says it means.
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "validation_error",
+            "request: at least one field must be supplied.",
+        )
+
+    item = _owned(db, item_id, current_user.id)
+    merged = _merged(item, supplied)
+    report = validate_tag_dict(merged)
+
+    # Errors *and* coercions are refused. A coercion is the
+    # vocabulary saying it cannot keep this value; the vision path
+    # accepts that because there is nobody to ask, and here there
+    # is somebody, with a form open. Accepting one returns 200
+    # with the field changed from what was typed (028).
+    if report.errors or report.coerced:
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "validation_error",
+            "; ".join(_rejection(issue) for issue in report.errors + report.coerced),
+        )
+
+    for field in _TAG_FIELDS:
+        setattr(item, field, report.tags[field])
+    item.user_edited = True
+    db.commit()
+
+    return ItemResponse.model_validate(item)
+
+
+@router.delete("/{item_id}")
+def archive_item(
+    item_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ItemResponse:
+    # Idempotent: archiving an archived row is a 200 carrying the
+    # same object. The row is still readable by id, so a 404 on
+    # the second call would contradict the GET that still answers.
+    item = _owned(db, item_id, current_user.id)
+    item.is_archived = True
+    db.commit()
+
+    return ItemResponse.model_validate(item)
+
+
+@router.post("/{item_id}/retag", status_code=status.HTTP_202_ACCEPTED)
+def retag_item(
+    item_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    force: bool = False,
+) -> ItemResponse:
+    item = _owned(db, item_id, current_user.id)
+    if item.user_edited and not force:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            "item_edited",
+            "This item has been edited by hand. Pass force=true to retag it anyway.",
+        )
+
+    # The tag columns are deliberately left alone. If this retag
+    # fails, _store writes `failed` without touching them, so a
+    # previously-good item keeps the tags it had; nulling them
+    # here would destroy good data to make a failure look tidier.
+    # error_message is cleared because the row is about to be
+    # `processing`, and a processing row carrying a past failure
+    # is incoherent on the wire.
+    item.status = ItemStatus.PROCESSING
+    item.error_message = None
+    # Committed before the task is queued: tag_and_store opens its
+    # own session and cannot see an uncommitted row. The same
+    # UPDATE moves updated_at through onupdate, so the sweep's ten
+    # minutes runs from this retag rather than from the insert
+    # (088).
+    db.commit()
+    # A retag against a row that is already `processing` is
+    # allowed, and two tasks can then write the same row with the
+    # last write winning. Refusing would cost a row that cannot be
+    # retagged for up to ten minutes when the process that owned
+    # it died, which is the worse failure and the one a user meets
+    # (089).
+    background_tasks.add_task(tag_and_store, item.id)
+
     return ItemResponse.model_validate(item)

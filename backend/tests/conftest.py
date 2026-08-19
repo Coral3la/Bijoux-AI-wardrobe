@@ -59,8 +59,10 @@ from app.api.v1.routes import items as items_route  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.core.deps import get_db  # noqa: E402
 from app.core.security import create_access_token, hash_password  # noqa: E402
+from app.core.short_id import generate_short_id  # noqa: E402
 from app.db.session import engine  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models.item import Item  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services import vision  # noqa: E402
 
@@ -223,6 +225,26 @@ def make_user(db: Session) -> Callable[..., User]:
         db.commit()
         db.refresh(user)
         return user
+
+    return _make
+
+
+@pytest.fixture
+def make_item(db: Session, make_user: Callable[..., User]) -> Callable[..., Item]:
+    """A planted row. `short_id` comes from the generator rather than a
+    literal, because a literal survives any run that fails to roll back and
+    leaves the suite red until someone truncates the table (`CONVENTIONS.md`)."""
+
+    def _make(**columns: Any) -> Item:
+        item = Item(
+            user_id=columns.pop("user_id", None) or make_user().id,
+            short_id=generate_short_id(),
+            image_public_id=f"bijoux/test/{uuid.uuid4().hex[:20]}",
+            **columns,
+        )
+        db.add(item)
+        db.commit()
+        return item
 
     return _make
 
