@@ -135,7 +135,9 @@ Add a startup sweep that resets `processing` rows older than 10 minutes to `fail
 - **The `status` filter.** `?status=processing` really narrows the result set. The only test today is `test_rejects_a_status_filter_outside_the_closed_vocabulary`, which proves a bad value is a `422` and says nothing whatever about filtering. **Ownership is 1.7's** — the polling loop is what depends on it — and it is written here because 1.7 is a frontend task and because the defence should exist before the two tasks that lean on it.
 
 ### 1.5 Wardrobe grid
-`WardrobeStore` with the signals from `05-FRONTEND-SPEC.md`. Responsive grid — 3 columns at 390px, 5 on desktop. Skeleton tiles for `processing`, warning tiles for `failed` with a working retry button. Empty state with both CTAs.
+`WardrobeStore` with the signals from `05-FRONTEND-SPEC.md` that this task has a consumer for — not the whole sketch; `05` §State management records which and why. Responsive grid — 3 columns at 390px, 5 on desktop. Dimmed-photograph tiles for `processing`, warning tiles for `failed` with a working retry button. Empty state with **one** CTA, **Add your first items**, inert until 1.6 wires it to the upload sheet.
+
+**Amended at 1.5: "both CTAs" was one CTA and one open question.** The second — **Try a demo wardrobe** — has no mechanism and cannot have one on this screen, because `/wardrobe` is authenticated and the link means switching accounts, which `04-API-SPEC.md` has no endpoint for. It moves to `/login` as prefilled `demo@bijoux.app` credentials, which is `AUDITS.md` **O-12** against task 1.10. `05` line 103 is corrected in the same commit. The audit found this as O-4, now closed.
 
 **A `failed` tile cannot assume the item has no tags.** Task 1.4's retag puts an already-tagged row back to `processing` without clearing the tag columns, and a retag that fails leaves them in place — so a `failed` item may arrive with a full set of tags from the last time it worked, and it may equally arrive with none, on an item that never succeeded. Render the warning state from `status`, never from "the tags are null". `DECISIONS.md` 089.
 

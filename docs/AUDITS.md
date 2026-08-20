@@ -89,6 +89,13 @@ table.
 
 Ordered by how soon the answer is needed.
 
+**O-1 to O-11 are audit 1's.** Items numbered from **O-12** onward were opened
+by a task rather than by an audit, and say so in their own text — the numbering
+is shared so that nothing has two names, and the next audit reads them exactly
+as it reads the rest. Two are closed so far: O-1 at task 1.4 and O-4 at 1.5.
+**O-14 is the first that records an unverified surface rather than a
+contradiction** — a thing no document disagrees about and nobody has looked at.
+
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
 `04` gives both endpoints a failure contract and no success contract: retag has
@@ -159,7 +166,7 @@ precisely the trap 1.4 already documents. Cutting it instead would strand the
 one class of item the product cannot otherwise recover: a photograph the model
 cannot read at all.
 
-#### O-4 · "Try a demo wardrobe" has no mechanism — task 1.5
+#### O-4 · ~~"Try a demo wardrobe" has no mechanism~~ — **closed at task 1.5**
 
 `05-FRONTEND-SPEC.md` line 103 puts a **Try a demo wardrobe** link in the
 wardrobe empty state "that loads the seeded 40-item account", and `STAGE-1` 1.5
@@ -172,6 +179,17 @@ and drop it from the empty state. No new endpoint, no new mechanism, one string
 in `en.json` — and it is honest about what it does, where a link inside your own
 empty wardrobe implies your wardrobe is about to fill up. The seeded account is
 1.10's and its email is already fixed (`demo@bijoux.app`).
+
+**Closed at task 1.5, and the recommendation was taken in full.** The empty
+state ships one CTA and no demo link; `05-FRONTEND-SPEC.md` line 103 and
+`STAGE-1` 1.5's "both CTAs" are corrected in the same commit. **Closing this
+does not delete the affordance** — the login-screen half is carried forward as
+**O-12** below, against 1.10, which is the task that creates the account it
+would sign into. One thing the audit did not reach, found only by building the
+screen: the *first* CTA has no mechanism either at 1.5, because the upload
+sheet is 1.6's. It ships inert rather than absent or `disabled`, and the rule
+that decides between those three is ownership rather than affordance —
+`DECISIONS.md` 090.
 
 #### O-5 · Two of the three rate limits are still unowned, and they are the two that spend money
 
@@ -286,6 +304,95 @@ not needed for the only thing that would want it.
 sentence with the note that it is belt-and-braces on PG 13+. Dropping the
 `CREATE EXTENSION` is a migration edit for no functional gain, and `0001` has
 already run against Neon.
+
+#### O-12 · The demo-wardrobe affordance is now owned by nobody until it is put on `/login` — task 1.10
+
+Carried out of **O-4**, which is closed above. The **Try a demo wardrobe**
+entry point is gone from the wardrobe empty state and is not yet anywhere else.
+The agreed replacement is prefilled `demo@bijoux.app` credentials on `/login`:
+no new endpoint, no new mechanism, one or two strings in `en.json` and a
+prefilled `FormGroup`. It belongs to **1.10**, which seeds that account —
+before 1.10 there is nothing to sign into, and after 1.10 the account exists
+with nothing pointing at it.
+
+**This is a tracking item, not a question.** It is written down because a
+closed audit item reads as a finished one, and the affordance was moved rather
+than cut. If 1.10 ships without it, the honest alternative is to record the
+omission in 5.4 and delete the promise from `05` — but it should be one or the
+other.
+
+#### O-13 · Nothing in this project runs the frontend test suite, and it had been broken for four commits — whoever writes `ci.yml`
+
+Found at task 1.5, by trying to run it. **`ng test` failed to build**, on a type
+error in `auth.service.spec.ts` — `service.register(…, null)` against a
+parameter narrowed to `string` at task 0.10 (`21e0f36`). The suite had been
+unrunnable since **2026-08-16**, across four commits, while `PROGRESS.md`
+recorded three of those tasks as complete.
+
+**What hid it is the finding, not the type error.** `.github/workflows/` is
+empty — CI does not exist. And the pipeline `06-TESTING-STRATEGY.md` specifies
+would not have caught it either: its frontend job is `npm ci → ng lint → ng
+build --configuration production`, and **neither command reads a spec file**.
+`ng lint` does not type-check, and `tsconfig.app.json` excludes `**/*.spec.ts`
+from the build. `ng test` is the only command in the project that type-checks a
+spec, and it is in no pipeline and no document's definition of done. `06`'s own
+layer table lists "Frontend unit — Vitest — yes" in the *required* column, so
+the document asks for a suite it does not then run.
+
+**Recommendation.** Add `ng test` to the frontend job in `ci.yml` when it is
+written, between `lint` and `build`. **Do not write `ci.yml` for this** — it is
+a whole task, it belongs to Stage 5, and the point of this item is that it must
+not be discovered again by accident. The stale test itself is deleted at 1.5
+(`DECISIONS.md` 096) so the suite runs; that is the symptom, and this is the
+cause.
+
+**One further observation, recorded because it is a fact and not a conclusion.**
+Across roughly twenty runs of the suite at 1.5, `authGuard > lets an
+authenticated user through` failed **once** and could not be reproduced in the
+seven runs that followed — five clean and two mutated. It is not diagnosed. It
+is written here rather than dismissed because an intermittent failure that
+nobody records is indistinguishable from one that nobody has seen yet.
+
+#### O-14 · Half of the wardrobe grid has been seen only by its tests — whoever verifies 1.9
+
+**Not a defect.** Task 1.5 was checked by eye at `ng serve` with seven uploaded
+items, and the surfaces that check reached are confirmed working: the **empty
+state**, the **ready tiles**, the **grid** at both column counts, images loading
+from Cloudinary, the **processing tile** keeping its dimmed photograph with
+"Tagging…" as `DECISIONS.md` 091 specifies, and the waiting line correctly
+reading **"Tagging 1 item"** in the singular, which is 095's whole point.
+
+**Four surfaces were not looked at, and are defended by tests alone:**
+
+- the **`failed` tile** — the ⚠ state, its message and its appearance over the
+  dimmed photograph
+- the **retry button** — its label, its "Trying…" in-flight state, and its
+  44px tap target
+- the **per-tile placement** of the retag spinner and the retag error message
+- the **`409 item_edited` branch** — the message a hand-edited item shows when
+  its retry is refused
+- and, separately, the **load-error state**: *"We couldn't load your
+  wardrobe."* with its **Try again** button
+
+**Why it was deferred rather than done.** Reaching the failed state at 1.5 means
+a terminal round trip — a hand-written status change through the ORM, or ageing
+a row past the startup sweep — which is more friction than one tile is worth,
+and it is the *only* way in, because nothing in the UI can make an item fail
+until 1.9 ships the editor. At 1.9 it is two clicks: edit an item, and the
+`user_edited` path that produces the `409` is reachable from the screen itself.
+
+**What stands behind them in the meantime**, so the size of the gap is stated
+rather than implied: ten `ItemCard` tests, four `WardrobePage` tests, two store
+tests naming the `item_edited` code, and **two mutations that survived and were
+then closed** — the spinner and the error message were both bound globally
+while 108 tests passed, which is recorded in `06-TESTING-STRATEGY.md` and is the
+reason this item exists at all. Tests are why the risk is low. They are not the
+same thing as having looked.
+
+**Owner: whoever verifies task 1.9.** The check is: force a tagging failure by
+editing an item and retagging it, confirm the ⚠ tile and its retry, retry two
+failed tiles and confirm the spinner and any message land on the tile that owns
+them, and stop the backend once to see the load-error state.
 
 ---
 

@@ -90,19 +90,6 @@ describe('AuthService', () => {
     expect(localStorage.getItem(TOKEN_KEY)).toBe('a.b.c');
   });
 
-  it('accepts a null display_name at the service boundary', () => {
-    construct();
-    service.register('coral@example.com', 'hunter2hunter2', null).subscribe();
-    const request = mock.expectOne(`${environment.apiUrl}/auth/register`);
-
-    expect(request.request.body).toEqual({
-      email: 'coral@example.com',
-      password: 'hunter2hunter2',
-      display_name: null,
-    });
-    request.flush(response);
-  });
-
   it('clears the token, the user and localStorage on logout', () => {
     localStorage.setItem(TOKEN_KEY, 'stored.token');
     construct();

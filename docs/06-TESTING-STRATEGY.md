@@ -13,7 +13,7 @@ The central question: **how do you write reliable automated tests against a non-
 | Unit — pure logic | pytest | yes | no |
 | Contract — schema validation | pytest | yes | no |
 | Integration — API + DB | pytest + httpx | yes | no (mocked) |
-| Frontend unit — services, guards, interceptors, models, pages | Vitest | yes | no |
+| Frontend unit — services, guards, interceptors, models, pages, stores | Vitest | yes | no |
 | E2E — user journeys | Playwright + TS | yes | no (mocked) |
 | AI evaluation — quality | pytest, `-m eval` | **no**, manual | yes |
 
@@ -222,6 +222,58 @@ Sixteen mutations plus a fatal control, against `validate_tags`, the required-fi
 
 **Numbers 4, 5 and 14 are each caught by exactly one test, and all three are decisions rather than mechanisms.** Whether the discarded value survives, whose coercions `ItemTags` carries, and which of two violations reaches `error_message` are all choices a later reader could reverse while leaving the module working. One named test each is the whole defence, which is the argument for naming them after the decision rather than after the code.
 
+### The wardrobe-grid mutation run, task 1.5 — the first on the frontend
+
+Thirteen mutations plus a fatal control against the new frontend code, and four
+against `GET /items`'s `limit` on the backend. Run from a pristine copy,
+baseline green at both ends. **Two survived, both in the same place, and they
+are the reason this run was worth doing.**
+
+| # | Behaviour deleted | Caught by |
+|---|---|---|
+| M0 | fatal control: the store discards the rows it loaded | 9 tests |
+| M1 | the store takes `GET /items`' default limit instead of passing one | 3 tests |
+| M2 | the failed tile branches on the tags being null, not on `status` | 8 tests |
+| M3 | the retag error stops branching on the documented `code` | 2 tests |
+| M4 | a retag response is dropped instead of replacing the row | 2 tests |
+| M5 | the retrying mark stops being per item in the store | 6 tests |
+| M6 | the header counts loaded rows instead of the server `total` | `states the server total rather than the number of tiles` |
+| M7 | the plural key is used for every count | `does not say "1 items"` |
+| M8 | the empty state is not gated on the first load finishing | `does not show the empty state while the first load is in flight` |
+| M9 | an untagged photograph gets an empty `alt` | `falls back to a described alt when the item has no name yet` |
+| M10 | the in-flight retag guard is removed | `sends one retag while one is already in flight` |
+| M11 | the spinner binds to "any retag in flight", not to this tile | **survived — 108 passed** |
+| M12 | every tile shows the first retag error rather than its own | **survived — 108 passed** |
+| B0 | fatal control: `GET /items` returns no rows | 3 tests |
+| B1 | the default page size is 50 rather than 100 | `test_the_list_defaults_to_a_hundred_items` |
+| B2 | the documented cap is raised, so an over-large limit is accepted | `test_the_limit_cap_is_two_hundred_and_over_it_is_rejected` |
+| B3 | the cap clamps instead of rejecting | `test_the_limit_cap_is_two_hundred_and_over_it_is_rejected` |
+
+**M11 and M12 are the same hole and it is a shape worth naming: the state was
+tested and the binding was not.** `WardrobeStore` keeps retag state per item —
+a `Set` of ids retrying, a `Map` of id to error key — and six store tests
+assert exactly that. Every one of them passed with the template broken, because
+a template can read a correct per-item collection and then bind it globally.
+What made it invisible is smaller and more general: **every test that looked
+like it covered this rendered a single item**, and with one tile on screen a
+per-item signal and a global one are indistinguishable. Two tests now render
+two failing tiles and assert the presence *and the absence*. `DECISIONS.md` 093.
+
+**A note on the harness, which behaved differently here from pytest's.** The
+equivalent of a collection error is a **build** failure: `ng test` compiles the
+whole project before running anything, so a mutation that does not type-check
+produces zero test results rather than a failure, and would read as "caught by
+0 tests" if the harness only parsed vitest's output. It is detected separately
+by matching `Application bundle generation failed` and reported as its own
+outcome, on the same reasoning as 1.2a's misreported row.
+
+**One row was thrown away rather than recorded.** The first M5 run listed
+`authGuard > lets an authenticated user through` among its failures — a test
+with no relationship to the mutated file. It did not reproduce in two further
+mutated runs or five clean ones. It is recorded as an unexplained intermittent
+in `AUDITS.md` **O-13** and *not* as a row in this table, because a mutation
+table that contains one unexplained row is evidence for nothing.
+
 ### What mutation testing has actually found on this project
 
 Worth stating plainly, because it is not what the technique is usually sold for: **on this project mutation testing has found more false claims than bugs.**
@@ -233,6 +285,8 @@ Worth stating plainly, because it is not what the technique is usually sold for:
 - 1.2a: seven mutations plus a fatal control, all caught, baseline green at both ends — and the finding is not in the table. **The harness misreported one row.** Dropping `LAYERS_BY_CATEGORY`'s `top` entry printed `CAUGHT by 0 tests` beside a mangled filename, because the run had produced a pytest `ERROR` line and the harness only parsed `FAILED`. It was a collection error dressed as a survivor. Both halves were fixed — the parsing, and the derived `@parametrize` that caused the collection to fail at all — and the mutation now fails `test_the_layer_table_covers_every_category` by name. **A mutation table that misreports one row reads as evidence for every row in it.**
 
 - 1.2b: seventeen mutations, all caught — and the finding is again about a claim rather than a bug. Number 16 established that `test_a_prompt_file_without_the_placeholder_raises_at_load` does not defend the shipped prompt file, only the guard's logic, because the real failure happens at import and takes the test module with it. The test's name does not say that and its docstring implied otherwise; both now do.
+
+- 1.5: the first two genuine survivors on the project, and the first run on the frontend. Both were the same false claim — that retag state is per item — held by six passing tests that only ever exercised one item. The technique found a coverage hole rather than a bug, in code that was already green, linted and type-checked.
 
 The lesson generalises: the assertion under test is often a sentence in a document, not a branch in the code. Deleting the behaviour is the only way to find out whether the sentence was ever true.
 
@@ -371,6 +425,8 @@ report:   upload Playwright HTML report and traces as artefacts
 ```
 
 Tests marked `eval` are excluded via `-m "not eval"`. CI never needs an OpenAI key, and CI must be green before merging to `main`.
+
+**The frontend line above is wrong by omission and is not corrected here, because correcting it is writing the pipeline.** Neither `ng lint` nor `ng build` reads a `.spec.ts` — lint does not type-check and `tsconfig.app.json` excludes specs from the build — so the job as written runs none of the frontend suite this document requires two sections above, and would not notice it failing to compile. It did not: the suite was unrunnable from 2026-08-16 to 1.5. `AUDITS.md` **O-13** owns it, against whoever writes `ci.yml`.
 
 ---
 

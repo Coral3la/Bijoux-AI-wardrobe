@@ -1,0 +1,80 @@
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+
+import { I18nService } from '../../core/i18n/i18n.service';
+import { Item } from '../../shared/models/item.model';
+
+@Component({
+  selector: 'app-item-card',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <article class="relative aspect-square overflow-hidden rounded-lg bg-surface shadow-sm">
+      <!-- The photograph is on the wire from the first response, so a
+           processing tile dims it rather than replacing it with a blank
+           skeleton: the user has just photographed this garment and it is the
+           only thing on screen telling them the upload worked. This departs
+           from 05-FRONTEND-SPEC.md's original grid legend, which the same
+           commit amends. DECISIONS.md 091. -->
+      <img
+        [src]="item().image_url"
+        [alt]="alt()"
+        loading="lazy"
+        class="h-full w-full object-contain"
+        [class.opacity-30]="item().status !== 'ready'"
+      />
+
+      @if (item().status === 'processing') {
+        <p class="absolute inset-x-0 bottom-0 bg-surface/90 p-1 text-center text-xs">
+          {{ i18n.t('wardrobe.item.processing') }}
+        </p>
+      }
+
+      <!-- Branches on status alone and never on "the tags are null": a retag
+           leaves the previous attempt's tags in place, so a failed item may
+           arrive fully tagged or not tagged at all. DECISIONS.md 089. -->
+      @if (item().status === 'failed') {
+        <div
+          class="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-surface/90 p-1 text-center"
+        >
+          <p class="text-xs font-medium text-danger">
+            <span aria-hidden="true">⚠</span> {{ i18n.t('wardrobe.item.failed') }}
+          </p>
+          <button
+            type="button"
+            (click)="retry.emit()"
+            [disabled]="retrying()"
+            [attr.aria-label]="retryLabel()"
+            class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-2 text-xs underline disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            {{ retrying() ? i18n.t('wardrobe.item.retrying') : i18n.t('wardrobe.item.retry') }}
+          </button>
+          @if (errorKey(); as key) {
+            <p class="text-xs font-medium text-danger">{{ i18n.t(key) }}</p>
+          }
+        </div>
+      }
+    </article>
+  `,
+})
+export class ItemCard {
+  protected readonly i18n = inject(I18nService);
+
+  readonly item = input.required<Item>();
+  readonly retrying = input(false);
+  readonly errorKey = input<string | null>(null);
+
+  readonly retry = output<void>();
+
+  // Trimmed rather than ??: display_name is null while an item is processing
+  // and stays null on one that never tagged successfully, and an empty alt on
+  // a photograph is worse than a generic one. Same shape as userLabel (071).
+  protected readonly alt = computed(() => {
+    const name = this.item().display_name?.trim();
+    return name ? name : this.i18n.t('wardrobe.item.untagged');
+  });
+
+  // The button's own text says only "Try again", which names no garment when a
+  // screen reader lists the buttons on a full grid of failures.
+  protected readonly retryLabel = computed(() =>
+    this.i18n.t('wardrobe.item.retryLabel', { name: this.alt() }),
+  );
+}

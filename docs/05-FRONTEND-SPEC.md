@@ -65,6 +65,8 @@ export class WardrobeStore {
 
 `canStyle` is used to disable the stylist entry point with a clear explanation rather than letting a request fail server-side.
 
+**The sketch above is the finished shape, not the shape at any one task.** Task 1.5 ships `items`, `total`, `isLoading`, `loadError`, `isEmpty`, `processing`, `retrying` and `retagErrors`, plus `load()` and `retag()`. `filters`, `visible` and `byCategory` arrive with the filter bar at 1.8, and `canStyle` with the stylist at Stage 2 — building them at 1.5 would be four computeds with no consumer, and `canStyle` in particular is the stylist gate, which `STAGE-1` puts out of scope for the whole stage. `total` and the two retag collections are not in the sketch at all: `total` counts the filter rather than the page and is the only truthful count above 200 items (`DECISIONS.md` 094), and the retag pair is keyed by item id so a spinner and a failure land on the tile that owns them (`DECISIONS.md` 093).
+
 ---
 
 ## Screens
@@ -91,7 +93,7 @@ The home screen and the most-used surface.
 ├────────────────────────────────┤
 │  ┌────┐ ┌────┐ ┌────┐          │
 │  │img │ │img │ │▓▓▓▓│          │  ← 3-col mobile, 5-col desktop
-│  └────┘ └────┘ └────┘             ▓▓▓▓ = skeleton, status processing
+│  └────┘ └────┘ └────┘             ▓▓▓▓ = dimmed photo, status processing
 │  ┌────┐ ┌────┐ ┌────┐          │
 │  │img │ │ ⚠ │ │img │          │  ← ⚠ = failed, tap to retry
 │  └────┘ └────┘ └────┘          │
@@ -100,9 +102,13 @@ The home screen and the most-used surface.
 └────────────────────────────────┘
 ```
 
-**Empty state is important.** A first-time user sees: a one-line explanation, a large **Add your first items** button, and a secondary **Try a demo wardrobe** link that loads the seeded 40-item account. Do not ship a blank grid.
+**Empty state is important.** A first-time user sees: a one-line explanation and a large **Add your first items** button. Do not ship a blank grid.
+
+**Corrected at task 1.5.** This paragraph also asked for a secondary **Try a demo wardrobe** link "that loads the seeded 40-item account", and there is no mechanism for it and cannot be one here: `/wardrobe` is reachable only when authenticated, so the link means *switch to somebody else's account*, `04-API-SPEC.md` has no endpoint for that and forbids adding endpoints it does not list. The affordance is not cut — it moves to `/login` as prefilled credentials for `demo@bijoux.app`, which needs no endpoint and is honest about what it does, where a link inside your own empty wardrobe implies your wardrobe is about to fill up. That is recorded as an open item in `AUDITS.md` (**O-12**) against the task that seeds the account, 1.10. Found by the 2026-08-18 audit as O-4.
 
 **Filter sheet:** category, colour swatches, formality range, warmth range, "never worn" toggle *(Stage 3)*. Filters are client-side over the loaded collection — the whole wardrobe fits in memory.
+
+**Built at task 1.5**, and three things about the grid are not what this section originally drew. **A `processing` tile keeps its photograph**, dimmed, with a "Tagging…" label — the legend above said skeleton, and the image is on the wire from the first response, so a grey block would replace a picture the user has just taken with a placeholder (`DECISIONS.md` 091). **A `failed` tile renders from `status` and never from "the tags are null"**: a retag leaves the previous attempt's values in place, so a failed item may arrive fully tagged (`DECISIONS.md` 089). **The empty state's button is inert until 1.6** wires it to the upload sheet, and the FAB drawn above is 1.6's rather than 1.5's — 1.5's acceptance line requires the one and no task requires the other (`DECISIONS.md` 090). The weather strip is 2.2's, the chip row and filter sheet are 1.8's, and the grid/list toggle is 1.8's and first on the stage's cut list; the mockup above spans three stages.
 
 That only holds if the whole wardrobe was loaded. `GET /items` defaults to `limit=100` and caps at 200, while a realistic wardrobe is 80–150 items, so the store must pass an explicit `limit` rather than take the default — otherwise the filter bar silently filters over the first hundred items and the counts are wrong with no error anywhere.
 

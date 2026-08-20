@@ -54,9 +54,9 @@ def stored(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 # --- GET /items behaviours 0.7 shipped and 0.10 left undefended -------------
 #
 # Reassigned into Stage 1 by STAGE-1's "Coverage inherited from Stage 0", to
-# the task that first depends on each. Both plant their rows directly rather
-# than going through DELETE, so a broken archive and a broken filter cannot
-# alibi each other.
+# the task that first depends on each. They all plant their rows directly
+# rather than going through DELETE or upload, so a broken archive and a broken
+# filter cannot alibi each other.
 
 
 def test_archived_items_are_excluded_unless_asked_for(
@@ -94,6 +94,55 @@ def test_the_status_filter_narrows_the_result_set(
 
     assert processing.json()["total"] == 1
     assert [row["status"] for row in processing.json()["items"]] == ["processing"]
+
+
+def test_the_list_defaults_to_a_hundred_items(
+    client: TestClient,
+    db: Session,
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # 1.5's to defend. The wardrobe screen filters client-side over whatever it
+    # loaded, so a store that took this default would filter over the first
+    # hundred items and report wrong counts with no error anywhere.
+    # Planted in bulk rather than through make_item: 101 separate commits is
+    # the slowest test in the suite for no gain. short_id still comes from the
+    # generator, because a literal outlives a run that fails to roll back.
+    user = make_user()
+    db.add_all(
+        Item(
+            user_id=user.id,
+            short_id=generate_short_id(),
+            image_public_id=f"bijoux/test/{uuid.uuid4().hex[:20]}",
+        )
+        for _ in range(101)
+    )
+    db.commit()
+
+    response = client.get(LIST_URL, headers=authorization(user))
+
+    assert len(response.json()["items"]) == 100
+    # total counts the filter, not the page, so it disagrees with the page
+    # length here on purpose.
+    assert response.json()["total"] == 101
+
+
+def test_the_limit_cap_is_two_hundred_and_over_it_is_rejected(
+    client: TestClient,
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # Both ends, because "201 is a 422" alone would also pass on a cap of 10.
+    # Rejected rather than clamped: a silently clamped page is a client that
+    # believes it holds the whole wardrobe and does not.
+    user = make_user()
+
+    at_cap = client.get(f"{LIST_URL}?limit=200", headers=authorization(user))
+    over_cap = client.get(f"{LIST_URL}?limit=201", headers=authorization(user))
+
+    assert at_cap.status_code == 200
+    assert over_cap.status_code == 422
+    assert over_cap.json()["code"] == "validation_error"
 
 
 # --- what upload writes -----------------------------------------------------

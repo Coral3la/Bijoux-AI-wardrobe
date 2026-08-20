@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 1 — Wardrobe
-**Status:** Stage 1 in progress — 1.1, 1.2a, 1.2b, 1.3 and 1.4 complete.
+**Status:** Stage 1 in progress — 1.1, 1.2a, 1.2b, 1.3, 1.4 and 1.5 complete.
 
 Claude Code updates this file at the end of every stage: tick the criteria, set the next stage, and note anything that changed relative to the plan.
 
@@ -29,7 +29,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Tag validation and retry — 1.2b
 - [x] Background tagging
 - [x] Item endpoints
-- [ ] Wardrobe grid
+- [x] Wardrobe grid
 - [ ] Upload sheet (camera + gallery)
 - [ ] Polling
 - [ ] Filters
