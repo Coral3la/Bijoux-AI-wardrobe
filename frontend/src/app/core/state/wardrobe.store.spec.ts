@@ -750,6 +750,129 @@ describe('WardrobeStore', () => {
     vi.advanceTimersByTime(2000);
     pollRequest().flush({ items: [item({ id: 'a', status: 'processing' })], total: 1 });
   });
+  // --- the edit and the delete, task 1.9 -----------------------------------
+
+  function editRequest(id = 'a') {
+    return mock.expectOne(`${environment.apiUrl}/items/${id}`);
+  }
+
+  it('replaces the edited row with the one the server answered with', () => {
+    store.load();
+    listRequest().flush({ items: [item({ id: 'a', display_name: 'old' })], total: 1 });
+
+    store.edit('a', { display_name: 'new' }).subscribe();
+    editRequest().flush(item({ id: 'a', display_name: 'new' }));
+
+    expect(store.items().map((row) => row.display_name)).toEqual(['new']);
+  });
+
+  // 116 clears a failed status on a completed edit, and the client learns it
+  // the same way it learns everything else: the whole row comes back.
+  it('takes a status change from the response rather than inferring one', () => {
+    store.load();
+    listRequest().flush({ items: [item({ id: 'a', status: 'failed' })], total: 1 });
+
+    store.edit('a', { category: 'top' }).subscribe();
+    editRequest().flush(item({ id: 'a', status: 'ready' }));
+
+    expect(store.items()[0].status).toBe('ready');
+  });
+
+  it('clears the retag error for the row that was edited', () => {
+    store.load();
+    listRequest().flush({ items: [item({ id: 'a' }), item({ id: 'b' })], total: 2 });
+    store.retag('a');
+    mock
+      .expectOne(`${environment.apiUrl}/items/a/retag`)
+      .flush({ detail: 'no', code: 'item_edited' }, { status: 409, statusText: 'Conflict' });
+    store.retag('b');
+    mock
+      .expectOne(`${environment.apiUrl}/items/b/retag`)
+      .flush({ detail: 'no', code: 'item_edited' }, { status: 409, statusText: 'Conflict' });
+    expect(store.retagErrors().size).toBe(2);
+
+    store.edit('a', { category: 'top' }).subscribe();
+    editRequest().flush(item({ id: 'a' }));
+
+    expect(store.retagErrors().has('a')).toBe(false);
+    expect(store.retagErrors().has('b')).toBe(true);
+  });
+
+  it('leaves a rejected edit alone rather than writing anything', () => {
+    store.load();
+    listRequest().flush({ items: [item({ id: 'a', display_name: 'old' })], total: 1 });
+
+    store.edit('a', { fit: 'skinny' }).subscribe({ error: () => undefined });
+    editRequest().flush(
+      { detail: 'fit does not describe category', code: 'validation_error' },
+      { status: 422, statusText: 'Unprocessable Content' },
+    );
+
+    expect(store.items()[0].display_name).toBe('old');
+  });
+
+  it('removes an archived row and moves the count with it', () => {
+    store.load();
+    listRequest().flush({ items: [item({ id: 'a' }), item({ id: 'b' })], total: 2 });
+
+    store.archive('a').subscribe();
+    editRequest().flush(item({ id: 'a', is_archived: true }));
+
+    expect(store.items().map((row) => row.id)).toEqual(['b']);
+    expect(store.total()).toBe(1);
+  });
+
+  // 121: a row fetched by id on a deep link never entered items() and was never
+  // counted, so decrementing for it would understate the wardrobe by one.
+  it('does not decrement the total for a row that was never in the collection', () => {
+    store.load();
+    listRequest().flush({ items: [item({ id: 'a' })], total: 1 });
+
+    store.archive('deep-linked').subscribe();
+    mock.expectOne(`${environment.apiUrl}/items/deep-linked`).flush(item({ id: 'deep-linked' }));
+
+    expect(store.total()).toBe(1);
+    expect(store.items().map((row) => row.id)).toEqual(['a']);
+  });
+
+  // 093 accepted that an id-keyed entry can outlive its row until the next
+  // load(). A delete is the first thing that removes a row without one, and it
+  // is where that leak would have become real.
+  it('drops both id-keyed entries when a row is archived', () => {
+    store.load();
+    listRequest().flush({ items: [item({ id: 'a' })], total: 1 });
+    store.retag('a');
+    mock
+      .expectOne(`${environment.apiUrl}/items/a/retag`)
+      .flush({ detail: 'no', code: 'item_edited' }, { status: 409, statusText: 'Conflict' });
+    expect(store.retagErrors().has('a')).toBe(true);
+
+    store.archive('a').subscribe();
+    editRequest().flush(item({ id: 'a', is_archived: true }));
+
+    expect(store.retagErrors().has('a')).toBe(false);
+    expect(store.stoppedWaiting().has('a')).toBe(false);
+  });
+
+  it('leaves the collection alone when the delete fails', () => {
+    store.load();
+    listRequest().flush({ items: [item({ id: 'a' })], total: 1 });
+
+    store.archive('a').subscribe({ error: () => undefined });
+    editRequest().flush({ detail: 'no' }, { status: 500, statusText: 'Server Error' });
+
+    expect(store.items().map((row) => row.id)).toEqual(['a']);
+    expect(store.total()).toBe(1);
+  });
+
+  it('passes force through to the retag endpoint', () => {
+    store.load();
+    listRequest().flush({ items: [item({ id: 'a' })], total: 1 });
+
+    store.retag('a', true);
+
+    mock.expectOne(`${environment.apiUrl}/items/a/retag?force=true`).flush(item({ id: 'a' }));
+  });
 });
 
 // Every row and every expected id below is written by hand. A test that built

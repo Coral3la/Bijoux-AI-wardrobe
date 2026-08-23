@@ -153,7 +153,7 @@ cannot fire on model output" to include them. Not applied here: the audit's
 brief is stale claims, and this is a document that is silent rather than wrong —
 adding rows to an authoritative spec is specifying, which is yours.
 
-#### O-3 · "Add manually" is promised to the user and owned by no task — tasks 1.5 and 1.9
+#### O-3 · ~~"Add manually" is promised to the user and owned by no task~~ — **closed at task 1.9**
 
 `03`'s user-facing failure table (line 401) says a failed tile carries a
 **Retry** button *and* an **Add manually** link. `STAGE-1` 1.4 reasons about a
@@ -169,6 +169,8 @@ category-dependent field submitted before `category` answers `422`, which is
 precisely the trap 1.4 already documents. Cutting it instead would strand the
 one class of item the product cannot otherwise recover: a photograph the model
 cannot read at all.
+
+**Closed at task 1.9, and the recommendation was taken — but it could not have been taken as written.** The link is the tag editor, reached from the failed tile, and the `category` note was right: a failed row has every tag `NULL`, so the editor's category select carries a placeholder that exists only while the stored value is null and refuses to save while it is selected (`DECISIONS.md` 123). What the recommendation did not know is that **the wire could not honour it at all.** `PATCH /items/{id}` wrote tags and never touched `status`, so an item recovered by hand answered `200` and kept its `failed` status and its `error_message` for good — the tile went on saying "Tagging failed" above a full set of tags the user had just typed. That is fixed in the commit before this one (`DECISIONS.md` 116) and it is the reason this item closes rather than shipping a link to a screen that could not finish the job. `05-FRONTEND-SPEC.md`'s grid legend gains the affordance in the same commit.
 
 #### O-4 · ~~"Try a demo wardrobe" has no mechanism~~ — **closed at task 1.5**
 
@@ -283,7 +285,7 @@ carry a number the project has already decided is a fluency signal. If it is
 kept instead, it needs a column in `02` and a named reader — the same two things
 086 required of the vision `confidence` before it would keep a branch.
 
-#### O-10 · `cloudinary-url.pipe.ts` is referenced by three documents and built by no task — low
+#### O-10 · ~~`cloudinary-url.pipe.ts` is referenced by three documents and built by no task~~ — **closed at task 1.9**
 
 Named in `04` line 119, `05`'s file tree, `07`'s transform table ("Build these in
 `services/storage.py` and in the frontend `cloudinaryUrl` pipe") and twice in
@@ -296,6 +298,10 @@ Note when doing so that its four transform strings become a third hand-written
 copy with nothing comparing them — the class `CONVENTIONS.md` already records
 for the upload limits and the password rules, and **F-3** above is that class
 producing its first real defect.
+
+**Closed at task 1.9, at the caller this item named.** Item detail needs the `detail` transform and `ItemResponse.image_url` is a thumbnail, so it was build-or-render-a-300px-image-at-800px. The four transform strings are indeed a third hand-written copy, as this item warned; the mitigation is 101's, applied deliberately — the pipe's spec transcribes all four **from `07-DEPLOYMENT.md` by hand** and never reads the constant the pipe reads, so mutating any string fails a named test. One thing this item did not reach: `environment.cloudinaryCloudName` has been declared in all three environment files since task 0.8 and was **read by nothing for nine tasks**, which is what the pipe was waiting for. `DECISIONS.md` 118.
+
+**`enum-label.pipe.ts` is a separate component and is still not built** — it appears in `05`'s file tree and in no audit item. `DECISIONS.md` 114 cited *this* item's recommendation when it declined to build it at 1.8, which was a misattribution: O-10 covers the Cloudinary pipe only. 114 is corrected in 1.9's commit. The label question was answered instead by moving 1.8's twenty-four keys out of `wardrobe.filter.*` into `vocabulary.*` and adding eighty-two more there (118).
 
 #### O-11 · `02` documents one extension; migration `0001` creates two — low
 
@@ -405,10 +411,56 @@ while 108 tests passed, which is recorded in `06-TESTING-STRATEGY.md` and is the
 reason this item exists at all. Tests are why the risk is low. They are not the
 same thing as having looked.
 
-**Owner: whoever verifies task 1.9.** The check is: force a tagging failure by
-editing an item and retagging it, confirm the ⚠ tile and its retry, retry two
-failed tiles and confirm the spinner and any message land on the tile that owns
-them, and stop the backend once to see the load-error state.
+**Owner: whoever verifies task 1.9. The method below was wrong and is corrected
+here rather than left to fail in someone's hands.**
+
+~~The check is: force a tagging failure by editing an item and retagging it~~ —
+**editing an item cannot cause a tagging failure.** Checked on disk at 1.9:
+editing sets `user_edited`, so the retag answers `409` rather than running; and
+a *forced* retag re-runs tagging against **the same photograph that tagged
+successfully before**. The model never sees the tags, so nothing about an edit
+can change what tagging returns. The only reliable routes to a `failed` row
+remain the two this item already names: a terminal round trip, or a photograph
+the model genuinely cannot read.
+
+**What task 1.9 does close, of the surfaces listed above:**
+
+- the **`409 item_edited` branch** — now reachable from the UI for the first
+  time, and it is what a user meets rather than what a store test asserts: edit
+  an item, press **Tag this again**, and the second step naming what will be
+  discarded is the branch (`DECISIONS.md` 122)
+- the **loop across a real navigation** — `/wardrobe` was the only
+  authenticated route until 1.9, so back button, bfcache restore and hard reload
+  become exercisable now that `/wardrobe/:id` exists
+
+**What stays unreachable, unchanged:** the **`failed` tile** and its ⚠ state, the
+**retry button**'s label and in-flight state, the **per-tile placement** of the
+spinner and error, the **load-error state**, and the **stopped-waiting tile**.
+Four of the five original surfaces and 1.7's tile are untouched by this task.
+
+**The check, corrected:** open an item from the grid and confirm the detail
+image is the large one rather than a scaled thumbnail; edit a tag, save, reload,
+and confirm it persisted and the badge appeared; press **Tag this again** on
+that item and confirm the second step appears rather than the retag running;
+delete an item and confirm the grid's count moves; and stop the backend once to
+see the load-error state. Producing a `failed` row still needs the terminal.
+
+**Extended again at task 1.9**, with what a detail screen adds that no gate here
+can see:
+
+- **Whether a `w_800` image fits a 390px screen**, and whether a fourteen-control
+  editor scrolls or clips. `getBoundingClientRect()` is still zero in every
+  dimension, so layout is invisible exactly as it was at 1.6 and 1.8.
+- **Whether `/wardrobe/:id` pasted into a fresh tab opens the right item.** Same
+  blind spot 1.8 recorded for filtered URLs, now on a route parameter:
+  `MockPlatformLocation` means the address bar never moves, so the tests prove
+  what the `Router` was asked for and never what a browser did with it.
+- **The two-press delete against a real pointer.** The arm-and-disarm logic is
+  gated thoroughly, but whether a thumb on a phone can hit the same 44px target
+  twice without the blur handler firing between presses is a device question.
+- **The forced retag end to end.** Every test flushes the `409` by hand; that a
+  real backend produces it, and that `?force=true` then re-tags the photograph,
+  has never been observed against a live OpenAI account.
 
 **Extended at task 1.6, which added more unverified surface than it closed.**
 The upload sheet's mechanism is largely outside what any automated gate in this
@@ -514,6 +566,18 @@ tasks have now declined to fill it, which strengthens rather than weakens the
 other half of this item: if Stage 1 ends this way, delete the line from `05`'s
 tree. `DECISIONS.md` 113. This item stays open on that second question only.
 
+**Fourth decline, at task 1.9.** The detail screen and the tag editor were the
+next two candidates and neither extracted anything: the editor is form controls
+in flow with no sheet, no modal and no toast, and its delete confirmation is a
+two-press button rather than a dialog — declined on cost, with `inert`
+unsupported in the gate making a fourth hand-rolled focus trap the real price
+(`DECISIONS.md` 126). `shared/ui/` is still empty, `shared/pipes/` now is not.
+**Stage 1 has one task left that touches the frontend and it is a seed script**,
+so this item's other recommendation is now the live one: delete the line from
+`05`'s file tree rather than leave a map of a structure the project does not
+have. That is a Stage 5 tidy and it needs a decision, not a commit.
+
+
 #### O-16 · Seven `GET /items` query parameters have no caller, no test, and now no candidate — task 5.2 or 5.4
 
 `DECISIONS.md` 051 implemented all eleven parameters `04-API-SPEC.md` lists
@@ -545,6 +609,41 @@ nobody, and found only because a task walked past it.
 tested by six integration tests, and consumed by no screen. 1.8 was its first
 possible caller and chose not to be one (`DECISIONS.md` 112), so it stays
 unowned until Stage 3 extends it. It is first on `STAGE-1`'s cut list.
+
+
+#### O-17 · Acceptance criterion 3 has no owner, and nothing in Stage 1 can produce the row it asks for — task 5.3, or a decision to cut it
+
+`STAGE-1`'s third acceptance criterion is *"A deliberately bad image ends as
+`failed` with a working retry button."* The **mechanism** is complete: 1.3 writes
+`failed` on both failure paths, 1.5 renders the tile, 1.9 adds **Add tags by
+hand** beside its retry. What has no owner is **producing the row**.
+
+Three routes were checked on disk at task 1.9 and all three are closed:
+
+- **`USE_FAKE_AI`** returns a hand-written placeholder that passes
+  `validate_tag_dict` with no errors and no coercions — asserted by a test — so
+  it cannot fail.
+- **A bad photograph** is unreliable rather than impossible: `validate_tags`
+  retries once, and a blurred or dark image usually still returns acceptable
+  tags. O-14 already says this.
+- **Editing and retagging** cannot do it, for the reason O-14 is corrected
+  above: the model never sees the tags.
+
+So the only dependable route is a hand-written status change through the ORM or
+ageing a row past the startup sweep — a terminal round trip that no task owns
+and no acceptance criterion should require.
+
+**Recommendation.** Do not invent a task for it. Either **cut the criterion**,
+on the grounds that what it is really asking about is the failure path and that
+path has integration tests at 1.3 and a `TaggingError` unit test at 1.2b — or
+**move it to 5.3**, where a browser-based QA pass can stage the row deliberately
+and the terminal round trip is in scope rather than an embarrassment. Recorded
+rather than solved because deciding which is a judgement about what Stage 1
+claims to have demonstrated, and that is the developer's.
+
+**Not a defect, and not new.** The criterion has been unownable since it was
+written; it is recorded now because task 1.9 was the last task that could
+plausibly have closed it and did not.
 
 ---
 

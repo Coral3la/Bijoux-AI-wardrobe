@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { I18nService } from '../../core/i18n/i18n.service';
 import { Item } from '../../shared/models/item.model';
@@ -6,6 +7,7 @@ import { Item } from '../../shared/models/item.model';
 @Component({
   selector: 'app-item-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink],
   template: `
     <article class="relative aspect-square overflow-hidden rounded-lg bg-surface shadow-sm">
       <!-- The photograph is on the wire from the first response, so a
@@ -14,13 +16,26 @@ import { Item } from '../../shared/models/item.model';
            only thing on screen telling them the upload worked. This departs
            from 05-FRONTEND-SPEC.md's original grid legend, which the same
            commit amends. DECISIONS.md 091. -->
-      <img
-        [src]="item().image_url"
-        [alt]="alt()"
-        loading="lazy"
-        class="h-full w-full object-contain"
-        [class.opacity-30]="item().status !== 'ready'"
-      />
+      <!-- The image is the link and the retry button is its sibling, never
+           inside it: an anchor containing a button is nested interactive
+           content, which no browser agrees on and no screen reader announces
+           twice the same way. How a user reaches item detail was specified in
+           no document — 05's grid legend gave the tile one behaviour, "tap to
+           retry" — so this is a decision rather than an implementation.
+           DECISIONS.md 129. -->
+      <a
+        [routerLink]="['/wardrobe', item().id]"
+        [attr.aria-label]="openLabel()"
+        class="block h-full w-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        <img
+          [src]="item().image_url"
+          [alt]="alt()"
+          loading="lazy"
+          class="h-full w-full object-contain"
+          [class.opacity-30]="item().status !== 'ready'"
+        />
+      </a>
 
       @if (item().status === 'processing' && !gaveUp()) {
         <p class="absolute inset-x-0 bottom-0 bg-surface/90 p-1 text-center text-xs">
@@ -47,6 +62,16 @@ import { Item } from '../../shared/models/item.model';
               <span aria-hidden="true">⚠</span> {{ i18n.t('wardrobe.item.failed') }}
             </p>
           }
+          <!-- O-3's "Add manually", promised by 03 line 401 since it was
+               written and built by no task until now. It is this editor,
+               reached from the failed tile, and it works because 116 lets a
+               completed edit clear the failed status. -->
+          <a
+            [routerLink]="['/wardrobe', item().id]"
+            class="inline-flex min-h-11 items-center justify-center rounded-md px-2 text-xs underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            {{ i18n.t('wardrobe.item.addManually') }}
+          </a>
           <button
             type="button"
             (click)="retry.emit()"
@@ -94,5 +119,12 @@ export class ItemCard {
   // screen reader lists the buttons on a full grid of failures.
   protected readonly retryLabel = computed(() =>
     this.i18n.t('wardrobe.item.retryLabel', { name: this.alt() }),
+  );
+
+  // Same problem one control over: the link's only content is an image, so
+  // without this a screen reader announces the alt text as the link name and a
+  // grid of untagged items reads as forty identical links.
+  protected readonly openLabel = computed(() =>
+    this.i18n.t('wardrobe.item.open', { name: this.alt() }),
   );
 }

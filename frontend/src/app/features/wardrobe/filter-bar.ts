@@ -13,7 +13,8 @@ import { ItemFilters, SCALE_MAX, SCALE_MIN } from '../../core/state/wardrobe.sto
 import { CATEGORIES, COLORS, Category, Color } from '../../shared/models/enums';
 
 // Presentation, not vocabulary: these are what a swatch is painted, while the
-// words themselves are in en.json. `satisfies` is doing real work here — a
+// words themselves are in en.json, under `vocabulary.*` since 1.9 — a screen's
+// namespace was the wrong home for words a second screen now reads (118). `satisfies` is doing real work here — a
 // colour added to enums.ts fails this file at compile time, which makes it the
 // one mirror on this project that cannot silently drift (CONVENTIONS.md's
 // hand-mirrored-constant problem, for once with a compiler watching it).
@@ -62,7 +63,7 @@ const SWATCHES = {
             (click)="chooseCategory(category)"
             [class]="chipClass(filters().category === category)"
           >
-            {{ i18n.t('wardrobe.filter.category.' + category) }}
+            {{ i18n.t('vocabulary.category.' + category) }}
           </button>
         }
       </div>
@@ -102,7 +103,7 @@ const SWATCHES = {
                      carries no text. DECISIONS.md 114. -->
                 <button
                   type="button"
-                  [attr.aria-label]="i18n.t('wardrobe.filter.color.' + color)"
+                  [attr.aria-label]="i18n.t('vocabulary.color.' + color)"
                   [attr.aria-pressed]="filters().color_primary === color"
                   [style.background-color]="swatch(color)"
                   (click)="chooseColor(color)"

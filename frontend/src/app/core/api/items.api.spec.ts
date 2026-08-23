@@ -108,4 +108,54 @@ describe('ItemsApi', () => {
     expect(request.request.body).toBeInstanceOf(FormData);
     request.flush({ items: [] });
   });
+
+  // --- task 1.9 -----------------------------------------------------------
+
+  it('reads one item by id', () => {
+    api.get('item-1').subscribe();
+
+    mock.expectOne(`${environment.apiUrl}/items/item-1`).flush({});
+  });
+
+  it('patches rather than puts, and sends the body as given', () => {
+    api.update('item-1', { category: 'top', fit: null }).subscribe();
+
+    const request = mock.expectOne(`${environment.apiUrl}/items/item-1`);
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.body).toEqual({ category: 'top', fit: null });
+    request.flush({});
+  });
+
+  // An explicit null is a supplied value on this endpoint — the server merges
+  // with exclude_unset — so it has to survive serialisation rather than being
+  // dropped the way an undefined would be.
+  it('keeps an explicit null in the body', () => {
+    api.update('item-1', { color_primary: null }).subscribe();
+
+    const request = mock.expectOne(`${environment.apiUrl}/items/item-1`);
+    expect(JSON.stringify(request.request.body)).toBe('{"color_primary":null}');
+    request.flush({});
+  });
+
+  it('deletes by id', () => {
+    api.archive('item-1').subscribe();
+
+    const request = mock.expectOne(`${environment.apiUrl}/items/item-1`);
+    expect(request.request.method).toBe('DELETE');
+    request.flush({});
+  });
+
+  // The default matters more than the parameter: every caller that does not
+  // ask for force must not send it, or the 409 is never produced. 122.
+  it('sends no force parameter unless asked', () => {
+    api.retag('item-1').subscribe();
+
+    mock.expectOne(`${environment.apiUrl}/items/item-1/retag`).flush({});
+  });
+
+  it('sends force=true when asked', () => {
+    api.retag('item-1', true).subscribe();
+
+    mock.expectOne(`${environment.apiUrl}/items/item-1/retag?force=true`).flush({});
+  });
 });

@@ -391,6 +391,86 @@ and the gate can only see one of the two. `DECISIONS.md` 110, 113, 115.
 filtered URL reopens filtered, and whether the chip row scrolls. Neither has a
 test that could tell the truth from a lie.
 
+**Extended at task 1.9**, because a tag editor is form controls, focus and a
+destructive confirmation, and the lists above measure none of the three. Probed
+against the same jsdom 28.1.0 and the same builder:
+
+```
+select.options / .value / .selectedIndex                work
+select.value = 'no-such-option'                         value "" , selectedIndex -1
+change on programmatic .value =                         does NOT fire
+change on dispatchEvent(new Event('change'))            fires
+select.disabled / option.selected                       supported
+element.focus() -> document.activeElement               moves; focus event fires
+plain <div>.focus()                                     does not take focus
+<div tabindex="-1">.focus()                             takes focus
+autofocus attribute on append                           NOT honoured
+element.inert                                           NOT supported
+window.confirm(...)                                     function; returns undefined ("Not implemented")
+window.alert / window.prompt                            same
+HTMLDialogElement.showModal / close                     still undefined
+form.requestSubmit / reportValidity                     function
+input.setCustomValidity                                 function
+element.checkVisibility                                 undefined
+```
+
+**One of these decided a design and one decided every spec in the task.**
+`window.confirm` exists as a function and returns `undefined`, which is falsy —
+so a delete written as `if (confirm(...))` would **never proceed under any test
+in this project**, and would read as thoroughly tested while its destructive
+branch never ran. That is `DECISIONS.md` 098's shape a second time, and it is
+why the delete is a two-press button (126). The missing `inert` is the other
+half of the same decision: a modal confirmation would need a hand-rolled focus
+trap, which is what 126 declined on cost.
+
+And **`change` does not fire on a programmatic `.value =`** — which is not a
+jsdom artefact, no browser does either. Every spec in this task dispatches the
+event by hand, and nothing may depend on an assignment firing one. The
+illegal-value line is the useful other half: assigning a value a `<select>` has
+no option for leaves `value` as `""` and `selectedIndex` as `-1`, which is what
+"the row carries a tag this category does not offer" looks like in the DOM, and
+`tag-editor.spec.ts` asserts it.
+
+Focus, by contrast, is **more** visible than it was at 1.6: `.focus()` moves
+`document.activeElement`, the `focus` and `blur` events fire, and
+`tabindex="-1"` works — so the delete button's disarm-on-blur is genuinely
+gated, where the upload sheet's focus behaviour was not.
+
+### The item detail mutation run, task 1.9
+
+Sixteen mutations plus a control, run from a copy of the mirror with the
+baseline green at both ends. **One survived, and the defect was in a test rather
+than in the code.**
+
+`M6` changed `route.snapshot.paramMap.get('id')` to `get('itemId')` and **all
+296 tests passed.** The cause was `item-detail.page.spec.ts`'s `ActivatedRoute`
+stub: `{ get: () => currentId }` answers *every* key with the same value, so it
+could not tell the right parameter name from a wrong one. The stub now honours
+the key and the same mutation fails 33 tests. **A stub that ignores its argument
+is a stub that cannot fail**, which is the general form of this and is worth
+more than the row.
+
+**The three survivors declared before the run were all caught**, which is the
+first time on this project that a full set of predictions has been wrong in that
+direction:
+
+| Declared | Result |
+|---|---|
+| the delete not removing the row from `items()` | caught, 2 tests |
+| the `total` decrement firing for a fallback-fetched row | caught, 1 test |
+| the category cascade clearing four of five fields | caught, 2 tests |
+
+The first two were predicted to survive because `WardrobePage`'s constructor
+reloads on every arrival, which makes the store mutation invisible on screen —
+and that reasoning is still correct. What it missed is that the tests written
+for them are **store-level**, deliberately, precisely because the page cannot
+see the difference. The prediction was about the screen and the tests are not.
+
+The control — `item` computed to always return `null` — fails 38 tests. An
+earlier control renaming the computed did not compile, and per this document's
+own rule that is **inconclusive rather than a catch**; it was replaced rather
+than recorded.
+
 ### The polling mutation run, task 1.7
 
 Seventeen mutations plus a fatal control, run from a pristine copy with the

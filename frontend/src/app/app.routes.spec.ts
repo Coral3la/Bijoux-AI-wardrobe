@@ -32,4 +32,23 @@ describe('routes', () => {
   it('sends an unknown URL to the wardrobe rather than to a blank page', async () => {
     expect(await navigate('/does-not-exist')).toBe('/wardrobe');
   });
+
+  // Declared above the wildcard. Below it, every item link would redirect to
+  // the grid — which looks like a working app and silently loses the screen.
+  it('resolves an item id rather than falling through to the wildcard', async () => {
+    expect(await navigate('/wardrobe/item-1')).toBe('/wardrobe/item-1');
+  });
+
+  it('still guards the detail route', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter(routes),
+        { provide: AuthService, useValue: { isAuthenticated: () => false } },
+      ],
+    });
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/wardrobe/item-1');
+
+    expect(router.url).toBe('/login');
+  });
 });

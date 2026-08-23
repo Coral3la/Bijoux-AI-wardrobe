@@ -51,3 +51,27 @@ export interface ItemListResponse {
 export interface ItemUploadResponse {
   readonly items: readonly Item[];
 }
+
+// The PATCH body. Mirrors `ItemUpdate` in backend/app/schemas/item.py, which
+// types every field permissively on purpose: shape is Pydantic's and meaning is
+// the vocabulary's. `null` is a value here rather than an omission — the server
+// merges with exclude_unset, so a field present as null clears the column and a
+// field absent is left alone. Task 1.9 sends all fourteen every time, so the
+// distinction never arises from this client; it is typed honestly anyway,
+// because the next caller may not. DECISIONS.md 119.
+export interface ItemUpdate {
+  readonly category?: string | null;
+  readonly subcategory?: string | null;
+  readonly fit?: string | null;
+  readonly length?: string | null;
+  readonly rise?: string | null;
+  readonly color_primary?: string | null;
+  readonly color_secondary?: string | null;
+  readonly pattern?: string | null;
+  readonly material?: string | null;
+  readonly formality?: number | null;
+  readonly warmth?: number | null;
+  readonly layer?: string | null;
+  readonly water_resistant?: boolean | null;
+  readonly display_name?: string | null;
+}

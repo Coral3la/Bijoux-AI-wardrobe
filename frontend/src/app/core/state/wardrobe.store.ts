@@ -1,10 +1,10 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { Observable, Subscription, tap } from 'rxjs';
 
 import { ItemsApi } from '../api/items.api';
 import { Category, Color } from '../../shared/models/enums';
-import { Item } from '../../shared/models/item.model';
+import { Item, ItemUpdate } from '../../shared/models/item.model';
 
 // One page, always. 04-API-SPEC.md caps `limit` at 200 and nothing in the plan
 // sends `offset`, because task 1.8 filters client-side over whatever is loaded
@@ -317,14 +317,17 @@ export class WardrobeStore {
     this.uploadErrorSignal.set(null);
   }
 
-  retag(id: string): void {
+  // `force` is the caller's and defaults off. Item detail sends the unforced
+  // request first and only passes true once the 409 has been shown and
+  // answered; the grid tile has no way to pass it. DECISIONS.md 122.
+  retag(id: string, force = false): void {
     if (this.retryingSignal().has(id)) {
       return;
     }
     this.setRetrying(id, true);
     this.setRetagError(id, null);
 
-    this.api.retag(id).subscribe({
+    this.api.retag(id, force).subscribe({
       next: (item) => {
         this.replace(item);
         // Without this the retry on a given-up tile does nothing visible: the
@@ -501,6 +504,48 @@ export class WardrobeStore {
       }
       return next;
     });
+  }
+
+  // Waiting, never optimistic. An edited row written locally would be an `Item`
+  // no server issued, on the one collection whose contract is that everything
+  // in it came off the wire — and it is worse than the synthetic row 097
+  // refused, because a preview is visibly not a row where a guessed edit is
+  // indistinguishable from a real one. The server also decides things this
+  // client cannot: whether five dependent fields were cleared, and whether the
+  // row has just stopped being `failed` (116). DECISIONS.md 120.
+  edit(id: string, changes: ItemUpdate): Observable<Item> {
+    return this.api.update(id, changes).pipe(
+      tap((item) => {
+        this.replace(item);
+        // The row the user has just corrected by hand is not the row that
+        // failed to retag, so the message about that failure goes. Cleared on
+        // success only: a rejected save leaves the tile saying what it said.
+        this.setRetagError(id, null);
+      }),
+    );
+  }
+
+  // The first operation in this project that removes a row from `items()`
+  // without a load(), which makes it the first test of the leak 093 accepted:
+  // both id-keyed collections are dropped here rather than left to outlive
+  // their row. `total` is the caller's problem, not this method's — see
+  // `forget`. DECISIONS.md 121.
+  archive(id: string): Observable<Item> {
+    return this.api.archive(id).pipe(tap(() => this.forget(id)));
+  }
+
+  // Split out from `archive` because only the caller knows whether this row was
+  // ever counted. A row fetched by id on a deep link never entered `items()`
+  // and was never in `total`, so decrementing for it would understate the
+  // wardrobe by one until the next load. DECISIONS.md 121.
+  forget(id: string): void {
+    const present = this.itemsSignal().some((item) => item.id === id);
+    this.itemsSignal.update((items) => items.filter((item) => item.id !== id));
+    if (present) {
+      this.totalSignal.update((total) => Math.max(0, total - 1));
+    }
+    this.setRetagError(id, null);
+    this.resumeWaiting(id);
   }
 
   private setRetagError(id: string, key: string | null): void {

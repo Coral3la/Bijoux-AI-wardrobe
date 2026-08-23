@@ -25,6 +25,7 @@ src/app/
 │   ├── auth/            login.page.ts, register.page.ts
 │   ├── wardrobe/        wardrobe.page.ts, upload-sheet.ts, item-card.ts,
 │   │                    item-detail.page.ts, tag-editor.ts, filter-bar.ts
+│   │                    (all built; shared/ui/ below is still empty)
 │   ├── stylist/         stylist.page.ts, look-request-form.ts, look-card.ts
 │   ├── trips/           trips.page.ts, trip-form.ts, packing-view.ts, day-strip.ts
 │   └── profile/         profile.page.ts
@@ -32,7 +33,7 @@ src/app/
 │   ├── ui/              button, chip, sheet, skeleton, empty-state, spinner, toast
 │   ├── models/          user.model.ts, item.model.ts, look.model.ts,
 │   │                    trip.model.ts, enums.ts
-│   └── pipes/           cloudinary-url.pipe.ts, enum-label.pipe.ts
+│   └── pipes/           cloudinary-url.pipe.ts (built at 1.9), enum-label.pipe.ts
 
 src/environments/        environment.model.ts, environment.ts,
                          environment.development.ts
@@ -95,7 +96,7 @@ The home screen and the most-used surface.
 │  │img │ │img │ │▓▓▓▓│          │  ← 3-col mobile, 5-col desktop
 │  └────┘ └────┘ └────┘             ▓▓▓▓ = dimmed photo, status processing
 │  ┌────┐ ┌────┐ ┌────┐          │
-│  │img │ │ ⚠ │ │img │          │  ← ⚠ = failed, tap to retry
+│  │img │ │ ⚠ │ │img │          │  ← ⚠ = failed: retry, or add tags by hand
 │  └────┘ └────┘ └────┘          │
 ├────────────────────────────────┤
 │         [ + Add items ]        │  ← FAB, bottom-right on mobile
@@ -149,9 +150,21 @@ The **+ Add items** FAB in §2's mockup is also 1.6's. It is not decoration: the
 
 ### 4. Item detail — `/wardrobe/:id`
 
-Large image, all tags shown as chips. **Edit tags** opens `tag-editor`, where every field is a select bound to the closed vocabulary — never a free-text input. Also: wear count and last worn *(Stage 3)*, retag, delete.
+**Built at task 1.9, and this section is rewritten rather than annotated** — as originally written it described a screen no task in Stage 1 could build.
 
-**Primary action on this screen: "Style around this."** It navigates to the stylist with `anchor_item_id` pre-set and the item shown pinned at the top of the form. This is the shortest path from *I am looking at this garment* to *here is what goes with it*, and it is the original problem the product exists to solve — do not bury it behind the edit and delete actions.
+The image at the `detail` transform, built from `image_public_id` through `cloudinary-url.pipe.ts`: the server sends `image_url` as a 300px padded thumbnail and nothing else, so this is the first screen in the project that cannot use it (`DECISIONS.md` 118). The name in the **body** face, per §Typography's rule — this is one of the four surfaces that renders text the project did not write.
+
+The editor is always open rather than behind an **Edit tags** control, because there is nothing else on the screen to be behind. Ten selects bound to the closed vocabulary, `formality` and `warmth` as 1.8's range controls, `water_resistant` as a checkbox, and **`display_name` as a text input** — the stage brief's "never a free-text input" is about tags, and a name is not a tag (`DECISIONS.md` 125). Every save sends all fourteen fields; changing the category empties the five dependent fields on screen and sends them as explicit nulls (119). The category select offers a placeholder only while the row has no category, and never a way to clear one it has (123). Subcategory narrows by category because that is a value mirror; nothing else narrows, because the rest are rules and they stay server-side (124).
+
+**The editor does not open on a `processing` row** — a background task is in flight and would overwrite the edit seconds later — and the page enforces that itself, because a deep link can land on one. A row still `failed` after a save says so, on the status the response carried (116).
+
+**Retag is one control.** It sends the unforced request; a `409 item_edited` opens a second step naming what will be discarded, and only that step sends `force=true`. Forcing straight away whenever `user_edited` is set would mean the `409` is never produced from the UI, and Stage 1's sixth acceptance criterion would stay a route test (122). **Delete arms on the first press and deletes on the second** — not `window.confirm`, which returns `undefined` in the test environment, and not a modal (126).
+
+Wear count and last worn remain *(Stage 3)*: the columns arrive at migration `0003`, so the section says so rather than rendering a zero that would change meaning when they land.
+
+**"Style around this" is not built, and this is where it was promised.** The line that said *"Primary action on this screen … do not bury it behind the edit and delete actions"* described a navigation into the stylist with `anchor_item_id` pre-set — a Stage 2 screen, out of scope for the whole of Stage 1, and named in no Stage 1 task. It is not cut: it is the first thing this screen should gain when the stylist exists, and the reasoning for it stands — it is the shortest path from *I am looking at this garment* to *here is what goes with it*. Recorded here so that whoever builds Stage 2 finds it, on 090's test: ownership, not affordance.
+
+**The route into this screen was specified nowhere.** The grid legend below gives a tile one behaviour, "tap to retry". Task 1.9 makes the tile's photograph a link to `/wardrobe/:id`, with the retry button as its sibling rather than inside it — an anchor wrapping a button is nested interactive content (`DECISIONS.md` 129). A `failed` tile also carries **Add tags by hand**, which is `03-AI-CONTRACTS.md`'s long-promised "Add manually" link and `AUDITS.md` **O-3**.
 
 The tag editor is not optional polish. Vision tagging is wrong on roughly 10–20% of items, and this screen is both the fix and the answer to "what happens when the AI is wrong?"
 

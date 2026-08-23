@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import en from '../../../../public/i18n/en.json';
@@ -72,7 +73,14 @@ async function render(
 describe('ItemCard', () => {
   beforeEach(async () => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      // The tile's image is a link since 1.9, so RouterLink needs a router to
+      // inject. Nothing here navigates; the routes exist so the directive can
+      // resolve an href.
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([{ path: 'wardrobe/:id', children: [] }]),
+      ],
     });
     mock = TestBed.inject(HttpTestingController);
 
@@ -197,5 +205,53 @@ describe('ItemCard', () => {
 
     expect(text()).toContain('Tagging failed');
     expect(text()).not.toContain('We stopped waiting');
+  });
+
+  // --- task 1.9 -----------------------------------------------------------
+
+  function links(): HTMLAnchorElement[] {
+    return [...(fixture.nativeElement as HTMLElement).querySelectorAll('a')];
+  }
+
+  it('makes the photograph a link to the item', async () => {
+    await render(item());
+
+    expect(links()[0].getAttribute('href')).toBe('/wardrobe/item-1');
+  });
+
+  // An anchor containing a button is nested interactive content: no browser
+  // agrees on it and no screen reader announces it the same way twice. 129.
+  it('keeps the retry button outside the link', async () => {
+    await render(item({ status: 'failed' }));
+
+    expect(links()[0].querySelector('button')).toBeNull();
+    expect(retryButton()).not.toBeNull();
+  });
+
+  it('names the garment in the links accessible label', async () => {
+    await render(item());
+
+    expect(links()[0].getAttribute('aria-label')).toBe('Open white oversized shirt');
+  });
+
+  // O-3, promised by 03 line 401 since it was written and built by no task
+  // until now. It is this editor, reached from the failed tile.
+  it('offers Add manually on a failed tile', async () => {
+    await render(item({ status: 'failed' }));
+
+    const manual = links().find((link) => link.textContent?.includes('Add tags by hand'));
+    expect(manual?.getAttribute('href')).toBe('/wardrobe/item-1');
+  });
+
+  it('offers it on a stopped-waiting tile too, which has the same way out', async () => {
+    await render(item({ status: 'processing' }), false, null, true);
+
+    expect(links().some((link) => link.textContent?.includes('Add tags by hand'))).toBe(true);
+  });
+
+  it('does not offer it on a healthy tile', async () => {
+    await render(item());
+
+    expect(links().some((link) => link.textContent?.includes('Add tags by hand'))).toBe(false);
   });
 });

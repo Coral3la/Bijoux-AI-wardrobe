@@ -4,7 +4,12 @@ import { Observable } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { ItemStatus } from '../../shared/models/enums';
-import { Item, ItemListResponse, ItemUploadResponse } from '../../shared/models/item.model';
+import {
+  Item,
+  ItemListResponse,
+  ItemUpdate,
+  ItemUploadResponse,
+} from '../../shared/models/item.model';
 
 @Injectable({ providedIn: 'root' })
 export class ItemsApi {
@@ -37,11 +42,32 @@ export class ItemsApi {
     return this.http.post<ItemUploadResponse>(`${environment.apiUrl}/items/upload`, body);
   }
 
-  // No `force` parameter: overwriting a hand-corrected item needs a
-  // confirmation, and that belongs beside the "You edited this" badge on item
-  // detail (task 1.9). Sending force=true from a grid tile would defeat the
-  // only thing the 409 exists to do.
-  retag(id: string): Observable<Item> {
-    return this.http.post<Item>(`${environment.apiUrl}/items/${id}/retag`, null);
+  // `force` is off by default and every caller sends the unforced request
+  // first. The grid tile cannot pass it at all; item detail sends it only after
+  // a 409 has come back and the user has been told, by name, what it discards.
+  // Defaulting it to true whenever `user_edited` is set would be the obvious
+  // shortcut and would mean the 409 is never produced from the UI — which is
+  // the whole of acceptance criterion 6. DECISIONS.md 122.
+  retag(id: string, force = false): Observable<Item> {
+    const url = `${environment.apiUrl}/items/${id}/retag`;
+    return this.http.post<Item>(force ? `${url}?force=true` : url, null);
+  }
+
+  get(id: string): Observable<Item> {
+    return this.http.get<Item>(`${environment.apiUrl}/items/${id}`);
+  }
+
+  // PATCH, not PUT: the endpoint merges over the stored row. The body is still
+  // every field the form holds (119) — that is the client's choice, not the
+  // wire's, and it is what keeps the server's category-clearing branch from
+  // firing behind a form that has already cleared those fields on screen.
+  update(id: string, changes: ItemUpdate): Observable<Item> {
+    return this.http.patch<Item>(`${environment.apiUrl}/items/${id}`, changes);
+  }
+
+  // DELETE is a soft archive and answers with the whole row, so the caller can
+  // see `is_archived` rather than infer it from a 204. 04-API-SPEC.md, O-1.
+  archive(id: string): Observable<Item> {
+    return this.http.delete<Item>(`${environment.apiUrl}/items/${id}`);
   }
 }
