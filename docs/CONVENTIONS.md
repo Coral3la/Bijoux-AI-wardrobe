@@ -106,29 +106,99 @@ Comment **why**, never **what**. Code that needs a comment to explain what it do
 
 The test is whether the sentence is false **now**, not whether it is about to be. Where a sentence is deliberately temporary, say what replaces it and when, so the next reader tidies it on purpose rather than by instinct. This applies to comments and to the documents alike; in this project the tidy has been the mistake more often than the comment has.
 
-## Delivering code, and what a paste cannot carry
+## Delivering code
 
-Code on this project is printed by the agent and pasted by the developer (`DECISIONS.md` 017). That transfer has a measured limit, found at task 1.2a: **a line that exceeds the display width cannot be transferred by paste with confidence, and comments are where that fails silently.**
+Every file this agent produces is **written to disk**, and the delivery is a
+printed `git --no-pager diff` over what it touched. The developer reviews what
+landed rather than what was intended, then stages and commits by hand.
+`DECISIONS.md` 117.
 
-Code fails loudly. A truncated statement does not compile, an unbalanced paren is caught by the next lint run, and a printed line count catches a block that never landed. **A truncated comment leaves a working file whose reasoning has a hole in it, and nothing anywhere reports that** — the file imports, the suite is green, and the sentence explaining why a line exists simply stops mid-word. At 1.2a six comment lines arrived cut at the same visual column and one three-line comment vanished entirely, in a file whose every statement was byte-correct.
+That is the whole rule. The review did not go away when the paste did — it moved
+to the diff, and the standard is the one this project already applied to the tree
+before every commit: **verify the tree, not the intent.** An unread diff is the
+same failure an unpasted module was.
 
-So, and this is the whole boundary:
+Alongside the diff, say what the file is responsible for, what it imports and
+what will import it, and the two or three decisions inside it that could have
+gone another way. Where a change spans several files, say how many. A file with
+nothing worth saying about it is declared as such in one line rather than padded.
 
-**Prose files — prompts, templates, documentation, tests — are written to disk. Python modules under `backend/app/` are printed for the developer to paste, always, with no exception for verified output.**
+`DECISIONS.md` **017 is untouched and still in force**: the agent runs no git
+command that writes, and the developer stages and commits by hand. That entry is
+about commits and has never been about file delivery — see 117 for the citation
+this section used to carry and why it did not hold.
 
-**Amended at task 1.5, and scoped: from 1.5 onward, everything under `frontend/` is written to disk.** The boundary line above is unchanged where it matters — **Python modules under `backend/app/` are still printed in full for manual paste, always, with no exception for verified output.** What moved is only the frontend, and the review moved with it rather than being dropped: the agent writes the files and delivers a **summary by file** — one line each on what the file does and on any decision inside it a later reader could reverse — and the developer reads `git diff` against that summary before staging. A file with nothing worth saying about it is declared as such in one line rather than padded.
+Verification did not move either. Code is still built and run in a scratchpad
+mirror first — lint, type-check, test — before it is written into the tree, and
+the measured output is quoted rather than the behaviour asserted. What changed is
+who types the file, not whether it was known-good before it arrived.
 
-The reason the frontend can carry this and `backend/app/` cannot is what 1.2a actually measured. The paste exists because the developer reads the file on the way past (`DECISIONS.md` 017), and the width rule exists because a truncated comment leaves a working file with a hole in its reasoning and nothing reports it. A `git diff` review answers the first of those and is *immune* to the second — a diff is not retyped, so no line can arrive cut at column 66. What it gives up is the enforced slowness of typing a module out, which is a real loss on a file whose every line is a judgement call and a smaller one on a component template. This is a delivery change, not a review change: an unread frontend diff is the same failure as an unpasted module, and the summary is what makes it readable.
+### Why the paste existed, and what it measured — history
 
-"Verified" is named in that line because it is the argument that has twice looked like a licence and is not one. The paste is not a quality gate that a lint run can stand in for; it is the developer reading the file on the way past, which is the entire content of `DECISIONS.md` 017. A module that is linted, type-checked, tested and green has satisfied nothing that rule was asking for.
+Retired at task 1.9 and kept because the findings are real and the reasoning is
+why the rule stood for nine tasks. **None of the measurements below is
+withdrawn.** Two of the rules they justified are now moot and are marked as such;
+they are not deleted, because a reader meeting a narrow comment in
+`backend/app/` should be able to find out why it is narrow.
 
-- **Amended at task 1.2b, because as written this bullet swallowed the printing rule whole.** It read *a file whose delivery includes comment prose is written to disk by the agent* — and every Python module in this project includes comment prose, so read literally it exempted all of them. That is not what 1.2a measured: the finding was six truncated comment lines in one pasted file, and the fix it justified was for files that are *only* prose. A Python module is still printed, comments and all; what protects its comments is the width rule below, not an exemption from pasting.
-- **Extended at task 1.2b: prompt and template files under `backend/app/` are written, not printed, whole — and nothing else is.** `app/prompts/vision_system.md` is prose end to end and is *sent to a model*, so the failure is worse than a hole in the reasoning — a sentence truncated mid-word still loads, still renders its `{{VOCABULARY}}` block, still returns plausible tags, and instructs the model wrong for as long as nobody re-reads it. Nothing can see it: it compiles nothing, lints as markdown, and every test that reads the prompt asserts on substrings that survive the cut. The rule above already covered it by intent and did not say so, which is the sort of gap that gets re-litigated every session.
+The rule was: prose files written to disk, Python modules under `backend/app/`
+printed in a fenced block for the developer to paste, always, with no exception
+for verified output. It existed because the developer reads the file on the way
+past, and it had a measured cost.
 
-  **This carve-out did not reach source, and at 1.2b it was used as though it had.** `app/services/vision.py` was written to disk rather than printed. That was wrong on its own terms — the carve-out names prompts and templates, a service module is neither — and the reason it looked defensible is the one the line above forbids: the file had been linted, type-checked and run in the mirror, so printing it felt like ceremony over an already-correct result. It was not ceremony; it was the review. The file stays on disk because it has since been read and approved, not because the rule permitted it. **From task 1.3 every Python module under `backend/app/` is printed. Read the boundary line, not this precedent.**
-- **Where a whole file is printed anyway, comment lines stay inside the narrowest pane the developer reads in.** The measured truncation point at 1.2a was **66 columns**; the comments that failed were written to 80. That number is a property of one pane on one day and will not survive a font change, so re-measure before trusting it. This bullet used to end *and prefer writing to disk*, which for a Python module is now exactly the wrong instinct: the module is printed, and keeping its comments narrow is the whole of the mitigation.
-- **A partial-block paste loses comments exactly as a truncated one does, and is harder to spot.** Found at task 1.4, on the `onupdate` line 1.3 added to `app/models/item.py`: the code landed byte-correct and the five comment lines above it did not arrive at all. Three of those five were 71–72 columns, over the measured limit, because the width pass that fixed `tagging.py` was never re-run over the smaller edits in the same delivery — so **re-measure every block in a delivery, not just the long file.** The second half of the lesson is the shape of the delivery rather than the width: a whole file printed once is checkable against a line count, whereas a change delivered as three separate blocks — one import, one parameter, one comment — has no total to check, and the block that goes missing is the one that compiles fine without it. Where a change is several blocks, say how many, and put the prose block first rather than last.
-- **Printed code is read back out of the verified mirror, never retyped.** The mirror is where it was linted, type-checked and run (`verify before printing`), so retyping it into a message reintroduces exactly the class of error the mirror exists to remove. At 1.2a a retyped block lost two closing parens and would not have compiled.
+- **The truncation, task 1.2a.** A line exceeding the display width could not be
+  transferred by paste with confidence, and comments were where that failed
+  silently. Code fails loudly — a truncated statement does not compile, an
+  unbalanced paren is caught by lint, a printed line count catches a block that
+  never landed. **A truncated comment leaves a working file whose reasoning has a
+  hole in it and nothing reports it.** Six comment lines arrived cut at the same
+  visual column and one three-line comment vanished entirely, in a file whose
+  every statement was byte-correct.
+- **The partial block, task 1.4.** On the `onupdate` line added to
+  `app/models/item.py`, the code landed byte-correct and the five comment lines
+  above it did not arrive at all. Three were 71–72 columns, over the limit,
+  because the width pass that fixed `tagging.py` was never re-run over the
+  smaller edits in the same delivery. The second half of that lesson was about
+  the shape of a delivery rather than its width: a whole file printed once is
+  checkable against a line count, and a change split into three blocks has no
+  total to check — the block that goes missing is the one that compiles fine
+  without it. **This is why a multi-file diff still says how many files it
+  covers.**
+- **The correction, task 1.2b.** The carve-out for prose was twice read as wider
+  than it was. First as a bullet that, read literally, exempted every Python
+  module in the project — every one of them contains comment prose. Then as
+  licence to write `app/services/vision.py` to disk because it had been linted,
+  type-checked and run in the mirror. Both were wrong on the rule's own terms,
+  and the second is the one worth carrying forward: **"verified" was never a
+  licence.** A module that is green has satisfied nothing that a review pass was
+  asking for. That argument survives the retirement intact — it is now an
+  argument about reading the diff.
+- **Moot: the 66-column width rule.** Comment lines in printed code were kept
+  inside the narrowest pane the developer read in; the measured truncation point
+  at 1.2a was 66 columns and the comments that failed were written to 80. Nothing
+  is retyped now, so nothing can arrive cut. The number was a property of one
+  pane on one day in any case. Comments already written narrow stay as they are;
+  there is no reason to widen them and no reason to keep the constraint.
+- **Moot: "printed code is read back out of the verified mirror, never
+  retyped."** Its purpose was to stop a retyped block reintroducing the errors
+  the mirror existed to remove — at 1.2a a retyped block lost two closing parens.
+  Files are copied from the mirror into the tree now, so the failure has no route
+  in. The mirror itself is not moot: see above.
+
+### The argument that generalised
+
+**Task 1.5 moved `frontend/` to write-to-disk and this is the sentence that did
+it:** a `git diff` review answers the thing the paste was for — the developer
+reading the file on the way past — and is *immune* to the thing the width rule
+was for, because **a diff is not retyped, so no line can arrive cut at column
+66.** That was written as a justification for one directory. It was always an
+argument about the medium rather than about the directory, and at 1.9 it becomes
+the argument for the whole project.
+
+What the paste gave up in exchange is real and is not recovered: the enforced
+slowness of typing a module out, on a file whose every line is a judgement call.
+The diff is faster to skim than a paste is to type, and skimming it is the
+failure mode this section now guards against rather than truncation.
 
 ## Error handling
 

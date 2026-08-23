@@ -201,6 +201,7 @@ def test_rows_sharing_a_created_at_are_ordered_by_short_id(
     returned = [row["short_id"] for row in response.json()["items"]]
     assert returned == sorted(row.short_id for row in planted)
 
+
 # --- what upload writes -----------------------------------------------------
 
 
