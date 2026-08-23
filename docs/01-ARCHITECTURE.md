@@ -54,13 +54,20 @@ The diagram names the model family. **The pin is a dated snapshot, `gpt-4o-mini-
      c. validate against enums
      d. on success → UPDATE item SET status='ready', tags…
         on failure → retry once, then status='failed'
-8. Angular polls  GET /api/v1/items?status=processing  every 2s
-   until the set is empty, then stops
+9. Angular polls  GET /api/v1/items?status=processing  every 2s,
+   and whenever an id it was waiting for is missing from that answer,
+   re-issues the full  GET /api/v1/items?limit=200  to collect the
+   tags — a body filtered to processing carries no finished row, so
+   the poll alone can never put a tag on a tile (DECISIONS.md 102)
+10. The loop stops when the set empties, and stops in any case after
+    3 minutes, marking whatever is left as no longer waited for
 ```
 
 **Why the user never waits:** the HTTP response returns after step 5, roughly 1–2 seconds for the Cloudinary upload. Tagging takes another 2–4 seconds per item and happens after the response is already on screen. Twenty items feel instant even though tagging runs for a minute.
 
 **Why polling and not WebSockets:** polling is ~15 lines, works through every proxy, and survives Render's free-tier idle behaviour. WebSockets would be the correct answer at scale; at 20 items per session they are unjustified complexity. Recorded in `DECISIONS.md`.
+
+**Steps 9 and 10 were both wrong until task 1.7 built them.** The flow numbered two consecutive steps `8` — the renumbering at 1.6 stopped one line short — and it described a loop with no bound at all, where `05-FRONTEND-SPEC.md` and `STAGE-1` have both carried the 3-minute hard stop since they were written. A flow describing an unbounded loop is the same class of error as a flow describing a poll that can show a tag it never receives, one size smaller.
 
 ---
 

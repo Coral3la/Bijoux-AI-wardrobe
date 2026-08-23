@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { Router } from '@angular/router';
 
 import { AuthService } from '../../core/auth/auth.service';
@@ -73,9 +80,10 @@ import { UploadSheet } from './upload-sheet';
           </button>
         </section>
       } @else {
-        <!-- Nothing refreshes this screen on its own until task 1.7 polls, so
-             the line names the action that does. -->
-        @if (store.processing().length > 0) {
+        <!-- Counts what the loop is still watching, not every row the server
+             calls processing: after the hard stop those are two different
+             numbers, and each abandoned tile says so for itself. -->
+        @if (store.awaitingTags().length > 0) {
           <p class="text-sm">{{ taggingLabel() }}</p>
         }
         <ul class="grid grid-cols-3 gap-3 md:grid-cols-5">
@@ -85,6 +93,7 @@ import { UploadSheet } from './upload-sheet';
                 [item]="item"
                 [retrying]="store.retrying().has(item.id)"
                 [errorKey]="store.retagErrors().get(item.id) ?? null"
+                [stoppedWaiting]="store.stoppedWaiting().has(item.id)"
                 (retry)="store.retag(item.id)"
               />
             </li>
@@ -137,7 +146,7 @@ export class WardrobePage {
   });
 
   protected readonly taggingLabel = computed(() => {
-    const count = this.store.processing().length;
+    const count = this.store.awaitingTags().length;
     return count === 1
       ? this.i18n.t('wardrobe.tagging.one')
       : this.i18n.t('wardrobe.tagging.other', { count });
@@ -145,6 +154,10 @@ export class WardrobePage {
 
   constructor() {
     this.store.load();
+    // WardrobeStore is providedIn: 'root' and outlives this component, so the
+    // loop has no owner unless one is given here. Without it a poll started on
+    // this screen keeps running behind every screen after it.
+    inject(DestroyRef).onDestroy(() => this.store.stopPolling());
   }
 
   // Cleared on open rather than on close, so a message about the last batch

@@ -434,6 +434,40 @@ than the terminal round trip described above — but it is not *reliable*:
 acceptable tags. The dependable route to a `failed` row is still the one this
 item already names, and the owner is unchanged.
 
+**Extended again at task 1.7.** The polling loop's arithmetic is gated
+thoroughly — `06-TESTING-STRATEGY.md` carries the seventeen-mutation run and
+the timer probe — and the arithmetic is not the part that fails in a browser.
+What has been seen only by tests, or not at all:
+
+- **That a browser's `setInterval` is anywhere near 2 seconds.** Chrome
+  throttles timers in background tabs to at least 1 second and can suspend them
+  entirely; Safari on iOS suspends them on lock. Every test here drives a mock
+  clock, so the *only* claim made is about the loop's own logic. Deliberately
+  no visibility handling was built (`DECISIONS.md` 107), which makes this the
+  behaviour a real device decides.
+- **The 3-minute hard stop has never elapsed in real time.** It is asserted at
+  exactly 180 000 mock milliseconds. Whether a real batch of twenty reaches it
+  is 1.3's serial tagging against a real OpenAI account, which nothing in this
+  project has yet run end to end.
+- **The stopped-waiting tile has never been looked at.** It needs a tagging run
+  that outlives three minutes, which is harder to stage by hand than the
+  `failed` tile this item already names — and its two properties are exactly
+  the ones a test states rather than shows: that it does not read as a failure,
+  and that its text fits a 110px tile at three columns on a 390px screen.
+- **The loop across a real navigation.** `fixture.destroy()` fires `DestroyRef`
+  in jsdom, which is what the test asserts. A browser back button, a bfcache
+  restore and a hard reload are three different paths and none is exercised;
+  `/wardrobe` is still the only authenticated route, so the first of them
+  becomes reachable at **1.9**.
+- **The reload's timing against a real server.** The poll and the reload are
+  serialised by construction, and every test flushes them by hand. Whether a
+  slow reload and a fast tagging run interleave the way the loop assumes is not
+  observed anywhere below a live run.
+
+**Owner: unchanged — whoever verifies task 1.9**, who will already be forcing a
+tagging failure by hand and can leave one batch running past three minutes at
+the same time.
+
 #### O-15 · `05`'s file tree names seven `shared/ui/` components and none exist — task 1.8, or whoever needs the second one
 
 `05-FRONTEND-SPEC.md` line 32 lists `shared/ui/ button, chip, sheet, skeleton,

@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import en from '../../../../public/i18n/en.json';
 import { environment } from '../../../environments/environment';
@@ -89,6 +89,29 @@ function fab(): HTMLButtonElement {
   return buttonWith('Add items');
 }
 
+// Fake timers and `await fixture.whenStable()` cannot both be true at once, and
+// this file has nineteen tests built on the second one. Measured at task 1.7
+// against vitest 4.1.10: with vi.useFakeTimers() in this file's beforeEach a
+// bare `await fixture.whenStable()` is still pending after 250ms of real time,
+// every one of those nineteen dies on the 5s test timeout, and the suite goes
+// from 2.1s to 96.4s. Angular's zoneless scheduler needs a task to run, and a
+// frozen clock never gives it one.
+//
+// So the switch happens *after* the render, never around it: real timers to get
+// a component on screen, fake timers to drive the loop, TestBed.tick() instead
+// of whenStable() from that point on. The alternative measured was
+// vi.useFakeTimers({ shouldAdvanceTime: true }), which keeps all 156 tests
+// green — and does it by advancing the mock clock 1:1 with real time, which is
+// not a fake clock in the way a deadline test needs. 06-TESTING-STRATEGY.md
+// carries the full probe.
+//
+// A run started under real timers keeps its real timer, so nothing may be
+// `processing` at the moment this is called. The tests below render a `failed`
+// tile and press its retry, which is how a run gets started on the far side.
+function switchToFakeTimers(): void {
+  vi.useFakeTimers();
+}
+
 // See wardrobe.store.spec.ts: jsdom implements neither half of the object-URL
 // API, so the upload path cannot run without these. They record that a URL was
 // asked for, nothing more.
@@ -152,6 +175,7 @@ describe('WardrobePage', () => {
   // test in the file fails on an already-instantiated TestBed instead — six
   // cascading failures hiding one real one.
   afterEach(() => {
+    vi.useRealTimers();
     try {
       mock.verify();
     } finally {
@@ -221,16 +245,18 @@ describe('WardrobePage', () => {
     expect(tiles()).toHaveLength(1);
   });
 
-  // Nothing on this screen refreshes itself until task 1.7 polls, so the line
-  // has to name the action that does.
-  it('tells a waiting user to reload while items are tagging', async () => {
+  // The screen refreshes itself from task 1.7, so the line stops naming an
+  // action the user has to take. The second half is asserted because the
+  // apology is the kind of string that survives a feature by being true when
+  // it was written and nobody re-reading it afterwards.
+  it('says what is tagging without asking the user to reload', async () => {
     await render([
       item({ id: 'a', status: 'processing' }),
       item({ id: 'b', status: 'processing' }),
     ]);
 
-    expect(text()).toContain('Tagging 2 items');
-    expect(text()).toContain('Reload the page');
+    expect(text()).toContain('Tagging 2 items, one after another');
+    expect(text()).not.toContain('Reload');
   });
 
   it('says nothing about tagging when every item is ready', async () => {
@@ -365,5 +391,83 @@ describe('WardrobePage', () => {
     await fixture.whenStable();
 
     expect(buttonWith('Add items')).toBeUndefined();
+  });
+  // --- polling, task 1.7 ---------------------------------------------------
+
+  // A failed tile with its retry pressed is how these tests get a `processing`
+  // row without rendering one: see switchToFakeTimers() above for why a run
+  // must not already be armed when the clock freezes.
+  function startTagging(): void {
+    retryButtons()[0].click();
+    mock
+      .expectOne(`${environment.apiUrl}/items/a/retag`)
+      .flush(item({ id: 'a', status: 'processing', display_name: null }));
+    TestBed.tick();
+  }
+
+  function poll() {
+    return mock.expectOne(
+      (candidate) => candidate.method === 'GET' && candidate.params.get('status') === 'processing',
+    );
+  }
+
+  // The reload is not load(), and this is the test that says why: load() sets
+  // isLoading, and this page swaps the whole grid for a loading line when it is
+  // true. Reusing it would blank the wardrobe every time one item finished.
+  it('does not blank the grid while a poll reloads it', async () => {
+    await render([item({ id: 'a', status: 'failed' })]);
+    switchToFakeTimers();
+    startTagging();
+
+    vi.advanceTimersByTime(2000);
+    poll().flush({ items: [], total: 0 });
+    TestBed.tick();
+
+    expect(text()).not.toContain('Loading your wardrobe');
+    expect(tiles()).toHaveLength(1);
+
+    mock
+      .expectOne((candidate) => candidate.method === 'GET' && !candidate.params.has('status'))
+      .flush({ items: [item({ id: 'a', display_name: 'black wool coat' })], total: 1 });
+    TestBed.tick();
+
+    expect(tileText(0)).not.toContain('Tagging');
+  });
+
+  // C7 bridged rather than papered over. The server still calls this row
+  // processing and may yet finish it, so the tile may not say it failed and may
+  // not take the danger token 057 reserves for something being wrong.
+  it('says it stopped waiting rather than that tagging failed', async () => {
+    await render([item({ id: 'a', status: 'failed' })]);
+    switchToFakeTimers();
+    startTagging();
+
+    for (let elapsed = 2000; elapsed <= 180_000; elapsed += 2000) {
+      vi.advanceTimersByTime(2000);
+      poll().flush({ items: [item({ id: 'a', status: 'processing' })], total: 1 });
+    }
+    TestBed.tick();
+
+    expect(tileText(0)).toContain('We stopped waiting');
+    expect(tileText(0)).not.toContain('Tagging failed');
+    expect(text()).not.toContain('Tagging 1 item');
+    expect(retryButtons()).toHaveLength(1);
+  });
+
+  // WardrobeStore is providedIn: 'root' and outlives this component, so nothing
+  // else would ever stop the loop. Without this the poll keeps running behind
+  // every screen the user goes to next.
+  it('stops polling when the page is destroyed', async () => {
+    await render([item({ id: 'a', status: 'failed' })]);
+    switchToFakeTimers();
+    startTagging();
+
+    vi.advanceTimersByTime(2000);
+    poll().flush({ items: [item({ id: 'a', status: 'processing' })], total: 1 });
+
+    fixture.destroy();
+
+    vi.advanceTimersByTime(60_000);
+    mock.expectNone((candidate) => candidate.method === 'GET');
   });
 });

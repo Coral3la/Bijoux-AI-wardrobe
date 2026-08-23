@@ -59,11 +59,13 @@ async function render(
   value: Item,
   retrying = false,
   errorKey: string | null = null,
+  stoppedWaiting = false,
 ): Promise<void> {
   fixture = TestBed.createComponent(ItemCard);
   fixture.componentRef.setInput('item', value);
   fixture.componentRef.setInput('retrying', retrying);
   fixture.componentRef.setInput('errorKey', errorKey);
+  fixture.componentRef.setInput('stoppedWaiting', stoppedWaiting);
   await fixture.whenStable();
 }
 
@@ -159,5 +161,41 @@ describe('ItemCard', () => {
     await render(item({ status: 'failed' }), false, 'wardrobe.error.retagEdited');
 
     expect(text()).toContain('would overwrite your changes');
+  });
+  // --- what the loop giving up looks like, task 1.7 ------------------------
+
+  it('offers a retry on an item the loop stopped waiting for', async () => {
+    await render(item({ status: 'processing', display_name: null }), false, null, true);
+
+    expect(text()).toContain('We stopped waiting');
+    expect(retryButton()).not.toBeNull();
+  });
+
+  // C7. The server still calls this row processing and may yet finish it, so
+  // the tile may not borrow the failure's words — and it may not borrow the
+  // danger token either, which 057 reserves for something being wrong.
+  it('does not call a stopped wait a tagging failure', async () => {
+    await render(item({ status: 'processing', display_name: null }), false, null, true);
+
+    expect(text()).not.toContain('Tagging failed');
+    expect(text()).not.toContain('Tagging…');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.text-danger')).toBeNull();
+  });
+
+  // The flag is read with the status and never alone: it outlives its row until
+  // the next load(), so on an item that has since come back `ready` it is stale
+  // and must draw nothing at all.
+  it('ignores a stale stopped-waiting flag on a row that has since finished', async () => {
+    await render(item({ status: 'ready' }), false, null, true);
+
+    expect(text()).not.toContain('We stopped waiting');
+    expect(retryButton()).toBeNull();
+  });
+
+  it('shows the failure rather than the stopped wait when the row really failed', async () => {
+    await render(item({ status: 'failed' }), false, null, true);
+
+    expect(text()).toContain('Tagging failed');
+    expect(text()).not.toContain('We stopped waiting');
   });
 });

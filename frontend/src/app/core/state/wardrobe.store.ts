@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { Subscription } from 'rxjs';
 
 import { ItemsApi } from '../api/items.api';
 import { Item } from '../../shared/models/item.model';
@@ -10,8 +11,32 @@ import { Item } from '../../shared/models/item.model';
 // the grid shows the newest 200 while the header still states the true total.
 export const WARDROBE_PAGE_SIZE = 200;
 
+// DECISIONS.md 007, and 01-ARCHITECTURE.md and 05-FRONTEND-SPEC.md both give
+// the same two numbers. They are pinned to hand-transcribed literals in
+// wardrobe.store.spec.ts rather than asserted against themselves: at 1.6 every
+// expectation about MAX_UPLOAD_BYTES was written in terms of it, so mutating
+// the constant moved the goalposts and the whole suite stayed green (101).
+export const POLL_INTERVAL_MS = 2000;
+export const POLL_DEADLINE_MS = 180_000;
+
 interface ApiErrorBody {
   readonly code?: string;
+}
+
+// The guard C6's sketch in 05-FRONTEND-SPEC.md lacks, and it is the run itself
+// rather than a boolean beside it: a run cannot exist without the timer and
+// request it owns, so "are we polling" and "is anything scheduled" cannot drift
+// apart. One place creates it, one place destroys it. DECISIONS.md 103.
+//
+// `seen` is every id this run has ever waited for, and it is what pushes the
+// deadline out when a second batch arrives mid-run (DECISIONS.md 108). It is
+// deliberately not the set the reload decision compares against: that one is
+// the ids awaited at the moment a response lands, where this one is cumulative.
+interface PollRun {
+  deadline: number;
+  readonly seen: Set<string>;
+  timer: ReturnType<typeof setTimeout> | null;
+  request: Subscription | null;
 }
 
 // A file the user picked, on screen before the request answers. Deliberately
@@ -75,8 +100,10 @@ export class WardrobeStore {
   private readonly pendingSignal = signal<readonly PendingUpload[]>([]);
   private readonly uploadingSignal = signal(false);
   private readonly uploadErrorSignal = signal<string | null>(null);
+  private readonly stoppedWaitingSignal = signal<ReadonlySet<string>>(new Set());
 
   private pendingKeySeq = 0;
+  private run: PollRun | null = null;
 
   readonly items = this.itemsSignal.asReadonly();
   readonly total = this.totalSignal.asReadonly();
@@ -87,11 +114,36 @@ export class WardrobeStore {
   readonly pending = this.pendingSignal.asReadonly();
   readonly isUploading = this.uploadingSignal.asReadonly();
   readonly uploadError = this.uploadErrorSignal.asReadonly();
+  readonly stoppedWaiting = this.stoppedWaitingSignal.asReadonly();
 
   readonly isEmpty = computed(() => this.itemsSignal().length === 0);
   readonly processing = computed(() =>
     this.itemsSignal().filter((item) => item.status === 'processing'),
   );
+
+  // The subtraction is what keeps the loop and the screen saying the same
+  // thing. A `processing` row the loop has given up on is one the user has
+  // been told we stopped waiting for, and an effect keyed on `processing` goes
+  // on waiting for it — silently, for another three minutes, from the next
+  // time anything else puts a row into the collection. DECISIONS.md 105.
+  readonly awaitingTags = computed(() =>
+    this.processing().filter((item) => !this.stoppedWaitingSignal().has(item.id)),
+  );
+
+  constructor() {
+    effect(() => {
+      const awaiting = this.awaitingTags();
+      if (awaiting.length === 0) {
+        this.stopPolling();
+        return;
+      }
+      if (this.run === null) {
+        this.startPolling(awaiting);
+        return;
+      }
+      this.extendDeadline(this.run, awaiting);
+    });
+  }
 
   load(): void {
     this.loadingSignal.set(true);
@@ -101,6 +153,12 @@ export class WardrobeStore {
       next: (response) => {
         this.itemsSignal.set(response.items);
         this.totalSignal.set(response.total);
+        // An explicit fresh start, so anything the last visit gave up on is
+        // waited for again. The poll's own reload deliberately does not do
+        // this: clearing mid-run would return a given-up id to `awaitingTags`
+        // with the deadline already behind it, and the run would give up and
+        // clear and give up again.
+        this.stoppedWaitingSignal.set(new Set());
         this.loadingSignal.set(false);
       },
       error: () => {
@@ -160,12 +218,146 @@ export class WardrobeStore {
     this.api.retag(id).subscribe({
       next: (item) => {
         this.replace(item);
+        // Without this the retry on a given-up tile does nothing visible: the
+        // 202 puts the row back to `processing`, `awaitingTags` still excludes
+        // it, and no run starts. Cleared on success rather than on click, so a
+        // refused retag leaves the tile saying what it said before.
+        this.resumeWaiting(id);
         this.setRetrying(id, false);
       },
       error: (error: unknown) => {
         this.setRetagError(id, retagErrorKey(error));
         this.setRetrying(id, false);
       },
+    });
+  }
+
+  // Called from the wardrobe page's DestroyRef. This service is
+  // providedIn: 'root' and outlives the page, so a run nobody stops keeps
+  // polling behind whatever screen comes next. DECISIONS.md 107.
+  stopPolling(): void {
+    const run = this.run;
+    if (run === null) {
+      return;
+    }
+    if (run.timer !== null) {
+      clearTimeout(run.timer);
+    }
+    run.request?.unsubscribe();
+    this.run = null;
+  }
+
+  private startPolling(awaiting: readonly Item[]): void {
+    this.run = {
+      deadline: Date.now() + POLL_DEADLINE_MS,
+      seen: new Set(awaiting.map((item) => item.id)),
+      timer: null,
+      request: null,
+    };
+    this.schedule(this.run);
+  }
+
+  // A second batch arriving mid-run gets its own three minutes rather than the
+  // remainder of the first one's. 098 keeps the sheet open after a camera
+  // capture precisely so the next garment can be shot immediately, so
+  // back-to-back batches are the designed path — and two full batches tag
+  // serially for longer than one deadline covers. DECISIONS.md 108.
+  private extendDeadline(run: PollRun, awaiting: readonly Item[]): void {
+    let arrived = false;
+    for (const item of awaiting) {
+      if (!run.seen.has(item.id)) {
+        run.seen.add(item.id);
+        arrived = true;
+      }
+    }
+    if (arrived) {
+      run.deadline = Date.now() + POLL_DEADLINE_MS;
+    }
+  }
+
+  private schedule(run: PollRun): void {
+    run.timer = setTimeout(() => {
+      run.timer = null;
+      this.poll(run);
+    }, POLL_INTERVAL_MS);
+  }
+
+  // Request one of two. This one answers "which of these is still tagging",
+  // and it can never answer "what did the others become" — a body filtered to
+  // status=processing carries no finished row. DECISIONS.md 102.
+  private poll(run: PollRun): void {
+    const awaited = new Set(this.awaitingTags().map((item) => item.id));
+
+    run.request = this.api.list(WARDROBE_PAGE_SIZE, 'processing').subscribe({
+      next: (response) => {
+        run.request = null;
+        // Compared as ids rather than as a count. A second batch landing while
+        // the first is finishing can leave the count unchanged with the
+        // membership completely different, and the reload would never fire.
+        const stillTagging = new Set(response.items.map((item) => item.id));
+        if ([...awaited].some((id) => !stillTagging.has(id))) {
+          this.reload(run);
+          return;
+        }
+        this.rearm(run);
+      },
+      // Q5: a dropped connection or a cold start on Render is not news. The
+      // deadline is what bounds a poll that never succeeds, and a red banner
+      // over an otherwise healthy grid is the worse answer. DECISIONS.md 106.
+      error: () => {
+        run.request = null;
+        this.rearm(run);
+      },
+    });
+  }
+
+  // Request two of two, and the only one that ever puts a tag on a tile. It is
+  // not load(): that sets isLoading, and the page swaps the entire grid for a
+  // loading line when it is true — so reusing it would blank the wardrobe
+  // every time a single item finished tagging.
+  private reload(run: PollRun): void {
+    run.request = this.api.list(WARDROBE_PAGE_SIZE).subscribe({
+      next: (response) => {
+        run.request = null;
+        this.itemsSignal.set(response.items);
+        this.totalSignal.set(response.total);
+        this.rearm(run);
+      },
+      error: () => {
+        run.request = null;
+        this.rearm(run);
+      },
+    });
+  }
+
+  // Re-armed after the whole step settles, reload included, rather than run
+  // from a fixed interval: one poll in flight at a time is then a property of
+  // the loop rather than a hope about how fast the server answers.
+  // DECISIONS.md 104.
+  private rearm(run: PollRun): void {
+    if (Date.now() >= run.deadline) {
+      this.giveUp();
+      return;
+    }
+    this.schedule(run);
+  }
+
+  // Nothing is written into `items` — a client-side 'failed' would be a row no
+  // server issued, on the one model whose contract is that everything in it
+  // came off the wire, and 1.8 filters that collection while 1.9 edits from
+  // it. 097 stays intact; this is a second collection beside it, the same
+  // shape as `retrying` and `retagErrors`. DECISIONS.md 105.
+  private giveUp(): void {
+    const abandoned = this.awaitingTags().map((item) => item.id);
+    this.stoppedWaitingSignal.update((current) => new Set([...current, ...abandoned]));
+    this.stopPolling();
+  }
+
+  private resumeWaiting(id: string): void {
+    this.stoppedWaitingSignal.update((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
     });
   }
 

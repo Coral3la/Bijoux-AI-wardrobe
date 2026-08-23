@@ -352,6 +352,126 @@ re-measurement. It is also the reason `AUDITS.md` **O-14** grew rather than
 closed. If `browsers` is ever configured, most of this list stops being true —
 re-measure before trusting it.
 
+### The polling mutation run, task 1.7
+
+Seventeen mutations plus a fatal control, run from a pristine copy with the
+baseline green at both ends. **One survived**, and it falsified a claim that
+had been written into the task's plan as its central finding.
+
+| # | Behaviour deleted | Caught by |
+|---|---|---|
+| M0 | fatal control: the reload throws away the rows it fetched | 4 tests |
+| M1 | the loop re-arms at request time, so polls overlap | 10 tests |
+| M2 | the reload decision compares counts instead of ids | `reloads on a change of membership that leaves the count alone` |
+| M3 | the reload decision is inverted | 3 tests |
+| M4 | the deadline is never checked | 5 tests |
+| M5 | the poll writes `total` from its own response | `takes the header total from the reload and never from the poll` |
+| M6 | the reload sets `isLoading` like `load()` does | `does not blank the grid while a poll reloads it` |
+| M7 | a failed poll sets the load error | `keeps polling through a failed poll and reports nothing` |
+| M8 | the effect is keyed on `processing()` rather than `awaitingTags()` | **survived — 180 passed.** Now `does not resume waiting for an abandoned item when a later batch finishes` |
+| M9 | `POLL_INTERVAL_MS` 2000 → 3000 | 9 tests |
+| M10 | `POLL_DEADLINE_MS` 180 000 → 90 000 | 6 tests |
+| M11 | the deadline comparison `>=` → `>` | 5 tests — **declared an expected survivor before the run** |
+| M12 | a mid-run batch does not push the deadline out | `gives a batch that arrives mid-run its own three minutes` |
+| M13 | the retry never resumes waiting for an abandoned item | `waits for an abandoned item again once its retag succeeds` |
+| M14 | `load()` no longer clears what the last visit gave up on | `waits again for everything after a fresh load` |
+| M15 | the tile reads the stopped-waiting flag without the status | 2 tests |
+| M16 | the page never stops the loop on destroy | `stops polling when the page is destroyed` |
+
+**M8 is the finding, and what makes it worth the space is that the survivor
+disproved the reason it was written.** The plan for this task named the
+subtracted computed as its central design decision, on this reasoning: an
+effect keyed on `processing()` would see a non-empty set and a null run the
+instant giving up wrote its signal, and would restart the loop it had just
+stopped. **That mechanism does not exist.** An effect that reads only
+`processing()` no longer *depends* on the signal giving up writes, so it never
+re-runs at all — which is precisely why nothing failed. The design is right and
+the argument for it was wrong, and the two are not the same thing.
+
+What is actually reachable is quieter: the loop stays stopped until something
+else changes `items()`, and the next upload restarts it with the abandoned
+rows back in the run. When *that* batch finishes, the loop keeps polling for an
+item whose tile already says we stopped waiting for it — three more minutes of
+the screen and the loop disagreeing, with nothing on screen to say so. That is
+what the closing test asserts, and it is a smaller claim than the one it
+replaced.
+
+**M11 is the second declared survivor in two tasks to be caught**, after M-U at
+1.6. It was declared expected-to-survive unless a test landed on the exact
+deadline; the boundary test was written for it and five tests failed. The
+declarations keep being wrong in the same direction, and they keep being worth
+making — because the mutation that actually survived, both times, was one
+nobody had predicted.
+
+**M9 and M10 are 101's lesson applied before the fact rather than after.** Every
+timing expectation in `wardrobe.store.spec.ts` could have been written as
+`POLL_INTERVAL_MS ± 1`, which is exactly the shape that let the mebibyte
+mutation survive at 1.6. `2000` and `180_000` are instead transcribed by hand
+from `01-ARCHITECTURE.md` and `05-FRONTEND-SPEC.md`, pinned to the constants in
+one test each, and the loops that drive the clock use the literals.
+
+### Timers under the frontend gate, measured at task 1.7
+
+The jsdom list above says nothing about time, and polling is entirely about
+time. Probed against **vitest 4.1.10** on the same builder:
+
+```
+vi.useFakeTimers() replaces setInterval / setTimeout    yes
+                   replaces queueMicrotask / Promise    no
+Date.now() and performance.now() advance                yes, exactly
+requestAnimationFrame                                   defined, and faked
+rxjs interval(2000) / timer(180_000)                    driven by advanceTimersByTime
+vi.getTimerCount() / vi.clearAllTimers()                work
+vi.setSystemTime(+180s) fires pending timers            no — moves the clock only
+HttpTestingController expectOne / flush / match         work, synchronously
+DestroyRef.onDestroy on fixture.destroy()               fires
+document.visibilityState via defineProperty             overridable
+visibilitychange / focus / blur / pagehide / online     dispatchable and heard
+real waiting inside a test (globalThis.setTimeout)      impossible — it is faked too
+```
+
+**And the one that decided how every polling test is written:**
+
+```
+await fixture.whenStable() under fake timers     never resolves
+```
+
+Angular's zoneless scheduler needs a task to run and a frozen clock never gives
+it one. This is not academic: `whenStable` is used **62 times across 7 spec
+files**. Adding `vi.useFakeTimers()` to `wardrobe.page.spec.ts`'s `beforeEach`
+was measured rather than reasoned about — **19 of that file's tests fail, every
+one on the 5-second timeout, and the suite goes from 2.1s to 96.4s.**
+
+Three ways out, all measured:
+
+- **`TestBed.tick()`** exists and renders synchronously under fake timers. This
+  is the `whenStable` replacement the polling tests use.
+- **`await vi.advanceTimersByTimeAsync(1)`** also flushes the scheduler.
+- **`vi.useFakeTimers({ shouldAdvanceTime: true })`** keeps all 156 tests green
+  — and does it by advancing the mock clock **1:1 with real time**, measured at
+  200ms of drift over 200ms of real waiting. It buys compatibility by not being
+  a fake clock in the way a deadline test needs, so it is safe by margin rather
+  than by construction. **Refused for that reason.**
+
+What ships instead is a **mid-test switch**: render under real timers exactly as
+every existing test does, then `vi.useFakeTimers()`, then `TestBed.tick()` from
+that point on. It is the only route that touches no existing test. One
+consequence has to be respected and is written into the helper: **a run started
+under real timers keeps its real timer**, so nothing may be `processing` at the
+moment the clock freezes — the page tests render a `failed` tile and press its
+retry to start a run on the far side of the switch.
+
+**What a polling test proves and what it does not.** It proves the arithmetic:
+a request every 2 seconds of mock time, the stop when the set empties, the stop
+at 3 minutes, the stop on destroy, the query string on the wire, and the DOM
+changing when a response lands. It does not prove that a browser's
+`setInterval` holds 2 seconds under load or in a background tab — Chrome
+throttles background intervals and can suspend them outright — nor that the
+loop survives a real navigation or a bfcache restore, nor that five real
+photographs finish inside 30 seconds, which is 1.3's serial tagging against a
+real account and is visible only by eye or in a Stage 5 end-to-end run.
+`AUDITS.md` **O-14** carries those.
+
 ### What mutation testing has actually found on this project
 
 Worth stating plainly, because it is not what the technique is usually sold for: **on this project mutation testing has found more false claims than bugs.**
@@ -365,6 +485,8 @@ Worth stating plainly, because it is not what the technique is usually sold for:
 - 1.2b: seventeen mutations, all caught — and the finding is again about a claim rather than a bug. Number 16 established that `test_a_prompt_file_without_the_placeholder_raises_at_load` does not defend the shipped prompt file, only the guard's logic, because the real failure happens at import and takes the test module with it. The test's name does not say that and its docstring implied otherwise; both now do.
 
 - 1.5: the first two genuine survivors on the project, and the first run on the frontend. Both were the same false claim — that retag state is per item — held by six passing tests that only ever exercised one item. The technique found a coverage hole rather than a bug, in code that was already green, linted and type-checked.
+
+- 1.7: the fourth survivor, and the first that killed an *argument* rather than a test or a binding. M8 established that the stated reason for the task's central design decision described a mechanism that cannot happen — an effect that stops reading a signal stops re-running on it — while the decision itself remained correct on narrower grounds. The technique found a false explanation in a document, in code that was green, linted and type-checked, and that nobody would have found by reading, because reading is how the explanation got written.
 
 - 1.6: the third survivor, and the first that was a *test* rather than a binding. `MAX_UPLOAD_BYTES` was mutated from 1024² to 1000² and nothing failed, because every expectation about it was written in terms of it. Same lesson as 1.5 from the opposite direction — there the state was tested and the binding was not, here the behaviour was tested against itself. Both were found in code that was green, linted and type-checked, and neither would have been found by reading.
 

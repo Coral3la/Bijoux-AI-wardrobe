@@ -10,6 +10,7 @@ collision is the uq_items_short_id constraint (`DECISIONS.md` 052).
 
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -144,6 +145,61 @@ def test_the_limit_cap_is_two_hundred_and_over_it_is_rejected(
     assert over_cap.status_code == 422
     assert over_cap.json()["code"] == "validation_error"
 
+
+def test_the_list_is_ordered_newest_first(
+    client: TestClient,
+    make_item: Callable[..., Item],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # created_at is planted rather than taken from the default, and it has to
+    # be: conftest joins every session to one connection-level transaction
+    # (`DECISIONS.md` 074), so now() — the *transaction* timestamp — is one
+    # value for the whole test no matter how many commits run inside it. The
+    # default cannot produce two different times here, which is the same
+    # property the tiebreak test below depends on from the other side.
+    user = make_user()
+    older = make_item(user_id=user.id, created_at=datetime(2026, 8, 20, 9, 0, tzinfo=UTC))
+    newer = make_item(user_id=user.id, created_at=datetime(2026, 8, 22, 9, 0, tzinfo=UTC))
+
+    response = client.get(LIST_URL, headers=authorization(user))
+
+    assert [row["id"] for row in response.json()["items"]] == [str(newer.id), str(older.id)]
+
+
+def test_rows_sharing_a_created_at_are_ordered_by_short_id(
+    client: TestClient,
+    db: Session,
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # 1.7's to write. Every row of one upload shares a created_at to the
+    # microsecond, so short_id is the only thing making the order total; with
+    # the tiebreak gone the sort is on one repeated value and a page can
+    # repeat or drop rows between two polls. The symptom is tiles changing
+    # places, which reads as a grid bug and sends you to the wrong file.
+    #
+    # The shared timestamp is asserted rather than assumed. Without that line
+    # this test would still pass if now() ever became the statement timestamp
+    # — it would just have stopped testing the tiebreak, silently.
+    user = make_user()
+    planted = [
+        Item(
+            user_id=user.id,
+            short_id=generate_short_id(),
+            image_public_id=f"bijoux/test/{uuid.uuid4().hex[:20]}",
+        )
+        for _ in range(4)
+    ]
+    db.add_all(planted)
+    db.commit()
+
+    assert len({row.created_at for row in planted}) == 1
+
+    response = client.get(LIST_URL, headers=authorization(user))
+
+    returned = [row["short_id"] for row in response.json()["items"]]
+    assert returned == sorted(row.short_id for row in planted)
 
 # --- what upload writes -----------------------------------------------------
 

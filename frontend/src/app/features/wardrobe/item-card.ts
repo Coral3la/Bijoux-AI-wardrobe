@@ -22,7 +22,7 @@ import { Item } from '../../shared/models/item.model';
         [class.opacity-30]="item().status !== 'ready'"
       />
 
-      @if (item().status === 'processing') {
+      @if (item().status === 'processing' && !gaveUp()) {
         <p class="absolute inset-x-0 bottom-0 bg-surface/90 p-1 text-center text-xs">
           {{ i18n.t('wardrobe.item.processing') }}
         </p>
@@ -30,14 +30,23 @@ import { Item } from '../../shared/models/item.model';
 
       <!-- Branches on status alone and never on "the tags are null": a retag
            leaves the previous attempt's tags in place, so a failed item may
-           arrive fully tagged or not tagged at all. DECISIONS.md 089. -->
-      @if (item().status === 'failed') {
+           arrive fully tagged or not tagged at all. DECISIONS.md 089.
+           The second condition is not a status and does not pretend to be —
+           the server still calls this row processing and may yet finish it. -->
+      @if (item().status === 'failed' || gaveUp()) {
         <div
           class="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-surface/90 p-1 text-center"
         >
-          <p class="text-xs font-medium text-danger">
-            <span aria-hidden="true">⚠</span> {{ i18n.t('wardrobe.item.failed') }}
-          </p>
+          <!-- No danger token on the second one. 057 reserves it for something
+               being wrong, and nothing is: we stopped watching, which is not
+               the same claim as tagging having failed. DECISIONS.md 105. -->
+          @if (gaveUp()) {
+            <p class="text-xs">{{ i18n.t('wardrobe.item.stoppedWaiting') }}</p>
+          } @else {
+            <p class="text-xs font-medium text-danger">
+              <span aria-hidden="true">⚠</span> {{ i18n.t('wardrobe.item.failed') }}
+            </p>
+          }
           <button
             type="button"
             (click)="retry.emit()"
@@ -61,8 +70,17 @@ export class ItemCard {
   readonly item = input.required<Item>();
   readonly retrying = input(false);
   readonly errorKey = input<string | null>(null);
+  readonly stoppedWaiting = input(false);
 
   readonly retry = output<void>();
+
+  // Read with the status, never alone. A stopped-waiting id outlives its row
+  // until the next load(), so on an item that has since come back `ready` the
+  // flag is stale and must draw nothing — the same conjunction that makes
+  // 093's leftover `retagErrors` keys harmless.
+  protected readonly gaveUp = computed(
+    () => this.item().status === 'processing' && this.stoppedWaiting(),
+  );
 
   // Trimmed rather than ??: display_name is null while an item is processing
   // and stays null on one that never tagged successfully, and an empty alt on

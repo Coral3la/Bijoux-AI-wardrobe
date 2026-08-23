@@ -42,6 +42,23 @@ describe('ItemsApi', () => {
     request.flush({ items: [], total: 0 });
   });
 
+  it('sends the status filter only when one was asked for', () => {
+    api.list(200, 'processing').subscribe();
+
+    const filtered = mock.expectOne((candidate) => candidate.method === 'GET');
+    expect(filtered.request.params.get('status')).toBe('processing');
+    filtered.flush({ items: [], total: 0 });
+
+    api.list(200).subscribe();
+
+    // Both halves, because "processing is on the wire" alone would also pass on
+    // a method that always sent it — and an unfiltered list that quietly
+    // filtered would show a wardrobe of nothing but the items still tagging.
+    const unfiltered = mock.expectOne((candidate) => candidate.method === 'GET');
+    expect(unfiltered.request.params.has('status')).toBe(false);
+    unfiltered.flush({ items: [], total: 0 });
+  });
+
   it('posts a retag to the item and sends no body', () => {
     api.retag('abc').subscribe();
 

@@ -163,6 +163,12 @@ The **`status` filter** is 1.4's to write and this task's to depend on. A filter
 
 The **`created_at DESC, short_id` ordering** (`DECISIONS.md` 051) is untested and is this task's to write. `now()` is the transaction timestamp, so every row of one upload shares a `created_at` to the microsecond and the `short_id` tiebreak is the only thing making the order total; without it a page can repeat or drop rows. The symptom is tiles changing places between two polls, which reads as a grid bug and sends you to the wrong file.
 
+**One line of this task's brief could not be built as written, and finding that out before writing it is what made this a decision rather than a rewrite.** "Poll `GET /items?status=processing`" and "all 5 become `ready` with correct-looking tags, no page refresh" cannot both be true of one request: a body filtered to `status=processing` carries only rows that are *still* processing, so it can say an item has left the set and can never say what it became. `01-ARCHITECTURE.md`, `05-FRONTEND-SPEC.md` and this line all described the same impossible loop. **It is two requests** — the documented poll, and the full `GET /items?limit=200` re-issued whenever an awaited id is missing from the answer. All three documents are corrected in this task's commit. `DECISIONS.md` 102.
+
+**"Marking the rest failed in the UI" is not what ships either.** A client-written `status` would put a row no server issued into `items()`, which 1.8 filters and 1.9 edits from — 097's boundary, arriving by a second door. The abandoned ids are their own collection, and the tile says we stopped waiting rather than that tagging failed, because the server may well still be tagging. `DECISIONS.md` 105.
+
+**The 3 minutes restart when a batch arrives mid-run**, rather than being measured once from the first item. 098 keeps the sheet open after a camera capture precisely so the next garment can be shot immediately, so back-to-back batches are the designed path — and two full batches tag serially for longer than one deadline covers. `DECISIONS.md` 108.
+
 ### 1.8 Filters
 Category chips, colour swatches, formality and warmth ranges. Client-side over the loaded collection. Filter state reflected in the URL so a filtered view can be shared and reloaded.
 
@@ -234,7 +240,7 @@ The prompt also licenses a null `fit` without ever saying when one is appropriat
 
 ## Commit checkpoints
 
-`feat(ai): vision tagging service` · `feat(core): category-dependent validation` · `feat(ai): tag validation and retry` · `feat(api): background tagging` · `feat(api): item crud and retag` · `feat(web): wardrobe grid` · `feat(web): upload sheet` · `feat(web): filters` · `feat(web): tag editor` · `chore: demo seed data` · `test: golden dataset and accuracy eval`
+`feat(ai): vision tagging service` · `feat(core): category-dependent validation` · `feat(ai): tag validation and retry` · `feat(api): background tagging` · `feat(api): item crud and retag` · `feat(web): wardrobe grid` · `feat(web): upload sheet` · `feat(web): polling` · `feat(web): filters` · `feat(web): tag editor` · `chore: demo seed data` · `test: golden dataset and accuracy eval`
 
 ## If you fall behind
 

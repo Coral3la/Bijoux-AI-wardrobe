@@ -32,8 +32,8 @@
   "wardrobe.loading": "Loading your wardrobe…",
   "wardrobe.count.one": "1 item",
   "wardrobe.count.other": "{{count}} items",
-  "wardrobe.tagging.one": "Tagging 1 item. Reload the page to see it finish.",
-  "wardrobe.tagging.other": "Tagging {{count}} items, one after another. Reload the page to see them finish.",
+  "wardrobe.tagging.one": "Tagging 1 item.",
+  "wardrobe.tagging.other": "Tagging {{count}} items, one after another.",
   "wardrobe.retryLoad": "Try again",
   "wardrobe.error.load": "We couldn't load your wardrobe.",
   "wardrobe.error.retag": "We couldn't start tagging again.",
@@ -48,6 +48,7 @@
   "wardrobe.item.failed": "Tagging failed",
   "wardrobe.item.retry": "Try again",
   "wardrobe.item.retrying": "Trying…",
+  "wardrobe.item.stoppedWaiting": "We stopped waiting. It may still finish.",
   "wardrobe.item.retryLabel": "Try tagging {{name}} again",
 
   "wardrobe.upload.open": "Add items",

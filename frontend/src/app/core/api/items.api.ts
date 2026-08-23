@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
+import { ItemStatus } from '../../shared/models/enums';
 import { Item, ItemListResponse, ItemUploadResponse } from '../../shared/models/item.model';
 
 @Injectable({ providedIn: 'root' })
@@ -11,8 +12,17 @@ export class ItemsApi {
 
   // No trailing slash. The route is declared as get("") under prefix
   // "/items", so /items/ is a different path and answers with a redirect.
-  list(limit: number): Observable<ItemListResponse> {
-    return this.http.get<ItemListResponse>(`${environment.apiUrl}/items`, { params: { limit } });
+  //
+  // One method with an optional status rather than a second `listProcessing`:
+  // the poll and the reload are two requests on purpose (DECISIONS.md 102) and
+  // the call site is where that should be legible. A vocabulary value in a
+  // method name would hide it, and nothing else in this project does that.
+  list(limit: number, status?: ItemStatus): Observable<ItemListResponse> {
+    const params: Record<string, string | number> = { limit };
+    if (status !== undefined) {
+      params['status'] = status;
+    }
+    return this.http.get<ItemListResponse>(`${environment.apiUrl}/items`, { params });
   }
 
   // Every file goes under the field name `files`, which is the route's

@@ -245,6 +245,18 @@ effect(() => {
 
 Hard stop after 3 minutes; mark anything still processing as failed in the UI and offer retry. Never poll forever.
 
+**Built at task 1.7, and the sketch above is wrong in three ways that are worth keeping visible rather than editing out.**
+
+**It is two requests, not one.** A body filtered to `status=processing` contains only rows that are *still* processing, so it can tell the client that an item has left the set and can never tell it what the item became. The poll alone therefore leaves every tile dimmed and untagged for ever, which is the opposite of the acceptance criterion it exists to satisfy — *"All 5 become `ready` with correct-looking tags … no page refresh"*. The shipped loop polls `GET /items?status=processing&limit=200`, compares the returned **ids** against the ones it was waiting for, and re-issues the full `GET /items?limit=200` whenever one is missing. Ids rather than a count, because a second batch landing while the first finishes leaves the count unchanged with the membership entirely different. `DECISIONS.md` 102.
+
+**The effect needs a guard the sketch does not have.** `processing()` is computed from `items()`, and every poll response changes `items()`, so an effect written exactly as above calls `startPolling()` on every response. The guard is the run object itself — a nullable private field holding the deadline, the timer and the in-flight subscription — rather than a boolean beside it, so "are we polling" and "is anything scheduled" cannot drift apart. `DECISIONS.md` 103.
+
+**The effect reads `awaitingTags()`, not `processing()`.** Those two differ by the items the loop has stopped waiting for, and keying it on `processing()` means the loop goes on polling for rows whose tiles already say we gave up on them — silently, for another three minutes, from the next time anything puts a row into the collection. This survived the entire suite as a mutation before the test that closes it existed; `06-TESTING-STRATEGY.md` carries it.
+
+**And nothing is "marked failed in the UI".** A client-written `status` would be a row no server issued, inside the one collection whose contract is that everything in it came off the wire — and 1.8 filters that collection while 1.9 edits from it. The abandoned ids are a second collection beside `retrying` and `retagErrors`, read by the tile *together with* `status` so a stale entry on a row that has since arrived `ready` draws nothing. The tile says **"We stopped waiting. It may still finish."** and does not take `--color-danger`: the server may well still be tagging, and 057 reserves that token for something being wrong. `DECISIONS.md` 105.
+
+The re-arm is after each response settles rather than on a fixed interval, so one poll is in flight at a time by construction (104); a failed poll is ignored and the deadline bounds it (106); and the loop is stopped by the wardrobe page's `DestroyRef`, because `WardrobeStore` is `providedIn: 'root'` and outlives the screen (107).
+
 ---
 
 ## Visual direction
