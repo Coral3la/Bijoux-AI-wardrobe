@@ -73,6 +73,48 @@ function listRequest() {
   return mock.expectOne((candidate) => candidate.url === `${environment.apiUrl}/items`);
 }
 
+function uploadRequest() {
+  return mock.expectOne(`${environment.apiUrl}/items/upload`);
+}
+
+function sheet(): HTMLElement | null {
+  return (fixture.nativeElement as HTMLElement).querySelector('app-upload-sheet');
+}
+
+function strip(): HTMLElement | null {
+  return (fixture.nativeElement as HTMLElement).querySelector('app-pending-strip section');
+}
+
+function fab(): HTMLButtonElement {
+  return buttonWith('Add items');
+}
+
+// See wardrobe.store.spec.ts: jsdom implements neither half of the object-URL
+// API, so the upload path cannot run without these. They record that a URL was
+// asked for, nothing more.
+function stubObjectUrls(): void {
+  let seq = 0;
+  URL.createObjectURL = () => `blob:stub/${seq++}`;
+  URL.revokeObjectURL = () => undefined;
+}
+
+function file(name: string): File {
+  return new File([new Uint8Array(8)], name, { type: 'image/jpeg' });
+}
+
+// Drives the sheet's gallery input, which is the second of its two file
+// inputs. Same defineProperty stand-in for a FileList as upload-sheet.spec.ts.
+async function pickFromGallery(files: File[]): Promise<void> {
+  const inputs = [
+    ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLInputElement>(
+      'input[type=file]',
+    ),
+  ];
+  Object.defineProperty(inputs[1], 'files', { value: files, configurable: true });
+  inputs[1].dispatchEvent(new Event('change'));
+  await fixture.whenStable();
+}
+
 // detectChanges rather than whenStable, and only here: observing the loading
 // state means observing it while a request is deliberately unresolved, and
 // whenStable() waits on exactly that request through PendingTasks.
@@ -97,6 +139,7 @@ describe('WardrobePage', () => {
       ],
     });
     mock = TestBed.inject(HttpTestingController);
+    stubObjectUrls();
 
     const loading = TestBed.inject(I18nService).load();
     mock.expectOne('/i18n/en.json').flush(en);
@@ -239,5 +282,88 @@ describe('WardrobePage', () => {
 
     expect(tileText(1)).toContain('would overwrite your changes');
     expect(tileText(0)).not.toContain('would overwrite your changes');
+  });
+
+  it('opens the sheet from the empty state call to action', async () => {
+    await render([]);
+    expect(sheet()).toBeNull();
+
+    buttonWith('Add your first items').click();
+    await fixture.whenStable();
+
+    expect(sheet()).not.toBeNull();
+  });
+
+  // The only entry point once the wardrobe has anything in it: the empty
+  // state's CTA is inside a branch that stops rendering after the first
+  // upload, so without this the sheet is reachable once per account.
+  it('opens the sheet from the floating button on a wardrobe that has items', async () => {
+    await render([item()]);
+
+    fab().click();
+    await fixture.whenStable();
+
+    expect(sheet()).not.toBeNull();
+  });
+
+  it('closes the sheet when the sheet asks to be closed', async () => {
+    await render([item()]);
+    fab().click();
+    await fixture.whenStable();
+
+    buttonWith('Done').click();
+    await fixture.whenStable();
+
+    expect(sheet()).toBeNull();
+  });
+
+  // The load-bearing placement. The grid lives in the final @else and
+  // isEmpty() is still true until the 202 lands, so a strip rendered from
+  // inside that branch would be absent for the whole of a first upload —
+  // exactly the upload it exists for.
+  it('shows the pending strip while the wardrobe is still empty', async () => {
+    await render([]);
+    fab().click();
+    await fixture.whenStable();
+    await pickFromGallery([file('a.jpg'), file('b.jpg')]);
+
+    expect(strip()).not.toBeNull();
+
+    uploadRequest().flush({ items: [] });
+  });
+
+  // The other half of the same condition: "Your wardrobe is empty" must not
+  // sit above two photographs that are on their way into it.
+  it('hides the empty state while previews are pending', async () => {
+    await render([]);
+    fab().click();
+    await fixture.whenStable();
+    await pickFromGallery([file('a.jpg'), file('b.jpg')]);
+
+    expect(text()).not.toContain('Your wardrobe is empty');
+
+    uploadRequest().flush({ items: [] });
+  });
+
+  it('puts the uploaded rows into the grid and moves the count', async () => {
+    await render([item({ id: 'old' })], 1);
+    fab().click();
+    await fixture.whenStable();
+    await pickFromGallery([file('a.jpg'), file('b.jpg')]);
+
+    uploadRequest().flush({ items: [item({ id: 'new-1' }), item({ id: 'new-2' })] });
+    await fixture.whenStable();
+
+    expect(tiles()).toHaveLength(3);
+    expect(text()).toContain('3 items');
+    expect(strip()).toBeNull();
+  });
+
+  it('hides the floating button while the sheet is open', async () => {
+    await render([item()]);
+    fab().click();
+    await fixture.whenStable();
+
+    expect(buttonWith('Add items')).toBeUndefined();
   });
 });

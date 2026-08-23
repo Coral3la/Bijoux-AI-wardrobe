@@ -95,6 +95,8 @@ is shared so that nothing has two names, and the next audit reads them exactly
 as it reads the rest. Two are closed so far: O-1 at task 1.4 and O-4 at 1.5.
 **O-14 is the first that records an unverified surface rather than a
 contradiction** — a thing no document disagrees about and nobody has looked at.
+It was extended at 1.6 rather than duplicated, and **O-15** was opened by the
+same task.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -393,6 +395,66 @@ same thing as having looked.
 editing an item and retagging it, confirm the ⚠ tile and its retry, retry two
 failed tiles and confirm the spinner and any message land on the tile that owns
 them, and stop the backend once to see the load-error state.
+
+**Extended at task 1.6, which added more unverified surface than it closed.**
+The upload sheet's mechanism is largely outside what any automated gate in this
+project can reach, and the limits were **measured** at 1.6 rather than assumed
+— jsdom 28.1.0, the environment `@angular/build:unit-test` uses when
+`angular.json` names no `browsers`. `06-TESTING-STRATEGY.md` carries the full
+probe; what it means for this item is that the following have been seen only by
+tests, or not at all:
+
+- **`URL.createObjectURL` and `revokeObjectURL` are both `undefined`.** Every
+  preview test drives a stub. That a preview *appears*, is the right image, is
+  replaced rather than duplicated when the rows land, and that its memory is
+  released — none of it is gated anywhere.
+- **The camera.** `capture="environment"` reflects as a content attribute with
+  no property and no behaviour. Whether a phone opens the rear camera is
+  unverifiable here **and in Playwright**; it needs a real device.
+- **The picker.** `showPicker` is `undefined` and `input.click()` only fires
+  our own handlers, so neither the OS dialog opening nor `multiple` genuinely
+  multi-selecting is exercised.
+- **`DataTransfer` does not exist and `new FileList()` is an illegal
+  constructor**, so specs install an array through `Object.defineProperty`.
+  Our handler is exercised; `FileList` semantics are not.
+- **Sheet geometry.** No layout in jsdom — `getBoundingClientRect().height` is
+  `0`, there is no `matchMedia`. Bottom anchoring, the overlay sitting above
+  the grid, and the 44px tap targets on its two buttons are all unchecked.
+- **The wire.** `HttpTestingController` asserts the `FormData` we built. That
+  the browser serialises it with the right boundary, and that no
+  `Content-Type` is set by hand, is not observed against a real server.
+- **HEIC.** A `File` built in a spec lies about its contents and the backend
+  decides type from bytes, so the format most likely to arrive from an iPhone
+  is exercised nowhere below a real end-to-end run with a real fixture.
+
+**1.6 does not make this item's original five surfaces reachable.** Uploading a
+deliberately unreadable image is now possible from the UI, which is cheaper
+than the terminal round trip described above — but it is not *reliable*:
+`validate_tags` retries, and a blurred or dark photograph usually still returns
+acceptable tags. The dependable route to a `failed` row is still the one this
+item already names, and the owner is unchanged.
+
+#### O-15 · `05`'s file tree names seven `shared/ui/` components and none exist — task 1.8, or whoever needs the second one
+
+`05-FRONTEND-SPEC.md` line 32 lists `shared/ui/ button, chip, sheet, skeleton,
+empty-state, spinner, toast`. **None of the seven has ever been built.** Task
+1.5 wrote its empty state and its buttons inline in `wardrobe.page.ts`, and
+task 1.6 built its bottom sheet inline in `upload-sheet.ts` rather than create
+`shared/ui/sheet` for a single caller.
+
+Same class as **O-10** (`cloudinary-url.pipe.ts`: named by three documents,
+built by no task) and recorded on the same terms. The difference is that this
+one is seven components rather than one, and that two tasks have now
+deliberately declined to build any of them.
+
+**Recommendation.** Do not create the directory speculatively. Extract the
+first primitive at its **second** caller, not its first — 1.8's filter sheet is
+the next thing that wants a sheet, and it is the point at which "inline in the
+one component that uses it" stops being true. Whoever does that should note
+that a shared `sheet` has to carry the focus and dismissal behaviour that
+`upload-sheet.ts` currently owns for itself. If Stage 1 ends with the directory
+still empty, the honest fix is to delete the line from `05`'s tree rather than
+leave a file map describing a structure the project does not have.
 
 ---
 

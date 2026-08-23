@@ -48,5 +48,23 @@
   "wardrobe.item.failed": "Tagging failed",
   "wardrobe.item.retry": "Try again",
   "wardrobe.item.retrying": "Trying…",
-  "wardrobe.item.retryLabel": "Try tagging {{name}} again"
+  "wardrobe.item.retryLabel": "Try tagging {{name}} again",
+
+  "wardrobe.upload.open": "Add items",
+  "wardrobe.upload.title": "Add items",
+  "wardrobe.upload.tip": "Best results: lay the item flat or hang it against a plain wall.",
+  "wardrobe.upload.camera": "Take a photo",
+  "wardrobe.upload.gallery": "Choose from gallery",
+  "wardrobe.upload.done": "Done",
+  "wardrobe.upload.dismiss": "Close",
+  "wardrobe.upload.pending.one": "Uploading 1 photo…",
+  "wardrobe.upload.pending.other": "Uploading {{count}} photos…",
+  "wardrobe.upload.preview": "Uploading {{name}}",
+  "wardrobe.upload.error.tooMany": "Choose at most {{max}} photos at a time.",
+  "wardrobe.upload.error.tooLarge": "{{name}} is larger than {{max}} MB. Choose a smaller photo.",
+  "wardrobe.upload.error.unsupportedType": "One of those files isn't a JPEG, PNG, WebP or HEIC photo, so none of them were uploaded.",
+  "wardrobe.upload.error.fileTooLarge": "One of those photos is too large, so none of them were uploaded.",
+  "wardrobe.upload.error.uploadFailed": "We couldn't store those photos. Please try again.",
+  "wardrobe.upload.error.validation": "We couldn't upload those photos. Choose between 1 and 20 at a time.",
+  "wardrobe.upload.error.general": "We couldn't upload those photos. Please try again."
 }

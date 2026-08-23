@@ -274,6 +274,84 @@ mutated runs or five clean ones. It is recorded as an unexplained intermittent
 in `AUDITS.md` **O-13** and *not* as a row in this table, because a mutation
 table that contains one unexplained row is evidence for nothing.
 
+### The upload-sheet mutation run, task 1.6
+
+Twelve mutations plus a fatal control, run from a pristine copy with the
+baseline green at both ends. **One survived**, and it was a test defect rather
+than a code defect.
+
+| # | Behaviour deleted | Caught by |
+|---|---|---|
+| U0 | fatal control: the store discards the rows it loaded | 12 tests |
+| U1 | the pending strip binds every slot to the first entry | `renders one slot per pending file, each with its own src` · `names each slot after its own file, not after the first` |
+| U2 | the per-file size check is dropped | 3 tests |
+| U3 | the file-count check is dropped | `refuses more files than the server would take, and sends nothing` |
+| U4 | the total is not moved when rows arrive | `moves the total by the number of rows the upload returned` · `puts the uploaded rows into the grid and moves the count` |
+| U5 | the returned rows are appended instead of prepended | `puts the returned rows in front of the ones already loaded` |
+| U6 | the upload error branches on the status, not the code | 4 tests |
+| U7 | the size limit uses 1000² instead of 1024² | **survived — 155 passed.** Now `mirrors ten mebibytes, not ten million bytes` · `accepts a file of exactly the limit and refuses one byte more` |
+| U8 | the empty state stops being gated on pending previews | `hides the empty state while previews are pending` |
+| U9 | the sheet's open/close rule is inverted between the two inputs | `stays open after a camera capture` · `closes after a gallery pick` |
+| U10 | the multipart field name stops being `files` | `posts every file under the field name files` |
+| M-U | the object URLs are never revoked | `releases every object url it asked for once the rows arrive` · `drops the previews when the batch is rejected` |
+
+**U7 is the whole finding, and it is this document's own rule catching the
+document's own subject.** "A test that reads its expectation from the thing
+under test measures nothing on its own" was written at 1.2a about a derived
+`@parametrize`. Here every size expectation in `upload-sheet.spec.ts` was
+written as `MAX_UPLOAD_BYTES ± 1`, imported from the component — so changing
+the component's arithmetic to `1000 * 1000` moved the goalposts with it and the
+suite did not move. The mutation is the exact confusion `CONVENTIONS.md` has a
+section about, and the file that exists to catch it could not. The fix is to
+transcribe the literal (`10_485_760`) from `CONVENTIONS.md`'s own sentence and
+pin the constant to it in one test. **The limits that were *already* checked
+against literals — 20 files, the "10 MB" in the message text — were caught
+correctly**, which is what makes the shape legible: the two constants were
+tested the same way and only one of them was self-referential.
+
+**M-U was predicted to survive and did not, and the prediction being wrong is
+worth more than the row.** It was declared inconclusive-by-design before the
+run, on the reasoning that jsdom implements neither half of the object-URL API
+so a revocation test could only ever assert against its own stub. It was caught
+by two tests — which does not falsify the reasoning, it qualifies the result:
+**those two tests prove the store called our stub, not that any browser
+released anything.** Recorded as a weak catch rather than a clean one, on the
+same principle as the collection-error row at 1.2a: a table that reported this
+identically to U10 would be overstating it.
+
+### What jsdom cannot reach, measured rather than assumed
+
+`@angular/build:unit-test` names no `browsers` in `angular.json`, and the
+builder's schema is explicit that this means "tests are run in a Node.js
+environment using jsdom". Probed directly against the installed **jsdom
+28.1.0** at task 1.6, because the upload sheet is the first feature whose
+mechanism lives mostly outside what that environment implements:
+
+```
+URL.createObjectURL / revokeObjectURL   undefined
+DataTransfer                            undefined
+new FileList()                          throws — Illegal constructor
+input.files = [File]                    throws — not of type 'FileList'
+Object.defineProperty(input,'files')    works
+input.showPicker                        undefined
+input.capture                           attribute reflects; no property
+HTMLDialogElement.showModal/show/close  undefined  (only the `open` attribute)
+matchMedia / IntersectionObserver       undefined
+ResizeObserver / scrollIntoView         undefined
+getBoundingClientRect().height          0
+```
+
+Two of these changed the code rather than the tests, which is why they are
+here and not only in `AUDITS.md`: the missing `<dialog>` methods decided that
+the sheet is a plain element (`DECISIONS.md` 098), and the missing
+`DataTransfer` decided that specs install an array through
+`Object.defineProperty` and therefore exercise our handler without exercising
+`FileList` semantics. **The list is a property of the gate, not of task 1.6**,
+and it is written here so the next frontend task costs a re-read rather than a
+re-measurement. It is also the reason `AUDITS.md` **O-14** grew rather than
+closed. If `browsers` is ever configured, most of this list stops being true —
+re-measure before trusting it.
+
 ### What mutation testing has actually found on this project
 
 Worth stating plainly, because it is not what the technique is usually sold for: **on this project mutation testing has found more false claims than bugs.**
@@ -287,6 +365,8 @@ Worth stating plainly, because it is not what the technique is usually sold for:
 - 1.2b: seventeen mutations, all caught — and the finding is again about a claim rather than a bug. Number 16 established that `test_a_prompt_file_without_the_placeholder_raises_at_load` does not defend the shipped prompt file, only the guard's logic, because the real failure happens at import and takes the test module with it. The test's name does not say that and its docstring implied otherwise; both now do.
 
 - 1.5: the first two genuine survivors on the project, and the first run on the frontend. Both were the same false claim — that retag state is per item — held by six passing tests that only ever exercised one item. The technique found a coverage hole rather than a bug, in code that was already green, linted and type-checked.
+
+- 1.6: the third survivor, and the first that was a *test* rather than a binding. `MAX_UPLOAD_BYTES` was mutated from 1024² to 1000² and nothing failed, because every expectation about it was written in terms of it. Same lesson as 1.5 from the opposite direction — there the state was tested and the binding was not, here the behaviour was tested against itself. Both were found in code that was green, linted and type-checked, and neither would have been found by reading.
 
 The lesson generalises: the assertion under test is often a sentence in a document, not a branch in the code. Deleting the behaviour is the only way to find out whether the sentence was ever true.
 
@@ -331,7 +411,7 @@ Locators use `getByRole` and `getByLabel` first, `data-testid` only where the ac
 
 | # | Test | Asserts |
 |---|---|---|
-| 1 | Register → land on empty wardrobe | empty state is visible with both CTAs |
+| 1 | Register → land on empty wardrobe | empty state is visible with its one CTA, **Add your first items** |
 | 2 | Upload 3 images → tiles appear immediately | 3 tiles in `processing` before any tag arrives |
 | 3 | Tagging completes → tags render | polling resolves, tiles show `display_name` |
 | 4 | Filter by category | count matches, chip reflects selection |

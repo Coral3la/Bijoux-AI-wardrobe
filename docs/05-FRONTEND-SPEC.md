@@ -137,6 +137,10 @@ A one-line tip sits above the buttons: *"Best results: lay the item flat or hang
 
 On selection: show local previews immediately from `URL.createObjectURL`, POST the files, then replace the previews with the returned rows. The user should never see an empty screen while uploading.
 
+**Built at task 1.6**, and four things about it are decisions this section did not take. **The previews are a strip above the grid, not tiles inside it** — they have no `id`, no `status` and no `short_id`, so placing them in grid position would mean inventing those on the one model `DECISIONS.md` 059 says mirrors the wire field for field. The accepted cost is that for a second or two the newest garments sit above the grid rather than in it, and "replace the previews with the returned rows" is a visual swap (`DECISIONS.md` 097). **The sheet is a plain element rather than `<dialog>`**, because jsdom implements neither `showModal` nor `show` nor `close`, so a dialog-based sheet could not be opened by any test in this project — a testability constraint that changed a design decision, recorded as one (098). **The camera keeps the sheet open and the gallery closes it**: this section gives the rule for the camera only, and after a batch the user's next move is watching the rows arrive, which a sheet over the grid would hide (098). **This section specifies no error surface at all**, and the sheet needed one: failures render our own strings keyed by the response `code`, which means the filename `04-API-SPEC.md` puts inside `detail` is not shown — a `415` on one file out of twelve cannot say which (099).
+
+The **+ Add items** FAB in §2's mockup is also 1.6's. It is not decoration: the empty state's CTA renders inside the `isEmpty()` branch and goes away after the first upload, so without it the sheet would be reachable once per account.
+
 ### 4. Item detail — `/wardrobe/:id`
 
 Large image, all tags shown as chips. **Edit tags** opens `tag-editor`, where every field is a select bound to the closed vocabulary — never a free-text input. Also: wear count and last worn *(Stage 3)*, retag, delete.

@@ -152,6 +152,8 @@ A limit expressed in MB means **mebibytes** — 1024², not 1000². `MAX_UPLOAD_
 
 Where a limit is counted in a unit other than the one a user would count in, the error message names the unit — `DECISIONS.md` 036 is the worked example, with a minimum in characters and a maximum in bytes.
 
+**Third instance, at task 1.6, and the first one a test catches.** `upload-sheet.ts` mirrors `MAX_FILES_PER_REQUEST` (20) and `max_upload_bytes` (10 mebibytes) from `app/core/config.py`, with the same accepted cost as the two below — two hand-written copies and nothing comparing them. What is different is one measurement: a mutation run at 1.6 changed the component's arithmetic to 1000² and **all 155 tests stayed green**, because every size expectation in the spec read the component's own constant. The number is now transcribed as a literal (`10_485_760`) from the sentence above, and one test pins the constant to it. That does not detect drift from the *Python* setting — nothing can — but it does detect the mebibyte/megabyte error, which is the specific failure this section exists to name.
+
 **Second instance, at task 0.9.** `register.page.ts` mirrors both password rules: `MIN_PASSWORD_LENGTH` from `app/schemas/auth.py` and `MAX_PASSWORD_BYTES` from `app/core/security.py`, the second enforced with `TextEncoder` so the count is bytes rather than characters. Same shape as the upload limits above and the same accepted cost — two hand-written copies, nothing comparing them, and the drift invisible until a user is rejected by a rule the form allowed. The message names bytes. `DECISIONS.md` 070.
 
 ## Tests

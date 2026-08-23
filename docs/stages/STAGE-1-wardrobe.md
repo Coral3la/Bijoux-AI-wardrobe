@@ -148,6 +148,10 @@ Bottom sheet with both inputs — `capture="environment"` for the camera, `multi
 
 The tip line — *"Best results: lay the item flat or hang it against a plain wall"* — is part of the feature, not decoration. Tagging accuracy depends on it.
 
+**This task owns both entry points into the sheet, and the stage file did not say so until now.** The empty state's **Add your first items** ships inert at 1.5 and is wired here; the **+ Add items** FAB in `05-FRONTEND-SPEC.md`'s wardrobe mockup is built here too. `05` line 111 and `DECISIONS.md` 090 both assigned the pair to this task while this file named neither, which left what gets built governed from the side. The FAB is not decoration: the empty state's CTA renders inside the `isEmpty()` branch and disappears after the first upload, so without a second control the sheet is reachable exactly once per account.
+
+**The acceptance list's first line was false before this task and is corrected in its commit.** It asked for skeleton tiles; `DECISIONS.md` 091 replaced those with the dimmed photograph at 1.5 and amended `05`'s legend only. `01-ARCHITECTURE.md`'s flow 1 carried the same stale claim and is corrected with it.
+
 ### 1.7 Polling
 Poll `GET /items?status=processing` every 2 seconds while any item is processing. Stop when the set empties. Hard stop after 3 minutes, marking the rest failed in the UI.
 
@@ -218,7 +222,7 @@ The prompt also licenses a null `fit` without ever saying when one is appropriat
 
 ## Acceptance criteria
 
-- [ ] Uploading 5 photos shows 5 skeleton tiles within a second
+- [ ] Uploading 5 photos shows 5 local previews within a second, replaced by 5 dimmed-photograph tiles when the `202` lands
 - [ ] All 5 become `ready` with correct-looking tags within ~30 seconds, no page refresh
 - [ ] A deliberately bad image ends as `failed` with a working retry button
 - [ ] Filtering by category, colour, and warmth all return correct counts

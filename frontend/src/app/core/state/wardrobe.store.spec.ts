@@ -50,6 +50,37 @@ function retagRequest(id: string) {
   return mock.expectOne(`${environment.apiUrl}/items/${id}/retag`);
 }
 
+function uploadRequest() {
+  return mock.expectOne(`${environment.apiUrl}/items/upload`);
+}
+
+function file(name: string): File {
+  return new File([new Uint8Array(8)], name, { type: 'image/jpeg' });
+}
+
+// jsdom implements neither half of the object-URL API — measured at task 1.6,
+// URL.createObjectURL and URL.revokeObjectURL are both `undefined` — so the
+// store's preview path cannot run at all without these two. Read the names
+// literally: they record that the store *asked for* and *released* a URL.
+// Nothing here decodes an image, renders one, or proves a user saw anything.
+// AUDITS.md O-14 carries what that leaves unverified.
+let granted: string[] = [];
+let released: string[] = [];
+
+function stubObjectUrls(): void {
+  granted = [];
+  released = [];
+  let seq = 0;
+  URL.createObjectURL = () => {
+    const url = `blob:stub/${seq++}`;
+    granted.push(url);
+    return url;
+  };
+  URL.revokeObjectURL = (url: string) => {
+    released.push(url);
+  };
+}
+
 describe('WardrobeStore', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -57,6 +88,7 @@ describe('WardrobeStore', () => {
     });
     store = TestBed.inject(WardrobeStore);
     mock = TestBed.inject(HttpTestingController);
+    stubObjectUrls();
   });
 
   afterEach(() => {
@@ -196,5 +228,123 @@ describe('WardrobeStore', () => {
     store.retag('a');
     expect(store.retagErrors().has('a')).toBe(false);
     retagRequest('a').flush(item({ id: 'a', status: 'processing' }));
+  });
+
+  // 093's finding, applied before it can recur: every one of these uses two
+  // files, because with a single file a per-file collection and a global one
+  // are indistinguishable and six passing tests proved nothing at 1.5.
+  it('holds one pending entry per selected file, each with its own key and url', () => {
+    store.upload([file('a.jpg'), file('b.jpg')]);
+
+    const pending = store.pending();
+    expect(pending.map((entry) => entry.name)).toEqual(['a.jpg', 'b.jpg']);
+    expect(new Set(pending.map((entry) => entry.key)).size).toBe(2);
+    expect(new Set(pending.map((entry) => entry.url)).size).toBe(2);
+    uploadRequest().flush({ items: [] });
+  });
+
+  it('asks for one object url per selected file', () => {
+    store.upload([file('a.jpg'), file('b.jpg')]);
+
+    expect(granted).toHaveLength(2);
+    uploadRequest().flush({ items: [] });
+  });
+
+  it('releases every object url it asked for once the rows arrive', () => {
+    store.upload([file('a.jpg'), file('b.jpg')]);
+    uploadRequest().flush({ items: [] });
+
+    expect(released).toEqual(granted);
+  });
+
+  it('marks itself uploading while the request is in flight and clear afterwards', () => {
+    store.upload([file('a.jpg'), file('b.jpg')]);
+    expect(store.isUploading()).toBe(true);
+
+    uploadRequest().flush({ items: [] });
+    expect(store.isUploading()).toBe(false);
+  });
+
+  it('stops being uploading when the request fails', () => {
+    store.upload([file('a.jpg'), file('b.jpg')]);
+    uploadRequest().flush(
+      { detail: 'no', code: 'upload_failed' },
+      { status: 502, statusText: 'Bad Gateway' },
+    );
+
+    expect(store.isUploading()).toBe(false);
+  });
+
+  it('sends one upload while one is already in flight', () => {
+    store.upload([file('a.jpg'), file('b.jpg')]);
+    store.upload([file('c.jpg')]);
+
+    uploadRequest().flush({ items: [] });
+    mock.verify();
+  });
+
+  // GET /items orders created_at DESC, so a fresh upload belongs at the top.
+  it('puts the returned rows in front of the ones already loaded', () => {
+    store.load();
+    listRequest().flush({ items: [item({ id: 'old' })], total: 1 });
+
+    store.upload([file('a.jpg'), file('b.jpg')]);
+    uploadRequest().flush({ items: [item({ id: 'new-1' }), item({ id: 'new-2' })] });
+
+    expect(store.items().map((row) => row.id)).toEqual(['new-1', 'new-2', 'old']);
+  });
+
+  // The 202 carries no `total`, so nothing moves the header's count but this.
+  it('moves the total by the number of rows the upload returned', () => {
+    store.load();
+    listRequest().flush({ items: [item({ id: 'old' })], total: 1 });
+
+    store.upload([file('a.jpg'), file('b.jpg')]);
+    uploadRequest().flush({ items: [item({ id: 'new-1' }), item({ id: 'new-2' })] });
+
+    expect(store.total()).toBe(3);
+  });
+
+  it('drops the previews when the batch is rejected', () => {
+    store.upload([file('a.jpg'), file('b.jpg')]);
+    uploadRequest().flush(
+      { detail: 'a.jpg: nope', code: 'unsupported_file_type' },
+      { status: 415, statusText: 'Unsupported Media Type' },
+    );
+
+    expect(store.pending()).toEqual([]);
+    expect(released).toEqual(granted);
+  });
+
+  it.each([
+    ['unsupported_file_type', 415, 'wardrobe.upload.error.unsupportedType'],
+    ['file_too_large', 413, 'wardrobe.upload.error.fileTooLarge'],
+    ['upload_failed', 502, 'wardrobe.upload.error.uploadFailed'],
+    ['validation_error', 422, 'wardrobe.upload.error.validation'],
+  ])('reads the %s code rather than the status', (code, status, key) => {
+    store.upload([file('a.jpg'), file('b.jpg')]);
+    uploadRequest().flush({ detail: 'no', code }, { status, statusText: 'Error' });
+
+    expect(store.uploadError()).toBe(key);
+  });
+
+  // 092's stated degradation path: a right status with a missing or misspelled
+  // code falls to the general message rather than guessing from the status.
+  it('falls back to the general message when the body carries no code', () => {
+    store.upload([file('a.jpg'), file('b.jpg')]);
+    uploadRequest().flush({ detail: 'no' }, { status: 415, statusText: 'Unsupported Media Type' });
+
+    expect(store.uploadError()).toBe('wardrobe.upload.error.general');
+  });
+
+  it('clears an upload error when it is dismissed', () => {
+    store.upload([file('a.jpg'), file('b.jpg')]);
+    uploadRequest().flush(
+      { detail: 'no', code: 'upload_failed' },
+      { status: 502, statusText: 'Bad Gateway' },
+    );
+
+    store.dismissUploadError();
+    expect(store.uploadError()).toBeNull();
   });
 });

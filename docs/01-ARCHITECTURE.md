@@ -40,12 +40,15 @@ The diagram names the model family. **The pin is a dated snapshot, `gpt-4o-mini-
 
 ```
 1. User selects/photographs image(s)
-2. Angular POSTs multipart to  POST /api/v1/items/upload
-3. Backend uploads bytes to Cloudinary  →  public_id
-4. Backend INSERTs item row  { status: 'processing', tags: NULL }
-5. Backend returns 202 with the item rows immediately
-6. Angular renders skeleton tiles in the grid at once
-7. BackgroundTask per item:
+2. Angular renders local previews from URL.createObjectURL, before any request
+3. Angular POSTs multipart to  POST /api/v1/items/upload
+4. Backend uploads bytes to Cloudinary  →  public_id
+5. Backend INSERTs item row  { status: 'processing', tags: NULL }
+6. Backend returns 202 with the item rows immediately
+7. Angular replaces the previews with the rows, drawn as dimmed
+   photographs — not skeletons; the image_url is on the wire in this
+   first response (DECISIONS.md 091)
+8. BackgroundTask per item:
      a. build Cloudinary transform URL (800px, JPEG — pinned, not negotiated)
      b. call OpenAI vision with the strict JSON schema
      c. validate against enums

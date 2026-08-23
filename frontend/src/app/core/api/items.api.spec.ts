@@ -50,4 +50,45 @@ describe('ItemsApi', () => {
     expect(request.request.body).toBeNull();
     request.flush({});
   });
+
+  // The field name is the route's parameter name, so it is the one thing here
+  // that a rename on either side breaks silently: the request still posts, and
+  // FastAPI answers 422 for a field it never received.
+  it('posts every file under the field name files', () => {
+    const a = new File([new Uint8Array(4)], 'a.jpg', { type: 'image/jpeg' });
+    const b = new File([new Uint8Array(4)], 'b.jpg', { type: 'image/jpeg' });
+
+    api.upload([a, b]).subscribe();
+
+    const request = mock.expectOne(`${environment.apiUrl}/items/upload`);
+    const body = request.request.body as FormData;
+    expect((body.getAll('files') as File[]).map((file) => file.name)).toEqual(['a.jpg', 'b.jpg']);
+    request.flush({ items: [] });
+  });
+
+  it('uploads with POST to /items/upload', () => {
+    api.upload([new File([new Uint8Array(4)], 'a.jpg', { type: 'image/jpeg' })]).subscribe();
+
+    const request = mock.expectOne(`${environment.apiUrl}/items/upload`);
+    expect(request.request.method).toBe('POST');
+    request.flush({ items: [] });
+  });
+
+  // Setting Content-Type by hand removes the multipart boundary the browser
+  // writes, and the request arrives at the server unparseable.
+  it('sets no content type of its own on the upload', () => {
+    api.upload([new File([new Uint8Array(4)], 'a.jpg', { type: 'image/jpeg' })]).subscribe();
+
+    const request = mock.expectOne(`${environment.apiUrl}/items/upload`);
+    expect(request.request.headers.get('Content-Type')).toBeNull();
+    request.flush({ items: [] });
+  });
+
+  it('sends a FormData body rather than a json array', () => {
+    api.upload([new File([new Uint8Array(4)], 'a.jpg', { type: 'image/jpeg' })]).subscribe();
+
+    const request = mock.expectOne(`${environment.apiUrl}/items/upload`);
+    expect(request.request.body).toBeInstanceOf(FormData);
+    request.flush({ items: [] });
+  });
 });

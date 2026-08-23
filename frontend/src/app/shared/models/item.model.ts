@@ -45,3 +45,9 @@ export interface ItemListResponse {
   readonly items: readonly Item[];
   readonly total: number;
 }
+
+// POST /items/upload answers with the same full item and no `total`, so a
+// client that appends these rows has to move its own count. DECISIONS.md 100.
+export interface ItemUploadResponse {
+  readonly items: readonly Item[];
+}
