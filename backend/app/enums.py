@@ -200,6 +200,32 @@ LAYERS_BY_CATEGORY: dict[Category, LayerRule] = {
 # restating it in a second language's worth of rules.
 CATEGORY_DEPENDENT_FIELDS: tuple[str, ...] = ("subcategory", "rise", "fit", "length", "layer")
 
+# What it takes for a row to describe a garment: the ten columns that carry no
+# meaning when null. `fit`, `length`, `rise` and `color_secondary` are absent
+# because a null in any of them is an answer (`02-DATA-MODEL.md` makes all four
+# always-nullable), not a gap.
+#
+# Two callers, one definition. `vision.py` asks whether the model answered
+# everything and adds `confidence` to this list for itself; `PATCH /items/{id}`
+# asks whether a garment is described well enough to leave `failed`, and cannot
+# ask about `confidence` at all — `ItemUpdate` has no such field and
+# `ai_confidence` is null on every row that never tagged. Requiring it here
+# would make that rule unfireable on exactly the row it exists to rescue
+# (`DECISIONS.md` 116). The name difference is real and is `tagging.py`'s:
+# the model answers `confidence` and the column is `ai_confidence` (028).
+REQUIRED_TAG_FIELDS: tuple[str, ...] = (
+    "category",
+    "subcategory",
+    "color_primary",
+    "pattern",
+    "material",
+    "formality",
+    "warmth",
+    "layer",
+    "water_resistant",
+    "display_name",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class TagIssue:

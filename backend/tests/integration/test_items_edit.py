@@ -20,7 +20,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.enums import CATEGORY_DEPENDENT_FIELDS
+from app.enums import CATEGORY_DEPENDENT_FIELDS, REQUIRED_TAG_FIELDS
 from app.models.item import Item
 from app.models.user import User
 
@@ -328,6 +328,130 @@ def test_patching_another_users_item_is_404(
 
     assert response.status_code == 404
     assert response.json()["code"] == "not_found"
+
+
+# --- PATCH: the status a completed edit clears -----------------------------
+#
+# `REQUIRED_TAG_FIELDS` is imported rather than transcribed, because a field
+# gaining or losing "required" in the vocabulary must move these tests with it.
+# What is written by hand is the *boundary*: exactly one field held back is the
+# incomplete case, and it is spelled by removing one key from a complete body
+# rather than by asserting against the tuple's own length.
+
+
+def _complete_tags() -> dict[str, Any]:
+    """Every required field `JEANS` carries — nine of the ten.
+
+    Built by intersecting with `REQUIRED_TAG_FIELDS` so the two
+    cannot drift. The tenth is `water_resistant`, which `JEANS`
+    does not set and which no body here needs to: the column is
+    NOT NULL with a server default, so the row arrives carrying
+    `False` and is already complete in that field. That is the
+    free pass named in `DECISIONS.md` 116, and it is visible here
+    rather than hidden — a body of nine keys clearing a `failed`
+    status is what proves it.
+    """
+    return {field: JEANS[field] for field in REQUIRED_TAG_FIELDS if field in JEANS}
+
+
+def test_a_completed_edit_clears_a_failed_status(
+    client: TestClient,
+    make_item: Callable[..., Item],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # O-3's whole promise: tagging could not read the photograph, a person
+    # supplied the answer, and nothing else in the product clears that tile.
+    user = make_user()
+    item = make_item(user_id=user.id, status="failed", error_message="No usable answer")
+
+    response = client.patch(_url(item), json=_complete_tags(), headers=authorization(user))
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+    assert response.json()["error_message"] is None
+    assert response.json()["user_edited"] is True
+
+
+def test_an_incomplete_edit_leaves_the_row_failed(
+    client: TestClient,
+    make_item: Callable[..., Item],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # One field short of the set, and the message that explains the failure
+    # stays with the failure. `subcategory` rather than `category`, so the
+    # request is a legal one that simply does not finish the row.
+    user = make_user()
+    item = make_item(user_id=user.id, status="failed", error_message="No usable answer")
+    body = _complete_tags()
+    del body["subcategory"]
+
+    response = client.patch(_url(item), json=body, headers=authorization(user))
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    assert response.json()["error_message"] == "No usable answer"
+    assert response.json()["subcategory"] is None
+
+
+def test_a_completed_edit_does_not_touch_a_processing_row(
+    client: TestClient,
+    make_item: Callable[..., Item],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # A background task is in flight and writes every tag column when it
+    # lands (089), so a status written here would be overwritten by a task
+    # that never knew about it.
+    user = make_user()
+    item = make_item(user_id=user.id, status="processing")
+
+    response = client.patch(_url(item), json=_complete_tags(), headers=authorization(user))
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "processing"
+
+
+def test_clearing_a_field_does_not_demote_a_ready_row(
+    client: TestClient,
+    make_item: Callable[..., Item],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # The rule runs in one direction. A user clearing a tag is answering,
+    # not failing, and 109 already depends on a `ready` row being able to
+    # carry a null beside four real tags.
+    user = make_user()
+    item = make_item(user_id=user.id, **JEANS)
+
+    response = client.patch(_url(item), json={"color_primary": None}, headers=authorization(user))
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+    assert response.json()["color_primary"] is None
+
+
+def test_water_resistant_false_still_completes_the_row(
+    client: TestClient,
+    make_item: Callable[..., Item],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # `is None`, never falsiness. `water_resistant` is the one required field
+    # whose legitimate value is falsy, and reading it the other way would
+    # leave every non-waterproof garment permanently failed. The same trap is
+    # already commented at `vision.py`'s `_missing_fields`.
+    user = make_user()
+    item = make_item(user_id=user.id, status="failed", error_message="No usable answer")
+    body = _complete_tags()
+    body["water_resistant"] = False
+
+    response = client.patch(_url(item), json=body, headers=authorization(user))
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+    assert response.json()["water_resistant"] is False
 
 
 # --- DELETE ----------------------------------------------------------------

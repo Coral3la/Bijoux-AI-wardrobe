@@ -138,6 +138,29 @@ Pagination defaults to 100, and `05-FRONTEND-SPEC.md` filters client-side "over 
 
 `PATCH` returns `422` `validation_error` on an empty body. A body with no fields would otherwise be a `200` that set `user_edited` on a request which edited nothing.
 
+**A `PATCH` that completes a `failed` row clears the failure**, added at task
+1.9. When the merged result carries every field in `REQUIRED_TAG_FIELDS` —
+`category`, `subcategory`, `color_primary`, `pattern`, `material`, `formality`,
+`warmth`, `layer`, `water_resistant`, `display_name` — a `failed` row answers
+`200` with `status: "ready"` and `error_message: null`. `fit`, `length`, `rise`
+and `color_secondary` are not in the set: a null in any of them is an answer
+rather than a gap.
+
+The rule is narrow in three directions and each one is deliberate. **It never
+writes `processing`**: a background task holds the row and writes every tag
+column when it lands, so a status set here would be overwritten seconds later by
+a task that never knew about it. **It never demotes**: a `ready` row that an edit
+leaves incomplete stays `ready`, because a user clearing a tag is answering
+rather than failing, and `DECISIONS.md` 109 already depends on a `ready` row
+being able to carry a null beside real tags. **And it is the only status this
+endpoint writes at all** — everything else about `status` remains the tagging
+path's.
+
+Before this, `PATCH` wrote tags and never touched `status`, so an item recovered
+by hand from the failed tile kept its `failed` status and its `error_message`
+permanently — `03-AI-CONTRACTS.md`'s **Add manually** link promised a recovery
+the wire had no mechanism for. `DECISIONS.md` 116.
+
 An item that exists but belongs to another user returns `404` with `code: "not_found"` on every one of these — not `403`. One code for every resource, because telling a caller that a row exists but is not theirs is an existence oracle for other people's wardrobes (`DECISIONS.md` 043).
 
 ### `POST /items/{id}/retag`

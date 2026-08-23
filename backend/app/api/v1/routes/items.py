@@ -13,6 +13,7 @@ from app.core.errors import ApiError
 from app.core.short_id import generate_short_id
 from app.enums import (
     CATEGORY_DEPENDENT_FIELDS,
+    REQUIRED_TAG_FIELDS,
     Category,
     ColorPrimary,
     ItemStatus,
@@ -141,6 +142,23 @@ def _owned(db: Session, item_id: uuid.UUID, user_id: uuid.UUID) -> Item:
 
 def _rejection(issue: TagIssue) -> str:
     return issue.reason.split(_COERCION_SUFFIX)[0]
+
+
+def _is_complete(item: Item) -> bool:
+    """Whether the row now describes a garment.
+
+    Read off the written row rather than the request, so it is
+    the saved result that decides — a partial body that finishes
+    a row someone else started counts, and one that leaves a gap
+    does not.
+
+    `REQUIRED_TAG_FIELDS` is `enums.py`'s, shared with the
+    tagging path rather than restated here. `water_resistant` is
+    in it and can never fail it: the column is NOT NULL with a
+    server default, so it is required in the vocabulary's sense
+    and free in this one.
+    """
+    return all(getattr(item, field) is not None for field in REQUIRED_TAG_FIELDS)
 
 
 def _merged(item: Item, changes: dict[str, Any]) -> dict[str, Any]:
@@ -347,6 +365,27 @@ def update_item(
     for field in _TAG_FIELDS:
         setattr(item, field, report.tags[field])
     item.user_edited = True
+
+    # The one status this endpoint writes, and it writes it in
+    # one direction. A `failed` row that now describes a garment
+    # has been recovered by hand, which is the whole of what
+    # `03-AI-CONTRACTS.md`'s "Add manually" promises and what the
+    # wire could not deliver: tagging failed, a person supplied
+    # the answer, and nothing else is going to clear the tile.
+    # `error_message` goes with it because the message explains a
+    # failure the row no longer carries.
+    #
+    # `processing` is never touched: a background task is in
+    # flight and will write every tag column when it lands (089),
+    # so a status set here would be overwritten seconds later by
+    # a task that never knew about it. `ready` is not touched
+    # either — a row that is already ready cannot be demoted by
+    # an edit that clears a field, because the user clearing a
+    # tag is answering, not failing. `DECISIONS.md` 116.
+    if item.status == ItemStatus.FAILED and _is_complete(item):
+        item.status = ItemStatus.READY
+        item.error_message = None
+
     db.commit()
 
     return ItemResponse.model_validate(item)

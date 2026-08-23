@@ -47,6 +47,7 @@ from app.core.config import settings
 from app.enums import (
     FIELD_APPLIES_TO,
     LAYERS_BY_CATEGORY,
+    REQUIRED_TAG_FIELDS,
     SUBCATEGORIES,
     VALUE_APPLIES_TO,
     Category,
@@ -374,23 +375,17 @@ class ItemTags:
 # The eleven fields whose schema type carries no null. `validate_tag_dict` reads
 # every field with `.get`, so an absent key and a null one are the same thing
 # there and both pass — correct for `PATCH`'s partial bodies, and wrong as input
-# to a typed object. The check therefore lives here and not in `enums.py`.
+# to a typed object. The *check* therefore lives here and not in `enums.py`.
 # Strict mode should make it unfireable on model output, like the first and third
 # rows of 03's table; it is what stops a short answer becoming a `TypeError`
 # escaping a background task instead of a `TaggingError`.
-_REQUIRED_FIELDS: tuple[str, ...] = (
-    "category",
-    "subcategory",
-    "color_primary",
-    "pattern",
-    "material",
-    "formality",
-    "warmth",
-    "layer",
-    "water_resistant",
-    "display_name",
-    "confidence",
-)
+#
+# The ten row fields are `REQUIRED_TAG_FIELDS` and are shared with
+# `PATCH /items/{id}`, which asks a different question of the same set. The
+# eleventh is added here and only here: `confidence` describes an answer rather
+# than a garment, so a row a person completed by hand legitimately has none.
+# `DECISIONS.md` 116.
+_REQUIRED_FIELDS: tuple[str, ...] = (*REQUIRED_TAG_FIELDS, "confidence")
 
 
 def _missing_fields(tags: Mapping[str, Any]) -> list[str]:

@@ -46,27 +46,26 @@ Then stop and wait.
 
 ### Delivering a file
 
-Default: **print it, do not write it.** Output the full contents in a fenced
-code block whose first line is a comment with the target path. She creates the
-file and pastes it in herself. This is deliberate — it is how she reads the
-structure on the way past, so do not optimise it away.
+Default: **write it, then print the diff.** Use your file tools, then run
+`git --no-pager diff` over the files you touched and print the actual output —
+the review is of what landed, not of what you intended. This replaced
+print-and-paste at task 1.9; the reading did not go away, it moved to the diff.
 
-Before the block, explain:
+Alongside the diff, explain:
 
 - what the file is responsible for
 - what it imports, and what will import it
 - the two or three decisions inside it that could have gone another way
 
-Files longer than roughly 60 lines: deliver in labelled sections, with the
-explanation for each section immediately before that section. Never dump a
-long file as one uninterrupted wall of code.
+Where a change spans several files, say how many and print the diff for all of
+them in one block. A file with nothing worth saying about it is declared as
+such in one line rather than padded.
 
-After the block, stop. Wait for "approved" or "next". Answer any questions
+After the diff, stop. Wait for "approved" or "next". Answer any questions
 before moving on.
 
-If she says "write it yourself", use your file tools for that one file —
-still explain first. If she says she wants to write a file herself from your
-instructions, switch to describing it step by step and do not print it whole.
+If she says she wants to write a file herself from your instructions, switch to
+describing it step by step and do not write it.
 
 ### Commands
 

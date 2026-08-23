@@ -252,7 +252,15 @@ The prompt also licenses a null `fit` without ever saying when one is appropriat
 
 ## Commit checkpoints
 
-`feat(ai): vision tagging service` · `feat(core): category-dependent validation` · `feat(ai): tag validation and retry` · `feat(api): background tagging` · `feat(api): item crud and retag` · `feat(web): wardrobe grid` · `feat(web): upload sheet` · `feat(web): polling` · `feat(web): filters` · `feat(web): tag editor` · `chore: demo seed data` · `test: golden dataset and accuracy eval`
+`feat(ai): vision tagging service` · `feat(core): category-dependent validation` · `feat(ai): tag validation and retry` · `feat(api): background tagging` · `feat(api): item crud and retag` · `feat(web): wardrobe grid` · `feat(web): upload sheet` · `feat(web): polling` · `feat(web): filters` · `fix(api): a completed edit clears a failed status` · `feat(web): item detail` · `chore: demo seed data` · `test: golden dataset and accuracy eval`
+
+**Task 1.9 is two commits, not one, and the first is backend.** The list above
+said `feat(web): tag editor`, which described the screen and hid the fact that
+the screen could not do its job: `PATCH /items/{id}` never touched `status`, so
+an item recovered by hand from a failed tile stayed `failed` for good and
+`03-AI-CONTRACTS.md`'s **Add manually** link promised a recovery the wire had no
+mechanism for. The fix is a narrow rule on the endpoint and it lands first, so
+the editor is written against a wire that already works. `DECISIONS.md` 116.
 
 ## If you fall behind
 

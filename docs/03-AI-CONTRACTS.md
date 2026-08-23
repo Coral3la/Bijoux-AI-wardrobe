@@ -401,6 +401,18 @@ The fallback is two-pass selection: a first cheap call picks 40 candidate IDs gi
 | Failure | User sees |
 |---|---|
 | Tagging fails after retry | Tile marked "Couldn't read this one" with a **Retry** button and an **Add manually** link |
+
+**"Add manually" is the tag editor, and the wire could not honour it until task
+1.9.** `PATCH /items/{id}` wrote tags and never touched `status`, so an item
+recovered by hand kept its `failed` status and its `error_message` for good —
+the row stayed marked "Couldn't read this one" underneath a full set of tags the
+user had just typed. The link therefore promised a recovery that did not exist.
+Fixed on the wire in this commit: a `PATCH` that leaves the row carrying every
+required tag clears `failed` to `ready` and clears `error_message` with it. The
+rule runs in one direction only and never writes `processing`, because a
+background task in flight would overwrite it seconds later. `DECISIONS.md` 116,
+`04-API-SPEC.md`'s `PATCH` section, and `AUDITS.md` **O-3**, which this half
+unblocks and task 1.9's editor closes.
 | Stylist returns invalid output twice | "I couldn't put a look together just now — try again" |
 | Wardrobe too small (< 6 ready items) | Blocked before the API call: "Add at least 6 items so I have something to work with" |
 | OpenAI timeout (> 30s) | Same message as invalid output; the request is not retried automatically |
