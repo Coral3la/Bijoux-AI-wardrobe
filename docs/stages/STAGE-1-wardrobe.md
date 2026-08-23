@@ -172,6 +172,18 @@ The **`created_at DESC, short_id` ordering** (`DECISIONS.md` 051) is untested an
 ### 1.8 Filters
 Category chips, colour swatches, formality and warmth ranges. Client-side over the loaded collection. Filter state reflected in the URL so a filtered view can be shared and reloaded.
 
+**This task does not own the grid/list toggle, and `05-FRONTEND-SPEC.md` said it did.** Line 111 there assigned the toggle to 1.8 while this brief named four things and not that one — the same shape as 1.6's FAB, where a deliverable was governed from the side, and corrected here the same way and in the opposite direction. By 090's test — **ownership, not affordance** — nothing in a stage brief requires a toggle, so building one would be an affordance nobody asked for. It stays on the cut list below and `05` is corrected in this task's commit. `DECISIONS.md` 113's neighbourhood.
+
+**The filter rule is stated on tags, never on status, and the difference is not cosmetic.** A row whose value **for the filtered field** is `null` passes that field's filter — per field, not per row, and the predicate does not read `status` at all. A null tag is an unknown rather than a non-match, and excluding it asserts something nobody has said about the garment. The concrete cost of the alternative is an upload that appears and vanishes: 1.6 renders a local preview outside the filter (097), the row that replaces it carries every tag null, and a membership-only filter removes it. Stating it on tags also means the **stopped-waiting** tile is never hidden, which matters because 105 leaves its retag as the only way out of that state — and that outcome *falls out of* the rule rather than being provided by it. `DECISIONS.md` 109.
+
+**Per field rather than per row was decided by a row 1.9 is about to make reachable.** `ItemUpdate` types every field `str | None` and `PATCH` merges with `exclude_unset=True`, so `{"color_primary": null}` is a supplied value and `validate_tag_dict` skips `None` on a strict field: a `ready` item can carry one null beside four real tags. Under a per-row reading that hand-cleared item is hidden by a filter on "black", which is the same false assertion one level down.
+
+**The loop is not filtered and does not need to be.** `awaitingTags` and both requests of 102 keep reading `items()`. Because a processing row has null tags, no tag filter can hide one, so the page's "Tagging 5 items" line sits above five visible dimmed tiles rather than above an empty grid — the two halves agree without either being special-cased.
+
+**The header is the only count on the screen**, and under a filter it states both numbers: the matched rows against the wardrobe total. 094 and 100 both survive unchanged, because `total` is still the wire's. A second count location — chip counts, or a count in the bar — would render the wardrobe size twice. `GET /items/stats` therefore stays unowned, and `05` line 68's assignment of `byCategory` to this task is corrected rather than built: it groups `visible()`, and this grid is flat. `DECISIONS.md` 111, 112.
+
+**Four properties of the test environment bind this task's code**, measured rather than recalled, and written into `06-TESTING-STRATEGY.md` as properties of the gate. A range input with no bound `value` reads **50** where a browser reads 3, so every handle carries an explicit value. jsdom does not snap to `step`, so the rounding is the store's rather than the control's. `scrollIntoView` is `undefined` and **calling it throws**, so nothing scrolls the chip row for the user. And `window.location.search` never moves under `MockPlatformLocation`, so the URL is written only through the `Router` — `history.replaceState` moves the address bar and leaves `router.url` stale.
+
 ### 1.9 Item detail and tag editor
 Full-size image, tags as chips, wear stats placeholder. The editor uses a select per field bound to the closed vocabulary — **never a free-text input**. Show a "You edited this" badge when `user_edited` is true.
 
@@ -231,7 +243,7 @@ The prompt also licenses a null `fit` without ever saying when one is appropriat
 - [ ] Uploading 5 photos shows 5 local previews within a second, replaced by 5 dimmed-photograph tiles when the `202` lands
 - [ ] All 5 become `ready` with correct-looking tags within ~30 seconds, no page refresh
 - [ ] A deliberately bad image ends as `failed` with a working retry button
-- [ ] Filtering by category, colour, and warmth all return correct counts
+- [ ] Filtering by category, colour, formality or warmth narrows the grid, the header states the matched count against the wardrobe total, and a row whose value for a filtered field is null is never hidden by that field's filter
 - [ ] Editing a tag persists, sets `user_edited`, and survives a reload
 - [ ] `retag` on an edited item returns `409` without `force`
 - [ ] `seed_demo.py` produces a browsable 40-item wardrobe from nothing

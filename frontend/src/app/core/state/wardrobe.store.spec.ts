@@ -8,8 +8,11 @@ import { Item } from '../../shared/models/item.model';
 import {
   POLL_DEADLINE_MS,
   POLL_INTERVAL_MS,
+  SCALE_MAX,
+  SCALE_MIN,
   WARDROBE_PAGE_SIZE,
   WardrobeStore,
+  applyFilters,
 } from './wardrobe.store';
 
 let store: WardrobeStore;
@@ -678,6 +681,56 @@ describe('WardrobeStore', () => {
     pollRequest().flush({ items: [item({ id: 'a', status: 'processing' })], total: 1 });
   });
 
+  // The filter object is normalised on the way in, so every one of these is
+  // asserted against a hand-written literal rather than against the value that
+  // went in — otherwise the expectation moves with the mutation. 101.
+  it('rounds a fractional scale point to a whole one', () => {
+    store.setFilters({ formality_min: 2.7 });
+
+    expect(store.filters().formality_min).toBe(3);
+  });
+
+  it('clamps a scale point to the ends of the scale', () => {
+    store.setFilters({ formality_min: 0, warmth_max: 9 });
+
+    expect(store.filters().formality_min).toBe(1);
+    expect(store.filters().warmth_max).toBe(5);
+  });
+
+  // The two handles carry no order of their own, so the pair is the interval.
+  it('orders the two handles of a range', () => {
+    store.setFilters({ formality_min: 5, formality_max: 2 });
+
+    expect(store.filters().formality_min).toBe(2);
+    expect(store.filters().formality_max).toBe(5);
+  });
+
+  it('drops a key that is not filtering on anything', () => {
+    store.setFilters({ category: undefined, color_primary: 'black' });
+
+    expect(Object.keys(store.filters())).toEqual(['color_primary']);
+  });
+
+  it('narrows the visible collection without touching the loaded one', () => {
+    loaded([
+      item({ id: 'a', category: 'top' }),
+      item({ id: 'b', category: 'bottom' }),
+      item({ id: 'c', category: 'top' }),
+    ]);
+
+    store.setFilters({ category: 'top' });
+
+    expect(store.visible().map((visible) => visible.id)).toEqual(['a', 'c']);
+    // The boundary 1.7 depends on: the loop reads items(), which a filter must
+    // never narrow, or a filtered wardrobe would stop waiting for the rows it
+    // is hiding. DECISIONS.md 109.
+    expect(store.items()).toHaveLength(3);
+  });
+
+  it('starts unfiltered', () => {
+    expect(store.filters()).toEqual({});
+  });
+
   // load() is an explicit fresh start — the page arriving, or the Try again
   // button on a failed load — so anything the last visit abandoned is waited
   // for again. The poll's own reload deliberately does not do this.
@@ -696,5 +749,139 @@ describe('WardrobeStore', () => {
     expect(store.stoppedWaiting().size).toBe(0);
     vi.advanceTimersByTime(2000);
     pollRequest().flush({ items: [item({ id: 'a', status: 'processing' })], total: 1 });
+  });
+});
+
+// Every row and every expected id below is written by hand. A test that built
+// its expectation by filtering the same collection with the same filter object
+// the predicate reads would pass against any predicate at all — including one
+// that returns its input — which is 101's self-referential failure wearing a
+// new coat, and this is the file most exposed to it.
+describe('applyFilters', () => {
+  const top = item({ id: 'top', category: 'top', color_primary: 'black', formality: 2, warmth: 1 });
+  const bottom = item({
+    id: 'bottom',
+    category: 'bottom',
+    color_primary: 'navy',
+    formality: 4,
+    warmth: 3,
+  });
+  const shoes = item({
+    id: 'shoes',
+    category: 'shoes',
+    color_primary: 'black',
+    formality: 5,
+    warmth: 2,
+  });
+  const all = [top, bottom, shoes];
+
+  function ids(filters: Parameters<typeof applyFilters>[1]): string[] {
+    return applyFilters(all, filters).map((match) => match.id);
+  }
+
+  it('returns everything when nothing is filtered', () => {
+    expect(ids({})).toEqual(['top', 'bottom', 'shoes']);
+  });
+
+  it('narrows by category', () => {
+    expect(ids({ category: 'top' })).toEqual(['top']);
+  });
+
+  it('narrows by colour', () => {
+    expect(ids({ color_primary: 'black' })).toEqual(['top', 'shoes']);
+  });
+
+  it('narrows by a formality range', () => {
+    expect(ids({ formality_min: 4, formality_max: 5 })).toEqual(['bottom', 'shoes']);
+  });
+
+  it('narrows by a warmth range', () => {
+    expect(ids({ warmth_min: 2, warmth_max: 3 })).toEqual(['bottom', 'shoes']);
+  });
+
+  // AND across dimensions, which is the only reading under which the header's
+  // "2 of 138" means anything. Multi-select within a dimension was declined
+  // rather than deferred: nothing in 1.8's brief asks for it.
+  it('combines two dimensions as AND', () => {
+    expect(ids({ category: 'shoes', color_primary: 'black' })).toEqual(['shoes']);
+    expect(ids({ category: 'top', color_primary: 'navy' })).toEqual([]);
+  });
+
+  // Both ends transcribed by hand rather than expressed against the boundary,
+  // so an off-by-one in the comparison cannot move the expectation with it.
+  it('includes a row sitting exactly on either end of a range', () => {
+    expect(ids({ formality_min: 2, formality_max: 4 })).toEqual(['top', 'bottom']);
+    expect(ids({ formality_min: 3 })).toEqual(['bottom', 'shoes']);
+    expect(ids({ formality_max: 1 })).toEqual([]);
+  });
+
+  it("exempts a null value from that field's filter", () => {
+    const untagged = item({ id: 'untagged', category: null, color_primary: null });
+
+    expect(applyFilters([untagged], { category: 'top' })).toHaveLength(1);
+    expect(applyFilters([untagged], { color_primary: 'black' })).toHaveLength(1);
+  });
+
+  it('exempts a null formality and a null warmth from their ranges', () => {
+    const untagged = item({ id: 'untagged', formality: null, warmth: null });
+
+    expect(applyFilters([untagged], { formality_min: 4 })).toHaveLength(1);
+    expect(applyFilters([untagged], { warmth_max: 1 })).toHaveLength(1);
+  });
+
+  // The test that pins the rule to *per field* rather than per row, and the row
+  // it is written for is a week away: PATCH {"color_primary": null} is a 200
+  // that clears one column, so a ready item can carry a null beside four real
+  // tags. Under a per-row reading this row would pass the category filter too.
+  it('filters a row with one null field on the fields it does have', () => {
+    const cleared = item({ id: 'cleared', category: 'top', color_primary: null });
+
+    expect(applyFilters([cleared], { category: 'bottom' })).toHaveLength(0);
+    expect(applyFilters([cleared], { category: 'top' })).toHaveLength(1);
+    expect(applyFilters([cleared], { color_primary: 'black' })).toHaveLength(1);
+  });
+
+  // Read the name literally: nothing here asserts on `status`, because the
+  // predicate does not read it. A processing row survives every filter because
+  // its tags are null, and a stopped-waiting row survives for the same reason
+  // and by the same line of code. DECISIONS.md 109.
+  it('never hides a row whose tags have not arrived, whatever its status', () => {
+    const untagged = {
+      category: null,
+      color_primary: null,
+      formality: null,
+      warmth: null,
+    } as const;
+    const processing = item({ id: 'processing', status: 'processing', ...untagged });
+    const failed = item({ id: 'failed', status: 'failed', ...untagged });
+    const everything = {
+      category: 'top',
+      color_primary: 'black',
+      formality_min: 4,
+      formality_max: 5,
+      warmth_min: 4,
+      warmth_max: 5,
+    } as const;
+
+    expect(applyFilters([processing, failed], everything).map((match) => match.id)).toEqual([
+      'processing',
+      'failed',
+    ]);
+  });
+
+  // The consequence, recorded rather than fixed: a failed row carrying tags
+  // from an earlier attempt is hidden by a filter that does not match them, and
+  // its retry goes with it. Clearing the filter is the way back. A status-aware
+  // exception was the alternative and it puts a special case inside a rule that
+  // fits in one sentence. DECISIONS.md 109.
+  it('hides a failed row that still carries tags from an earlier attempt', () => {
+    const failed = item({ id: 'failed', status: 'failed', category: 'top' });
+
+    expect(applyFilters([failed], { category: 'bottom' })).toHaveLength(0);
+  });
+
+  it('uses the same scale the vocabulary does', () => {
+    expect(SCALE_MIN).toBe(1);
+    expect(SCALE_MAX).toBe(5);
   });
 });

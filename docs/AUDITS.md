@@ -96,7 +96,9 @@ as it reads the rest. Two are closed so far: O-1 at task 1.4 and O-4 at 1.5.
 **O-14 is the first that records an unverified surface rather than a
 contradiction** — a thing no document disagrees about and nobody has looked at.
 It was extended at 1.6 rather than duplicated, and **O-15** was opened by the
-same task.
+same task. **O-15 was answered at 1.8 rather than acted on** — the second
+caller decided it does not want a sheet — and **O-16** was opened by the same
+task. O-14 was extended again at 1.7 and at 1.8.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -364,6 +366,18 @@ from Cloudinary, the **processing tile** keeping its dimmed photograph with
 "Tagging…" as `DECISIONS.md` 091 specifies, and the waiting line correctly
 reading **"Tagging 1 item"** in the singular, which is 095's whole point.
 
+**Extended at task 1.8.** Two properties of the filter bar cannot be reached by
+any test in this project, both measured rather than assumed. **A pasted
+filtered URL reopening filtered** is by eye only: Angular's testing setup
+installs `MockPlatformLocation`, so `window.location.search` never moves under
+a `router.navigate` — the tests can prove what the `Router` was asked for and
+can never prove what the address bar did with it, nor that a link pasted into a
+fresh tab restores the grid. And **the chip row scrolling horizontally** is
+invisible to the gate at all: `getBoundingClientRect()` returns zero for both
+height and width, and `scrollWidth` and `clientWidth` are both `0`, so a row
+that scrolls and a row that clips are the same DOM. Both belong to whoever
+verifies this screen by hand.
+
 **Four surfaces were not looked at, and are defended by tests alone:**
 
 - the **`failed` tile** — the ⚠ state, its message and its appearance over the
@@ -489,6 +503,48 @@ that a shared `sheet` has to carry the focus and dismissal behaviour that
 `upload-sheet.ts` currently owns for itself. If Stage 1 ends with the directory
 still empty, the honest fix is to delete the line from `05`'s tree rather than
 leave a file map describing a structure the project does not have.
+
+**Answered at task 1.8, and the answer is no.** The recommendation was to
+extract at the second caller and to let that caller decide; the second caller
+is 1.8's filter control and it is **not a sheet**. It is an inline disclosure
+panel, because a modal over the grid hides the thing being filtered while the
+control is open — 098's own argument for why the gallery path closes the upload
+sheet, applied to the worse case. So `shared/ui/` is still empty and **three**
+tasks have now declined to fill it, which strengthens rather than weakens the
+other half of this item: if Stage 1 ends this way, delete the line from `05`'s
+tree. `DECISIONS.md` 113. This item stays open on that second question only.
+
+#### O-16 · Seven `GET /items` query parameters have no caller, no test, and now no candidate — task 5.2 or 5.4
+
+`DECISIONS.md` 051 implemented all eleven parameters `04-API-SPEC.md` lists
+"rather than the subset with a named consumer". Seven of them —
+`category`, `color_primary`, `formality_min`, `formality_max`, `warmth_min`,
+`warmth_max` and `search` — have never been sent by anything, and
+`tests/integration/test_items_rows.py` defends the other four and not these.
+
+**Task 1.8 was the last plausible consumer and declined them**, which is not a
+change of plan: `05-FRONTEND-SPEC.md` has specified client-side filtering "over
+the loaded collection" since it was written, and `STAGE-1` §1.8 repeats it
+verbatim, so the five tag filters were never going to be sent. `search` appears
+in no mockup and no stage brief; `offset` is refused by name in 094;
+`include_archived` has no screen. On the current plan the client will only ever
+send `limit` and `status`.
+
+This is recorded so that whoever meets it meets a decision rather than an
+oversight. **It is not a defect** — the endpoint is correct, and an API wider
+than its client is a normal thing for an API to be. The two live questions are
+whether the seven should be tested before Stage 5 signs the endpoint off
+(**5.2**), and whether the unknown-parameter silence `04` line 119 already
+assigns to **5.4** should be closed at the same time, since a client that never
+sends these cannot notice that `?colour_primary=navy` filters nothing.
+
+Same class as **O-10** and **O-15**: named by a document, built or not built by
+nobody, and found only because a task walked past it.
+
+`GET /items/stats` is in the same condition one level up — implemented at 1.4,
+tested by six integration tests, and consumed by no screen. 1.8 was its first
+possible caller and chose not to be one (`DECISIONS.md` 112), so it stays
+unowned until Stage 3 extends it. It is first on `STAGE-1`'s cut list.
 
 ---
 

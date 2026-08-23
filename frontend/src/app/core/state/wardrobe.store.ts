@@ -3,6 +3,7 @@ import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
 
 import { ItemsApi } from '../api/items.api';
+import { Category, Color } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
 
 // One page, always. 04-API-SPEC.md caps `limit` at 200 and nothing in the plan
@@ -48,6 +49,102 @@ export interface PendingUpload {
   readonly key: string;
   readonly url: string;
   readonly name: string;
+}
+
+// The four tag fields 1.8 gives a control, keyed by 04-API-SPEC.md's own query
+// parameter names so the address bar, this object and the endpoint all call
+// them one thing — 059's rule applied to a shape that never goes on the wire.
+// Nothing here is ever sent: the filter runs over the loaded collection
+// (05-FRONTEND-SPEC.md), which is why GET /items still receives the two
+// parameters the store already sends and no more. DECISIONS.md 110.
+export interface ItemFilters {
+  readonly category?: Category;
+  readonly color_primary?: Color;
+  readonly formality_min?: number;
+  readonly formality_max?: number;
+  readonly warmth_min?: number;
+  readonly warmth_max?: number;
+}
+
+// Transcribed by hand from 02-DATA-MODEL.md, where `formality` and `warmth` are
+// both "integer 1-5", and where migration 0001 spells the same bound as a
+// CHECK. Literals rather than anything derived: a constant that reads its own
+// value from the code beneath it defends nothing. DECISIONS.md 101.
+export const SCALE_MIN = 1;
+export const SCALE_MAX = 5;
+
+// A null value is an unknown, not a non-match, so it passes that field's
+// filter. Per field rather than per row, because the two differ on a row that
+// is a week away: `PATCH {"color_primary": null}` is a 200 that clears one
+// column (exclude_unset makes an explicit null a supplied one), so a `ready`
+// item can carry a null beside four real tags — and hiding it under "black"
+// asserts something nobody has said. DECISIONS.md 109.
+function admits<T>(value: T | null, wanted: T | undefined): boolean {
+  return wanted === undefined || value === null || value === wanted;
+}
+
+function admitsRange(
+  value: number | null,
+  min: number | undefined,
+  max: number | undefined,
+): boolean {
+  if (value === null) {
+    return true;
+  }
+  return (min === undefined || value >= min) && (max === undefined || value <= max);
+}
+
+// `status` is deliberately absent from this function, and the stopped-waiting
+// tile staying visible under every filter *falls out of* that rather than being
+// provided by it: its tags really are null. Anyone simplifying this rule to
+// read `status` should know that is what they are removing. DECISIONS.md 109.
+export function applyFilters(items: readonly Item[], filters: ItemFilters): readonly Item[] {
+  return items.filter(
+    (candidate) =>
+      admits(candidate.category, filters.category) &&
+      admits(candidate.color_primary, filters.color_primary) &&
+      admitsRange(candidate.formality, filters.formality_min, filters.formality_max) &&
+      admitsRange(candidate.warmth, filters.warmth_min, filters.warmth_max),
+  );
+}
+
+// The gate's range input is not a browser's — jsdom does not snap to `step`,
+// and an unbound range reads 50 where a browser reads 3 — so the rounding is
+// ours, at the one door into the filter state, rather than trusted to the
+// control. 06-TESTING-STRATEGY.md carries the measurement. DECISIONS.md 115.
+function scalePoint(value: number | undefined): number | undefined {
+  if (value === undefined || Number.isNaN(value)) {
+    return undefined;
+  }
+  return Math.min(SCALE_MAX, Math.max(SCALE_MIN, Math.round(value)));
+}
+
+// The pair is the interval and the handles carry no order of their own, so a
+// max dragged below a min is a narrower range rather than an empty result.
+function scaleRange(
+  min: number | undefined,
+  max: number | undefined,
+): readonly [number | undefined, number | undefined] {
+  const low = scalePoint(min);
+  const high = scalePoint(max);
+  return low !== undefined && high !== undefined && low > high ? [high, low] : [low, high];
+}
+
+// Inactive keys are omitted rather than carried as undefined, because "is a
+// filter on" is read off this object's key count on the wardrobe page and
+// written from its entries into the query string.
+function normalise(filters: ItemFilters): ItemFilters {
+  const [formalityMin, formalityMax] = scaleRange(filters.formality_min, filters.formality_max);
+  const [warmthMin, warmthMax] = scaleRange(filters.warmth_min, filters.warmth_max);
+
+  return {
+    ...(filters.category !== undefined && { category: filters.category }),
+    ...(filters.color_primary !== undefined && { color_primary: filters.color_primary }),
+    ...(formalityMin !== undefined && { formality_min: formalityMin }),
+    ...(formalityMax !== undefined && { formality_max: formalityMax }),
+    ...(warmthMin !== undefined && { warmth_min: warmthMin }),
+    ...(warmthMax !== undefined && { warmth_max: warmthMax }),
+  };
 }
 
 // Same rule as retagErrorKey below: branch on the documented code, never on
@@ -101,6 +198,7 @@ export class WardrobeStore {
   private readonly uploadingSignal = signal(false);
   private readonly uploadErrorSignal = signal<string | null>(null);
   private readonly stoppedWaitingSignal = signal<ReadonlySet<string>>(new Set());
+  private readonly filtersSignal = signal<ItemFilters>({});
 
   private pendingKeySeq = 0;
   private run: PollRun | null = null;
@@ -115,8 +213,10 @@ export class WardrobeStore {
   readonly isUploading = this.uploadingSignal.asReadonly();
   readonly uploadError = this.uploadErrorSignal.asReadonly();
   readonly stoppedWaiting = this.stoppedWaitingSignal.asReadonly();
+  readonly filters = this.filtersSignal.asReadonly();
 
   readonly isEmpty = computed(() => this.itemsSignal().length === 0);
+  readonly visible = computed(() => applyFilters(this.itemsSignal(), this.filtersSignal()));
   readonly processing = computed(() =>
     this.itemsSignal().filter((item) => item.status === 'processing'),
   );
@@ -143,6 +243,15 @@ export class WardrobeStore {
       }
       this.extendDeadline(this.run, awaiting);
     });
+  }
+
+  // The one door into the filter state, so the coercion has one place to live.
+  // The URL is not written here: this store is providedIn: 'root' and outlives
+  // the page, so a store that wrote the address bar would write it from behind
+  // whatever screen came next — 107's failure, one collection over. The page
+  // owns the URL and calls this. DECISIONS.md 110.
+  setFilters(filters: ItemFilters): void {
+    this.filtersSignal.set(normalise(filters));
   }
 
   load(): void {

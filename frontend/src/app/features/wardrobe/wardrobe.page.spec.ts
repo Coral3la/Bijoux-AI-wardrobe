@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import en from '../../../../public/i18n/en.json';
@@ -61,6 +61,31 @@ function retryButtons(): HTMLButtonElement[] {
   return [
     ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
   ].filter((candidate) => candidate.getAttribute('aria-label')?.startsWith('Try tagging'));
+}
+
+// The alt text is the only per-tile string a tile puts in the DOM — the name is
+// on the image, not in the text content — so this is what tells one filtered
+// grid from another.
+function alts(): (string | null)[] {
+  return tiles().map((tile) => tile.querySelector('img')?.getAttribute('alt') ?? null);
+}
+
+// The empty state and the no-match state are direct children of <main>, where
+// the filter bar's own <section> is a grandchild inside <app-filter-bar>. That
+// is what tells the state's Clear filters button from the bar's.
+function stateSection(): HTMLElement | null {
+  return (fixture.nativeElement as HTMLElement).querySelector('main > section');
+}
+
+function maybeButtonWith(fragment: string): HTMLButtonElement | undefined {
+  return [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find((candidate) =>
+    candidate.textContent?.includes(fragment),
+  );
+}
+
+async function press(label: string): Promise<void> {
+  buttonWith(label).click();
+  await fixture.whenStable();
 }
 
 function buttonWith(fragment: string): HTMLButtonElement {
@@ -158,7 +183,12 @@ describe('WardrobePage', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([{ path: 'login', children: [] }]),
+        provideRouter([
+          { path: 'login', children: [] },
+          // The filter tests below navigate here before rendering: the page reads
+          // its filters from the URL once, on construction.
+          { path: 'wardrobe', children: [] },
+        ]),
       ],
     });
     mock = TestBed.inject(HttpTestingController);
@@ -457,6 +487,170 @@ describe('WardrobePage', () => {
   // WardrobeStore is providedIn: 'root' and outlives this component, so nothing
   // else would ever stop the loop. Without this the poll keeps running behind
   // every screen the user goes to next.
+  // Everything below this line is task 1.8's. The grid renders visible() and
+  // the two collections are only distinguishable while a filter is on, so
+  // every one of these puts a filter on first.
+  it('renders the visible collection rather than every loaded row', async () => {
+    await render([
+      item({ id: 'a', category: 'top', display_name: 'white shirt' }),
+      item({ id: 'b', category: 'bottom', display_name: 'blue jeans' }),
+      item({ id: 'c', category: 'top', display_name: 'black tank' }),
+    ]);
+
+    await press('Tops');
+
+    expect(alts()).toEqual(['white shirt', 'black tank']);
+  });
+
+  it('states the matched count against the wardrobe total under a filter', async () => {
+    await render([item({ id: 'a', category: 'top' }), item({ id: 'b', category: 'bottom' })], 138);
+
+    await press('Tops');
+
+    expect(text()).toContain('1 of 138 items');
+  });
+
+  // The third state. A wardrobe with items in it and nothing on screen is not
+  // an empty wardrobe, and it must not offer the empty wardrobe's action.
+  it('tells a filtered wardrobe with no matches apart from an empty one', async () => {
+    await render([item({ id: 'a', category: 'top' })]);
+
+    await press('Dresses');
+
+    expect(tiles()).toHaveLength(0);
+    expect(text()).toContain('Nothing matches those filters');
+    expect(text()).not.toContain('Your wardrobe is empty');
+    expect(maybeButtonWith('Add your first items')).toBeUndefined();
+  });
+
+  it('clears the filter and the URL from the no-match state', async () => {
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/wardrobe');
+    await render([item({ id: 'a', category: 'top' })]);
+    await press('Dresses');
+
+    stateSection()!.querySelector('button')!.click();
+    await fixture.whenStable();
+
+    expect(tiles()).toHaveLength(1);
+    expect(router.url).toBe('/wardrobe');
+  });
+
+  // The clause most likely to be lost in a rewrite of this file, and it has no
+  // visible symptom when it goes: the screen simply tells a user mid-upload
+  // that her wardrobe is empty. The 1.6 test above guards the empty state; this
+  // one guards it against the branch 1.8 added underneath it, where items() is
+  // empty and visible() is empty for the same reason rather than for the
+  // filter's. DECISIONS.md 097, 111.
+  it('shows neither empty state while previews are pending', async () => {
+    await render([]);
+    fab().click();
+    await fixture.whenStable();
+    await pickFromGallery([file('a.jpg'), file('b.jpg')]);
+
+    expect(text()).not.toContain('Your wardrobe is empty');
+    expect(text()).not.toContain('Nothing matches those filters');
+
+    uploadRequest().flush({ items: [] });
+  });
+
+  it('restores the filter from the URL on arrival', async () => {
+    await TestBed.inject(Router).navigateByUrl('/wardrobe?category=top');
+
+    await render([item({ id: 'a', category: 'top' }), item({ id: 'b', category: 'bottom' })]);
+
+    expect(tiles()).toHaveLength(1);
+  });
+
+  it('restores a range from the URL, rounded and ordered by the store', async () => {
+    await TestBed.inject(Router).navigateByUrl(
+      '/wardrobe?formality_min=4.6&formality_max=2&warmth_min=9',
+    );
+
+    await render([item({ id: 'a', formality: 3, warmth: 5 }), item({ id: 'b', formality: 1 })]);
+
+    expect(tiles()).toHaveLength(1);
+    expect(alts()).toEqual(['white oversized shirt']);
+  });
+
+  // A URL is user input, and the closed vocabulary is not open to it.
+  it('ignores a filter value that is not in the vocabulary', async () => {
+    await TestBed.inject(Router).navigateByUrl('/wardrobe?category=banana&colour_primary=black');
+
+    await render([item({ id: 'a', category: 'top' }), item({ id: 'b', category: 'bottom' })]);
+
+    expect(tiles()).toHaveLength(2);
+    expect(text()).toContain('2 items');
+  });
+
+  it('writes the filter into the URL', async () => {
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/wardrobe');
+    await render([item({ id: 'a', category: 'top' })]);
+
+    await press('Tops');
+
+    expect(router.url).toBe('/wardrobe?category=top');
+  });
+
+  // replaceUrl cannot be read off router.url — a stacked history entry and a
+  // replaced one produce the same string — so this asserts the argument. It is
+  // the one white-box assertion in the file, and the alternative was to leave
+  // the flag undefended.
+  it('replaces the history entry rather than stacking one per chip', async () => {
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/wardrobe');
+    const navigate = vi.spyOn(router, 'navigate');
+    await render([item({ id: 'a', category: 'top' })]);
+
+    await press('Tops');
+
+    expect(navigate.mock.calls[0][1]).toMatchObject({ replaceUrl: true });
+  });
+
+  // Reading the URL once, on construction, is the whole of the read side: a
+  // page that wrote it back on arrival would be the loop 110 exists to avoid.
+  it('does not write the URL on arrival', async () => {
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/wardrobe?category=top');
+    const navigate = vi.spyOn(router, 'navigate');
+
+    await render([item({ id: 'a', category: 'top' })]);
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(router.url).toBe('/wardrobe?category=top');
+  });
+
+  // C4, and the reason the rule is stated on tags rather than on status: an
+  // upload under an active filter stays on screen, and the line above it goes
+  // on counting the rows the loop is waiting for. The loop was never filtered.
+  it('keeps a tagging row and its line on screen under a filter it cannot match', async () => {
+    await render([
+      item({
+        id: 'a',
+        status: 'processing',
+        category: null,
+        color_primary: null,
+        formality: null,
+        warmth: null,
+        display_name: null,
+      }),
+      item({ id: 'b', category: 'top' }),
+      item({ id: 'c', category: 'bottom' }),
+    ]);
+
+    await press('Tops');
+
+    expect(tiles()).toHaveLength(2);
+    expect(text()).toContain('Tagging 1 item.');
+  });
+
+  it('offers no filter bar on an empty wardrobe', async () => {
+    await render([]);
+
+    expect(maybeButtonWith('Filters')).toBeUndefined();
+  });
+
   it('stops polling when the page is destroyed', async () => {
     await render([item({ id: 'a', status: 'failed' })]);
     switchToFakeTimers();

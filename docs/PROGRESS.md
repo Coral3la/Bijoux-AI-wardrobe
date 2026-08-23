@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 1 — Wardrobe
-**Status:** Stage 1 in progress — 1.1, 1.2a, 1.2b, 1.3, 1.4, 1.5, 1.6 and 1.7 complete.
+**Status:** Stage 1 in progress — 1.1, 1.2a, 1.2b, 1.3, 1.4, 1.5, 1.6, 1.7 and 1.8 complete.
 
 Claude Code updates this file at the end of every stage: tick the criteria, set the next stage, and note anything that changed relative to the plan.
 
@@ -32,7 +32,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Wardrobe grid
 - [x] Upload sheet (camera + gallery)
 - [x] Polling
-- [ ] Filters
+- [x] Filters
 - [ ] Item detail and tag editor
 - [ ] Seed script — 40 items
 - [ ] Golden dataset and first accuracy run
@@ -260,3 +260,25 @@ Changed from the plan, and the things that were measured rather than argued:
 - **Three documents described a loop that cannot show a tag**, and `01-ARCHITECTURE.md` also numbered two consecutive steps `8` and described a loop with no bound. All corrected here rather than left for whoever meets the tiles that never gain tags.
 - **The `status` filter's owner was recorded two ways.** `STAGE-1` 1.4 says ownership is 1.7's; this file and `STAGE-5` 5.2 both said 1.4. The stage file wins because it carries the argument, and both other sentences are amended. The test stays where it is, at 1.4's start.
 - **`GET /items` had no ordering test anywhere in the project**, four stages after the ordering shipped. Two now: one for `created_at DESC` across two timestamps, one for the `short_id` tiebreak on rows sharing a `created_at`. The second asserts the shared timestamp rather than assuming it — without that line the test would still pass if `now()` ever became the statement timestamp, having silently stopped testing the tiebreak.
+
+**2026-08-23 — task 1.8, filters.** **226 frontend tests pass (181 before, 45 added).** Backend untouched and not run — this task sends no new query parameter, so there was nothing on that side to defend. New: `features/wardrobe/filter-bar.ts` and `filter-bar.spec.ts`. Changed: `core/state/wardrobe.store.ts` (`ItemFilters`, `applyFilters`, `filters`, `visible`, `setFilters`, the scale constants), `features/wardrobe/wardrobe.page.ts` (the branch chain, the bar, the URL, the filtered count), `public/i18n/en.json` (+36 keys), two spec files, and six documents besides this one. Seven entries, `DECISIONS.md` 109–115. Audit **O-15 answered**, **O-16 opened**, **O-14 extended**.
+
+Seven decisions, and the first one is the task:
+
+- **A null tag is an unknown, not a non-match, and the predicate never reads `status`.** Per field rather than per row: a filter on colour tests colour, so a row whose colour is null passes it and is still filtered on its category. The alternative costs an upload that appears and vanishes — the preview renders outside the filter (097) and the row that replaces it carries every tag null. **Per field was decided by a row 1.9 makes reachable**: `PATCH {"color_primary": null}` is a `200` that clears one column, so a `ready` item can carry one null beside four real tags. The stopped-waiting tile staying visible *falls out of* the rule rather than being provided by it. 109.
+- **The filters are the store's and the URL is the page's**, read once from the snapshot and written in the same method that sets the state, with `replaceUrl: true`. A root-provided store writing the address bar is 107's failure one collection over. 110.
+- **The header is the only count**, and under a filter it reads "12 of 138 items" — both numbers in the one place a count already lives, so 094 and 100 both survive unchanged. The empty result is its own state with its own way out, and never the empty wardrobe's call to action. 111.
+- **No chip counts, and `byCategory` was corrected out of `05` rather than built.** It groups `visible()` and this grid is flat. `GET /items/stats` stays unowned. 112.
+- **The filter control is an inline disclosure panel, not a sheet**, on 098's own argument: a modal hides the thing being filtered while the control is open. **O-15 is answered rather than acted on** — the second caller was asked to decide and does not want a sheet. 113.
+- **Twenty-four label keys by hand rather than pulling O-10's pipe forward**, with the swatch colours held in a `satisfies Record<Color, string>` map — the one hand-mirror on this project with a compiler watching it. 114.
+- **The ranges are bound and coerced**, because the gate's range input is not a browser's. 115.
+
+Changed from the plan, and the things that were measured rather than argued:
+
+- **The A/B question was mine to raise and the stage file had already settled it.** "Client-side over the loaded collection" is the brief verbatim, so server-side filtering was mapped and built nowhere. The mapping stands as the record of what was considered, and its one durable finding is **O-16**: 1.8 was the last plausible consumer of seven `GET /items` query parameters and declined them, so they now have no caller, no test and no candidate.
+- **Two questions were missing from the orientation and cost one round trip.** Whether the exemption is per field or per row, and whether dimensions combine as AND — the second had been asked for by name and I did not turn it into a question. Both were settled before any code, which is where the cost stopped.
+- **The gate was measured again, and four measurements changed the code rather than the tests.** A range with no bound value reads **50** where a browser reads 3; jsdom does not snap to `step`; `scrollIntoView` is `undefined` and **calling it throws**; and `window.location.search` never moves under `MockPlatformLocation` while `history.replaceState` moves it and leaves `router.url` stale. Written into `06-TESTING-STRATEGY.md` as properties of the environment.
+- **Twenty-four mutations plus a control, one survivor, and the three declared in advance were all wrong.** The survivor was rounding inside `setFormality`, which no test reached because the only fractional drag was on a **warmth** handle — two near-identical methods, one tested. A second test now drags a formality handle. The control fails 29 tests. `06` carries the run.
+- **The `pending().length === 0` clause survived the rewrite and was defended twice**: 1.6's test still guards the empty state, and a new one guards it against the branch 1.8 added underneath it. Dropping the clause fails both.
+- **Two controls say "Clear filters" when the no-match state is on screen** — the bar's and the state's. Accepted rather than solved: the state carries its own way out. 111.
+- **One acceptance criterion was rewritten rather than softened.** It asked for "correct counts" without naming anything that renders a count, and omitted formality, which the brief gives a control. It now describes what appears, including the per-field null rule.

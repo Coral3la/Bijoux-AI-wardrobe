@@ -352,6 +352,45 @@ re-measurement. It is also the reason `AUDITS.md` **O-14** grew rather than
 closed. If `browsers` is ever configured, most of this list stops being true —
 re-measure before trusting it.
 
+**Extended at task 1.8**, because a filter bar is layout and URL state and the
+list above measures neither. Probed against the same jsdom 28.1.0 and the same
+builder:
+
+```
+getBoundingClientRect().width                           0
+element.scrollWidth / clientWidth                       0 / 0
+element.scrollLeft (set, then read)                     kept — and meaningless
+element.scrollIntoView                                  undefined — CALLING IT THROWS
+input[type=range] min=1 max=5, no value: .value         50   (a browser gives 3)
+input[type=range] step snapping (set 2.7, step 1)       2.7  — not snapped
+input[type=range] clamps above max (set 9, max 5)       5
+connected checkbox.click()                              fires input and change
+detached checkbox.click()                               checked flips, NO change event
+router.navigate([...], { queryParams })                 resolves; router.url reflects it
+Location.path(true)                                     reflects it
+root ActivatedRoute.snapshot.queryParamMap              reads it
+route.queryParamMap                                     one emission per navigation
+queryParamsHandling: 'merge' / queryParams: {}          merges / clears
+withComponentInputBinding() → input() signal            binds, and follows later navigations
+RouterTestingHarness.create() / navigateByUrl           work
+window.location.search after router.navigate            "" — MockPlatformLocation, never moves
+history.replaceState                                    moves it, and leaves router.url STALE
+```
+
+**Four of these changed the code rather than the tests**, which is why they are
+here. `scrollIntoView` throwing is why nothing scrolls the chip row for the
+user. The range defaulting to 50 is why every handle carries an explicit
+`[value]` — a test asserting an initial position would otherwise be asserting a
+jsdom artefact. The missing `step` snapping is why the rounding lives in
+`WardrobeStore.setFilters` rather than being trusted to the control. And the
+last two lines together are why the URL is written only through the `Router`:
+`history.replaceState` moves the address bar and desynchronises `router.url`,
+and the gate can only see one of the two. `DECISIONS.md` 110, 113, 115.
+
+**What this leaves unverifiable** is in `AUDITS.md` **O-14**: whether a pasted
+filtered URL reopens filtered, and whether the chip row scrolls. Neither has a
+test that could tell the truth from a lie.
+
 ### The polling mutation run, task 1.7
 
 Seventeen mutations plus a fatal control, run from a pristine copy with the
@@ -472,6 +511,43 @@ photographs finish inside 30 seconds, which is 1.3's serial tagging against a
 real account and is visible only by eye or in a Stage 5 end-to-end run.
 `AUDITS.md` **O-14** carries those.
 
+### The filter-bar mutation run, task 1.8
+
+Twenty-four mutations plus a control, run from a pristine copy with the
+baseline green at both ends. **One survived**, and the three survivors declared
+in advance were declared for the right reasons and were all wrong.
+
+The control — `applyFilters` returning nothing — fails 29 tests, which is what
+makes the rest of the table readable.
+
+Caught, and the ones worth naming: dropping the null exemption; widening it
+from per field to per row (`M6`, killed by the one test written for exactly
+that row); `>=` to `>` and `<=` to `<` on both range ends; AND to OR across
+dimensions; the grid rendering `items()` instead of `visible()`; the no-match
+branch losing its `isEmpty` guard; **the empty branch losing its
+`pending().length === 0` clause**, killed by 1.6's own test; the URL never
+being written, never being read, or losing `replaceUrl`; a URL value skipping
+the vocabulary check; the chip's pressed state going global; a swatch losing
+its `aria-label`; and the panel starting open.
+
+**The survivor, and it is a coverage hole rather than a bug.** Rounding the
+value inside `setFormality` — the thing 115 says the bar must not do — survived
+the entire suite, because the only test that dragged a handle with a fraction
+dragged a **warmth** handle, and `setWarmth` is a second, near-identical method
+making the same claim. Two methods, one test, and the untested one is
+indistinguishable from a correct one. This is 1.5's finding from the other
+side: there the state was tested and the binding was not; here one of two
+identical paths was tested and the other was not. A second test now drags a
+formality handle with `3.4`, and the mutation fails it by name.
+
+**Three survivors were declared before the run and none of them survived** — the third consecutive run in which every declaration was wrong, after M-U at 1.6 and M11 at 1.7. The declarations keep being wrong in the same direction, and they keep being worth making: naming what is expected to survive is what turns a green table into evidence, and on all three runs the real survivor was one nobody had predicted.
+The disclosure panel's visual state was expected to survive if the test only
+asserted presence in the DOM — the tests assert `aria-expanded` and the range
+count instead, and it was caught. `replaceUrl` was expected to survive if the
+spy on `Router.navigate` were refused as too white-box — the spy was kept, and
+it was caught. The horizontal scroll of the chip row was declared **unmutatable**
+rather than a survivor, and it remains so: the gate has no layout.
+
 ### What mutation testing has actually found on this project
 
 Worth stating plainly, because it is not what the technique is usually sold for: **on this project mutation testing has found more false claims than bugs.**
@@ -487,6 +563,8 @@ Worth stating plainly, because it is not what the technique is usually sold for:
 - 1.5: the first two genuine survivors on the project, and the first run on the frontend. Both were the same false claim — that retag state is per item — held by six passing tests that only ever exercised one item. The technique found a coverage hole rather than a bug, in code that was already green, linted and type-checked.
 
 - 1.7: the fourth survivor, and the first that killed an *argument* rather than a test or a binding. M8 established that the stated reason for the task's central design decision described a mechanism that cannot happen — an effect that stops reading a signal stops re-running on it — while the decision itself remained correct on narrower grounds. The technique found a false explanation in a document, in code that was green, linted and type-checked, and that nobody would have found by reading, because reading is how the explanation got written.
+
+- 1.8: the fifth survivor, and the pattern it belongs to is now worth stating on its own. **Where one claim is made by two near-identical pieces of code, the tests reliably exercise one of them and the suite cannot tell the difference.** At 1.5 it was per-item state: six tests, every one rendering a single item, where a per-item signal and a global one are indistinguishable. At 1.8 it was two range methods making the same "this rounds nothing" claim, with only a warmth handle ever dragged with a fraction, so rounding inside the formality one survived the whole suite. The two look unrelated and are the same shape: **the untested copy is invisible precisely because the tested copy passes**, and reading cannot find it, because the code that was not exercised is the code that looks right. The instances differ; what to do about them does not — when a claim has more than one site, test every site, and prefer one site where the duplication is avoidable.
 
 - 1.6: the third survivor, and the first that was a *test* rather than a binding. `MAX_UPLOAD_BYTES` was mutated from 1024² to 1000² and nothing failed, because every expectation about it was written in terms of it. Same lesson as 1.5 from the opposite direction — there the state was tested and the binding was not, here the behaviour was tested against itself. Both were found in code that was green, linted and type-checked, and neither would have been found by reading.
 
