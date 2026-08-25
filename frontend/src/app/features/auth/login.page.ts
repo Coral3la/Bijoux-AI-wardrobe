@@ -12,6 +12,15 @@ import { finalize } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 
+// Published rather than secret, and the same two strings live in
+// `backend/scripts/seed_demo.py`, which is what creates the account. Nothing
+// compares them: drift here is a demo button that answers 401 against a
+// correctly seeded database, and only signing in catches it. `DECISIONS.md`
+// 136 and 137; `07-DEPLOYMENT.md` documents the credential as published so
+// that finding it in this file is not read as a leak.
+const DEMO_EMAIL = 'demo@bijoux.app';
+const DEMO_PASSWORD = 'bijoux-demo-wardrobe';
+
 @Component({
   selector: 'app-login-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -97,6 +106,24 @@ import { I18nService } from '../../core/i18n/i18n.service';
         </button>
       </form>
 
+      <!-- Outside the <form> deliberately: inside it, a <button> defaults to
+           type=submit, and a demo button that also submits an empty form is one
+           misreading away. This is O-12's affordance, and it is a button rather
+           than the prefilled credentials that audit item specified — a value in
+           an input carrying autocomplete="current-password" invites a browser
+           to save the demo account over somebody's stored login. DECISIONS.md 136. -->
+      <div class="flex flex-col gap-1">
+        <button
+          type="button"
+          (click)="viewDemo()"
+          [disabled]="submitting()"
+          class="min-h-11 rounded-md border border-ink/15 px-4 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {{ i18n.t('login.demo.action') }}
+        </button>
+        <p class="text-sm opacity-70">{{ i18n.t('login.demo.hint') }}</p>
+      </div>
+
       <a
         routerLink="/register"
         class="text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -131,9 +158,20 @@ export class LoginPage {
       return;
     }
 
+    const { email, password } = this.form.getRawValue();
+    this.signIn(email, password);
+  }
+
+  // The demo account, on the same call and the same token as any other sign-in.
+  // 04-API-SPEC.md lists no endpoint for switching accounts and forbids adding
+  // one, which is why this is a login rather than a mechanism of its own.
+  protected viewDemo(): void {
+    this.signIn(DEMO_EMAIL, DEMO_PASSWORD);
+  }
+
+  private signIn(email: string, password: string): void {
     this.submitting.set(true);
     this.serverError.set(null);
-    const { email, password } = this.form.getRawValue();
 
     this.auth
       .login(email, password)

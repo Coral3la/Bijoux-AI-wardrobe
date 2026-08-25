@@ -214,6 +214,22 @@ from `04` and record "no rate limiting" in 5.4 beside the auth-throttling
 omission already recorded there — but it should be one or the other, not a
 specified table nobody builds.
 
+**Extended at task 1.10, and the upload limit now has a second reason that is
+not about loops.** `/login` ships a **View the demo wardrobe** button
+(**O-12**, closed above) that signs any visitor into `demo@bijoux.app` with a
+published password. `POST /items/upload` accepts twenty files and queues a real
+tagging call per file, so on a deployed instance the path from a stranger
+opening the site to the project's OpenAI credit being spent is two clicks, with
+nothing in between. `04-API-SPEC.md` already names the answer — `429` with
+`code: "rate_limited"` — and calls it "the answer to 'how do you stop a demo
+account from burning your OpenAI budget?'", which is now literally the question.
+
+**The rate limit is a precondition for deploying, not a Stage 5 nicety.** Today
+nothing is deployed and the exposure is nil; the moment Render serves this
+frontend it is not. Whoever does task 5.6 owns the ordering: the limiter lands
+first, or the demo button is removed from the deployed build and the omission
+recorded in 5.4. `DECISIONS.md` 137.
+
 #### O-6 · The user profile the stylist prompt reads can never be filled in — Stage 2
 
 `03`'s stylist user message carries a `USER PROFILE:` block —
@@ -315,7 +331,7 @@ sentence with the note that it is belt-and-braces on PG 13+. Dropping the
 `CREATE EXTENSION` is a migration edit for no functional gain, and `0001` has
 already run against Neon.
 
-#### O-12 · The demo-wardrobe affordance is now owned by nobody until it is put on `/login` — task 1.10
+#### O-12 · ~~The demo-wardrobe affordance is now owned by nobody until it is put on `/login`~~ — **closed at task 1.10, superseded rather than taken**
 
 Carried out of **O-4**, which is closed above. The **Try a demo wardrobe**
 entry point is gone from the wardrobe empty state and is not yet anywhere else.
@@ -330,6 +346,26 @@ closed audit item reads as a finished one, and the affordance was moved rather
 than cut. If 1.10 ships without it, the honest alternative is to record the
 omission in 5.4 and delete the promise from `05` — but it should be one or the
 other.
+
+**Closed at task 1.10. The affordance shipped and the mechanism did not.**
+`/login` carries a **View the demo wardrobe** button that calls
+`POST /auth/login` with the seeded credentials and lands on `/wardrobe` — every
+constraint this item imposed is met (no new endpoint, no new mechanism, the
+same call and the same JWT), and the prefilled `FormGroup` it specified is not
+what was built. The reason is one this item could not have had, because it is a
+property of the screen rather than of the audit: the password input carries
+`autocomplete="current-password"` and the email input `autocomplete="username"`,
+paired deliberately at `DECISIONS.md` **070** so that password managers offer
+save-and-fill — so a prefilled password invites a browser to save the demo
+account over a visitor's own stored login. A button never populates the field.
+It sits outside the `<form>` because a `<button>` inside one defaults to
+`type=submit`. `05-FRONTEND-SPEC.md` line 108, which described the replacement
+as prefilled credentials, is corrected in the same commit. `DECISIONS.md` 136.
+
+**One thing this closes onto rather than away from**, recorded here because a
+closed item reads as a finished one: the button hands any visitor an
+authenticated session on a shared, mutable account, and the rate limit that
+would stop them spending the project's OpenAI credit is **O-5**, which is open.
 
 #### O-13 · Nothing in this project runs the frontend test suite, and it had been broken for four commits — whoever writes `ci.yml`
 
@@ -493,6 +529,15 @@ tests, or not at all:
   decides type from bytes, so the format most likely to arrive from an iPhone
   is exercised nowhere below a real end-to-end run with a real fixture.
 
+  **Still true at 1.10, and the one candidate to close it has gone.** The seed
+  set briefly held a real HEIC — the brown shearling jacket — which would have
+  put an iPhone original through `upload_image`, Cloudinary and `build_url` for
+  the first time. It was replaced with a JPEG of the same garment before
+  `--upload` ran, so **no HEIC exists in the seed set** and this line is not
+  closed by 1.10. `tests/unit/test_storage.py` still defends the signature
+  branch with synthetic twelve-byte headers; that is detection, not delivery.
+  `DECISIONS.md` 141.
+
 **1.6 does not make this item's original five surfaces reachable.** Uploading a
 deliberately unreadable image is now possible from the UI, which is cheaper
 than the terminal round trip described above — but it is not *reliable*:
@@ -644,6 +689,31 @@ claims to have demonstrated, and that is the developer's.
 **Not a defect, and not new.** The criterion has been unownable since it was
 written; it is recorded now because task 1.9 was the last task that could
 plausibly have closed it and did not.
+
+#### O-18 · Four shipped behaviours have no surface in the demo wardrobe — deliberate, recorded at task 1.10
+
+The seeded wardrobe is 64 rows, all `ready`. Nothing in it reaches **1.5's
+failed tile**, **1.4's retry button**, or **1.9's `failed`→`ready` promotion**
+and its *Add tags by hand* link — all three are entered only through a
+`status='failed'` row. **1.8's rule that a null is never hidden by that field's
+filter** goes with them, and by construction rather than by omission:
+`REQUIRED_TAG_FIELDS` forbids a null in `category`, `color_primary`,
+`formality` or `warmth` on any `ready` row, and the wardrobe measures zero
+nulls in all four.
+
+**This is a choice, not an oversight.** `--with-failures` exists and adds the
+two rows, and it is not run: its rows reuse two committed `public_id`s, so the
+grid shows two garments twice — once ready, once failed — which reads as a
+duplication bug to anyone who does not know the design (`DECISIONS.md` 135).
+Two dedicated photographs would fix it and were declined. The live-retag
+alternative is refused for **O-17**'s reason: `validate_tags` retries and a bad
+photograph usually still tags, so it is a demonstration that depends on an API
+call failing on cue.
+
+**Nothing to do here.** It is written down so the gap is met as a decision
+rather than found during a defence, and so that whoever adds two photographs
+later knows what they buy. `07-DEPLOYMENT.md`'s checklist no longer implies the
+failed states are demonstrable.
 
 ---
 

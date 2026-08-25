@@ -198,9 +198,23 @@ Full-size image, tags as chips, wear stats placeholder. The editor uses a select
 **The vocabulary's category rules are server-side, and this screen is what pays for that.** `enums.ts` mirrors the *values* only — the decision and its cost are `DECISIONS.md` 085 and they are inherited here rather than reopened. The consequence is concrete: the `fit` select can offer `skinny` while the item is a tank top, and saving it returns `422` naming `fit`. Two acceptable ways to handle that, and **it is this task's choice which**: render the server's message against the field, or filter the select client-side from a hand-written copy of the rules — which would be a second copy in a second language with nothing comparing them, the failure `CONVENTIONS.md` records three times over. The reason there is no third option is that no endpoint publishes the vocabulary; adding one needs `04-API-SPEC.md` changed first, since that document forbids inventing endpoints.
 
 ### 1.10 Seed script
-`scripts/seed_demo.py` creating `demo@bijoux.app` with 40 pre-tagged items, `status='ready'`, no AI calls. Images uploaded to Cloudinary once and their `public_id`s committed in the script.
+`scripts/seed_demo.py` creating `demo@bijoux.app` from a committed table of pre-tagged items, `status='ready'`, no AI calls. Images uploaded to Cloudinary once and their `public_id`s committed in the script.
+
+**The table holds 64 items, and the number is a property of the data rather than of the brief.** It is what one real wardrobe contained once every photograph had been opened and tagged from the image — not a designed distribution. The original 40 was an estimate made before the photographs existed; it moved to 58 and then to 64 as the folder grew, which is the reason the acceptance criterion below no longer names a count.
 
 Cover every category, a spread of formality 1–5 and warmth 1–5, and enough variety that the stylist has real choices. **This script is what makes the project demonstrable.** Do not leave it for later.
+
+**It lives at `backend/scripts/seed_demo.py` and is run as `python -m scripts.seed_demo`.** Measured: `python scripts/seed_demo.py` puts `backend/scripts` on `sys.path[0]` instead of `backend/`, so `import app` raises — the same gap `pyproject.toml`'s `pythonpath = ["."]` closes for pytest. `01-ARCHITECTURE.md`'s tree carried no `scripts/` at all until this task, while four documents and `storage.py`'s own docstring had been naming `scripts/seed_demo.py` since Stage 0; the tree is corrected. `[tool.mypy] files` widens to `["app", "scripts"]`, because it read `["app"]` and would have left this file the only unchecked module in the backend.
+
+**Two modes.** The default reads the committed `SEED_ITEMS` table and writes rows, touching no network but the database. `--upload DIR` validates every file, uploads them and logs a paste-ready table, writing no rows. `--reset` deletes `demo@bijoux.app` by email and lets the foreign key's cascade take the items; `--with-failures` appends two `failed` rows. Nothing runs without `--yes`, and the target database's host, name and current row counts are logged before anything is written. `DECISIONS.md` 130–135.
+
+**The count is a property of the table, not of the code.** Nothing asserts forty; the script seeds whatever `SEED_ITEMS` holds and logs how many that was. The acceptance criterion below is therefore verified by looking rather than by running.
+
+**The tags are hand-written and validated on `PATCH`'s policy — any error *and any coercion* aborts the run.** Cost is not what decided against a live tagging pass: vision is about $0.0002 an image, so forty items is roughly a cent. Reproducibility decided it. `USE_FAKE_AI` is refused by name in `DECISIONS.md` 081 — forty identical placeholder white shirts is not a wardrobe.
+
+**Task 1.10 also closes `AUDITS.md` O-12**, and closes it as *superseded*: the demo affordance ships as a **View the demo wardrobe** button on `/login` rather than as the prefilled `FormGroup` that item specified. One commit covers the script, the button and the documents. `DECISIONS.md` 136.
+
+**One thing this task opens rather than closes.** The button hands any visitor an authenticated session on a shared account whose password is published, and the rate limit that stops them spending the project's OpenAI credit is `AUDITS.md` **O-5**, which is open. O-5 now says the limiter is a precondition for deploying.
 
 ### 1.11 Golden dataset
 30 hand-labelled photos in `tests/fixtures/golden/`. Include deliberately hard cases. Write `test_vision_accuracy_on_golden_set` marked `eval`, run it once, and record the result in `docs/eval-results.md`.
@@ -248,13 +262,24 @@ The prompt also licenses a null `fit` without ever saying when one is appropriat
 - [ ] Filtering by category, colour, formality or warmth narrows the grid, the header states the matched count against the wardrobe total, and a row whose value for a filtered field is null is never hidden by that field's filter
 - [ ] Editing a tag persists, sets `user_edited`, and survives a reload
 - [ ] `retag` on an edited item returns `409` without `force`
-- [ ] `seed_demo.py` produces a browsable 40-item wardrobe from nothing
+- [x] `seed_demo.py` produces a browsable wardrobe from nothing, covering every category, and logs the count it seeded
 - [ ] Golden-set category accuracy is recorded and ≥ 85% (target 90%)
 - [ ] Integration tests cover cross-user isolation on every item endpoint
 
 ## Commit checkpoints
 
-`feat(ai): vision tagging service` · `feat(core): category-dependent validation` · `feat(ai): tag validation and retry` · `feat(api): background tagging` · `feat(api): item crud and retag` · `feat(web): wardrobe grid` · `feat(web): upload sheet` · `feat(web): polling` · `feat(web): filters` · `fix(api): a completed edit clears a failed status` · `feat(web): item detail` · `chore: demo seed data` · `test: golden dataset and accuracy eval`
+`feat(ai): vision tagging service` · `feat(core): category-dependent validation` · `feat(ai): tag validation and retry` · `feat(api): background tagging` · `feat(api): item crud and retag` · `feat(web): wardrobe grid` · `feat(web): upload sheet` · `feat(web): polling` · `feat(web): filters` · `fix(api): a completed edit clears a failed status` · `feat(web): item detail` · `feat: seed the demo wardrobe and sign in to it from /login` · `test: golden dataset and accuracy eval`
+
+**Task 1.10's checkpoint said `chore: demo seed data` and that type was wrong.**
+The task adds a script, a test file and a button a user can press, and
+`CONVENTIONS.md` **040** already records that labelling a behaviour change as
+`chore` was a mistake once — "a change that alters what the code does — even by
+subtraction, and even with no change in observable behaviour — is not
+housekeeping." It carries no scope because it spans three: `db` for the rows and
+the guard, `web` for the button, `core` for the mypy configuration. A scope
+names the module a reader would grep for, and a reader would grep `seed_demo`.
+The line above is corrected in 1.10's own commit rather than quietly disobeyed,
+which is the precedent 1.9 set below.
 
 **Task 1.9 is two commits, not one, and the first is backend.** The list above
 said `feat(web): tag editor`, which described the screen and hid the fact that

@@ -24,7 +24,7 @@ markers = [
 
 [tool.mypy]
 python_version = "3.14"
-files = ["app"]
+files = ["app", "scripts"]
 plugins = ["pydantic.mypy"]
 disallow_untyped_defs = true
 warn_redundant_casts = true

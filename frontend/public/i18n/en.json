@@ -5,6 +5,8 @@
   "login.submit": "Sign in",
   "login.submitting": "Signing in…",
   "login.toRegister": "Create an account",
+  "login.demo.action": "View the demo wardrobe",
+  "login.demo.hint": "A shared account with a ready-made wardrobe. Anyone who opens it sees the same items, and any changes stay.",
   "login.error.invalidCredentials": "Incorrect email or password.",
   "login.notice.signedOut": "Please sign in again.",
   "login.notice.unreachable": "We couldn't reach Bijoux. You may still be signed in.",

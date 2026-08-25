@@ -151,6 +151,8 @@ bijoux/
 │   │   │   └── serializer.py    wardrobe → compact prompt text
 │   │   └── prompts/             *.md prompt templates, version-controlled
 │   ├── alembic/
+│   ├── scripts/
+│   │   └── seed_demo.py         the demo wardrobe, from a committed table
 │   ├── tests/
 │   │   ├── unit/
 │   │   ├── integration/

@@ -34,7 +34,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Polling
 - [x] Filters
 - [ ] Item detail and tag editor
-- [ ] Seed script — 40 items
+- [x] Seed script — the demo wardrobe
 - [ ] Golden dataset and first accuracy run
 
 ## Stage 2 — Stylist
@@ -328,3 +328,24 @@ Changed from the plan, and the things that were measured rather than argued:
 - **O-14's verification method was wrong on disk and is corrected rather than left.** It told whoever verifies this task to *"force a tagging failure by editing an item and retagging it"* — editing sets `user_edited` so the retag is a `409`, and a forced retag re-runs tagging against a photograph that already succeeded. The model never sees the tags. Two of its bullets close at 1.9 (the `409` branch, the loop across a real navigation) and four do not.
 - **Acceptance criterion 3 is recorded as unowned rather than quietly failed.** *"A deliberately bad image ends as `failed`"* — `USE_FAKE_AI` cannot fail, a bad photograph usually still tags, and editing cannot cause a failure. The only dependable route is a terminal round trip no task owns. **O-17**, with a recommendation to cut it or move it to 5.3 and no invented task.
 - **`shared/ui/` is declined a fourth time and `shared/pipes/` is no longer empty.** Stage 1 has one frontend-adjacent task left and it is a seed script, so O-15's other recommendation — delete the line from `05`'s tree — is now the live one.
+
+**2026-08-25 — task 1.10, demo seed data.** **566 backend tests pass (486 before, 80 added)** and **301 frontend tests (296 before, 5 added)**. New: `backend/scripts/seed_demo.py` (1,698 lines, of which 64 are the committed table), `backend/tests/unit/test_seed_data.py` (66 of its cases are the table itself). Changed: `backend/pyproject.toml` (`[tool.mypy] files` widened to `["app", "scripts"]`), `frontend/src/app/features/auth/login.page.ts`, `login.page.spec.ts`, `public/i18n/en.json`, and seven documents besides this one. Twelve entries, `DECISIONS.md` 130–141. Audit **O-12 closed as superseded**, **O-5 and O-14 extended**, **O-18 opened**.
+
+**Seeded against Neon on 2026-08-25: 64 items on `demo@bijoux.app`, all `ready`.** The four pre-existing users and their thirteen items were verified untouched after the run. An earlier run of the same seed used `--with-failures` and was replaced by a `--reset`: its two extra rows reuse existing `public_id`s, so the grid showed two garments twice and read as a duplication bug rather than as a demonstration of the failed state. `DECISIONS.md` 135 amends the decision; `AUDITS.md` **O-18** records what the clean wardrobe cannot demonstrate.
+
+Four decisions worth the summary:
+
+- **The tags are hand-written and validated on `PATCH`'s policy — any error *and any coercion* aborts the run.** Cost did not decide against a live tagging pass; reproducibility did. `USE_FAKE_AI` was refused by name (081): forty identical placeholder shirts is not a wardrobe. 130.
+- **The demo user's UUID is pinned.** `--upload` names a Cloudinary folder before any row exists, and `--reset` deletes the user, so a generated id would have orphaned every committed `public_id` on every reset — the problem `STAGE-0` §0.6 named, made permanent. 132.
+- **Seeded rows carry `attributes["seed"]`**, a second guest key beside `tagging`, so 1.11 can exclude them with `WHERE NOT (attributes ? 'seed')` before mining `display_name` for words the vocabulary is missing. Verified on the live database: the exclusion returns exactly the 13 non-seed rows. 134.
+- **The demo affordance is a button, not O-12's prefilled form.** A value in an input carrying `autocomplete="current-password"` invites a browser to save the demo account over a visitor's own login. 136.
+
+Changed from the plan, and the things that were measured rather than argued:
+
+- **The count moved three times — 40 → 58 → 64 — and the acceptance criterion no longer names one.** The 40 was an estimate made before the photographs existed. The criterion now asks for a browsable wardrobe covering every category, and the script logs what it seeded.
+- **Filename-derived tags failed on 13 of 24 rows, and seven of the thirteen were wrong only in a column that inserts silently.** A wrong `subcategory` aborts the run; a wrong `colour`, `warmth` or `material` is a legal value in the right column and is discovered at a defence. `sweater` in a filename carried no warmth information at all — two of three are summer knits. All 64 rows were re-tagged from the image. 141.
+- **Two defects found by running rather than reading.** No `relationship()` is declared between `User` and `Item`, so SQLAlchemy's unit of work had no dependency edge and batched the items first, failing on `fk_items_user_id_users`; the fix is an explicit `flush` (133). And every CLI log line passed its values as `extra`, which the **development** formatter drops — the guard that exists to show which database is about to be written to printed the words "Target database" and nothing else. Six call sites now put the values in the message.
+- **All 64 `public_id`s were fetched through `build_url` and returned 200.** This is the check `DECISIONS.md` 133 records as untestable — no fixture can tell you a committed reference is live — and it was run by hand instead: 64/64 thumbnails, `image/jpeg`, 4.3–16.5 KB. The Admin API confirms 64 assets under the pinned folder.
+- **Four vocabulary gaps found by looking at photographs before 1.11 ran**: `turquoise`, knee-high `length`, the bag subcategories, and `suede`. The fourth is a different kind and 141 says so — suede *is* leather, so that tag is lossy rather than false, and a model answering `leather` there must score as correct.
+- **The failure rows are built and not shipped.** `--with-failures` adds two `failed` rows and is off by default; it is not run, because its rows reuse two committed `public_id`s and the grid then shows two garments twice. The wardrobe that ships is 64 rows, all `ready`, with no duplicated photograph — and four shipped behaviours consequently have no demo surface, recorded as **O-18**.
+- **Nothing tests the database guard or the insert ordering**, measured by mutation: deleting either leaves the suite green. A test for the guard would have to write into `TEST_DATABASE_URL`, which is the one thing the guard refuses.

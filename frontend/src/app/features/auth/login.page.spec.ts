@@ -57,6 +57,12 @@ function submit(): void {
   (fixture.nativeElement as HTMLElement).querySelector('form')!.dispatchEvent(new Event('submit'));
 }
 
+function demoButton(): HTMLButtonElement {
+  return [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find((element) =>
+    element.textContent?.includes('View the demo wardrobe'),
+  )!;
+}
+
 describe('LoginPage', () => {
   beforeEach(async () => {
     localStorage.clear();
@@ -240,6 +246,65 @@ describe('LoginPage', () => {
 
       expect(auth.isAuthenticated()).toBe(true);
       expect(router.url).toBe('/wardrobe');
+    });
+  });
+  describe('the demo button', () => {
+    // The only place in the frontend that pins the seeded credentials. They are
+    // duplicated in backend/scripts/seed_demo.py and nothing compares the two,
+    // so this test fixes what this side sends and a real sign-in is the only
+    // thing that can prove the other side agrees. DECISIONS.md 136.
+    it('posts the seeded demo credentials', async () => {
+      demoButton().click();
+      await fixture.whenStable();
+
+      const request = mock.expectOne(`${environment.apiUrl}/auth/login`);
+      expect(request.request.body).toEqual({
+        email: 'demo@bijoux.app',
+        password: 'bijoux-demo-wardrobe',
+      });
+      request.flush(TOKEN_RESPONSE);
+    });
+
+    it('lands on /wardrobe', async () => {
+      demoButton().click();
+      await fixture.whenStable();
+      mock.expectOne(`${environment.apiUrl}/auth/login`).flush(TOKEN_RESPONSE);
+      await fixture.whenStable();
+
+      expect(auth.isAuthenticated()).toBe(true);
+      expect(router.url).toBe('/wardrobe');
+    });
+
+    // Inside the <form> a <button> defaults to type=submit, so the demo button
+    // would fire a second, empty sign-in alongside its own. Asserting where it
+    // sits is what stops that being reintroduced by someone tidying the markup.
+    it('sits outside the form and never submits it', () => {
+      expect(demoButton().type).toBe('button');
+      expect(demoButton().closest('form')).toBeNull();
+    });
+
+    it('sends nothing while a form sign-in is still in flight', async () => {
+      fill('#email', 'coral@example.com');
+      fill('#password', 'hunter2hunter2');
+      submit();
+      await fixture.whenStable();
+
+      expect(demoButton().disabled).toBe(true);
+      demoButton().click();
+      await fixture.whenStable();
+
+      mock.expectOne(`${environment.apiUrl}/auth/login`).flush(TOKEN_RESPONSE);
+    });
+
+    it('explains a rejected demo sign-in the way the form does', async () => {
+      demoButton().click();
+      await fixture.whenStable();
+      mock
+        .expectOne(`${environment.apiUrl}/auth/login`)
+        .flush({ detail: 'x', code: 'invalid_credentials' }, { status: 401, statusText: 'x' });
+      await fixture.whenStable();
+
+      expect(text()).toContain('Incorrect email or password.');
     });
   });
 });

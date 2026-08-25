@@ -77,6 +77,54 @@ TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5433/bijoux_t
 
 The same variable is what the Neon `test` branch below and CI's service container are for; only its value changes. The suite runs `alembic upgrade head` against it once per session, so the target needs no preparation beyond existing. **Postgres 18 rather than 16**, to match what Neon actually serves — CI's `postgres:16` pin is task 5.5's to correct.
 
+## The demo account, and the seed script that creates it
+
+`backend/scripts/seed_demo.py` creates `demo@bijoux.app` and its wardrobe from a
+committed table of Cloudinary `public_id`s and hand-written tags. It makes no AI
+call, so the wardrobe is the same wardrobe every run. Run it **from `backend/`,
+as a module** — `python scripts/seed_demo.py` cannot work, because that form puts
+`backend/scripts` on `sys.path` instead of `backend/` and `import app` fails.
+
+```bash
+python -m scripts.seed_demo --upload ~/bijoux-seed-images   # uploads, logs the table, writes no rows
+python -m scripts.seed_demo --yes                           # seeds; refuses if the account exists
+python -m scripts.seed_demo --yes --reset                   # deletes demo@bijoux.app and reseeds
+python -m scripts.seed_demo --yes --reset --with-failures   # adds the two failed rows
+```
+
+It logs the host, the database name and the current user and item counts before
+it writes anything, and refuses without `--yes`. It refuses outright if
+`DATABASE_URL` resolves to `TEST_DATABASE_URL` — `conftest.py`'s guard from the
+other side. Every write and delete is scoped to the demo user's id; there is no
+unscoped `DELETE` and no `TRUNCATE` in the file. `DECISIONS.md` 130–135.
+
+### The demo password is published, not secret
+
+**`demo@bijoux.app` / `bijoux-demo-wardrobe`.**
+
+This is a **published credential**, not a leaked one. It is in
+`backend/scripts/seed_demo.py`, in `frontend/src/app/features/auth/login.page.ts`
+— which needs it for the **View the demo wardrobe** button — and here. It was
+chosen fresh for this account and is reused from nothing. Written down in this
+document because a password found in committed source with no explanation reads
+as a mistake, and because the pre-defence checklist needs somewhere to point.
+
+**The same two strings live in two languages and nothing compares them.** Drift
+gives a demo button that answers `401` against a correctly seeded database, and
+the only thing that catches it is signing in with the button — which is why that
+is a checklist line below and not an assumption. `DECISIONS.md` 136 and 137.
+
+**The demo account is shared and mutable.** Every visitor who presses the button
+is the same user; anything they edit or delete stays that way until
+`--reset` is run again.
+
+**Before this frontend is deployed, read `AUDITS.md` O-5.** The button hands any
+visitor an authenticated session, and `POST /items/upload` queues a real tagging
+call per file. The rate limit that answers this is specified in `04-API-SPEC.md`
+and is not built.
+
+---
+
 ### Frontend — `frontend/src/environments/`
 
 Three files, created by `ng generate environments` at task 0.8 and typed against a shared interface so a key cannot be present in one and missing from the other:
@@ -195,7 +243,9 @@ No OpenAI key is present in CI. If a test needs one, that test belongs in the `e
 
 ## Pre-defence checklist
 
-- [ ] Demo account seeded with 40 tagged items, password written down somewhere you can read it under pressure
+- [ ] Demo account seeded — `python -m scripts.seed_demo --yes` from `backend/`, credentials in the section above
+- [ ] **View the demo wardrobe** pressed once against the seeded database, because nothing but a real sign-in compares the two copies of the password
+- [ ] `--with-failures` decided: on if the failed tile, its retry and the hand-recovery path are being shown; off for a clean wardrobe
 - [ ] Backend warmed up — free-tier cold start already paid
 - [ ] A rehearsed 3-minute path: upload → tag → daily look → 4-day trip
 - [ ] Screen-recorded backup of that path, in case the wifi fails

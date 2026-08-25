@@ -377,6 +377,6 @@ ORM models arrive later than the tables they describe — `users` in task 0.5, `
 
 ## Seed data
 
-`backend/scripts/seed_demo.py` creates a demo account with **40 pre-tagged items** — real photos, tags already populated, `status='ready'`, no AI calls.
+`backend/scripts/seed_demo.py` creates a demo account with **64 pre-tagged items** — real photos, tags already populated, `status='ready'`, no AI calls. The count lives in the committed table, not in the code; `DECISIONS.md` 138 and 141 record where the photographs came from and how they were tagged.
 
 This is not optional. An evaluator will not photograph 40 garments to see the product work, and the E2E suite needs a deterministic wardrobe to assert against. Build it in Stage 1.
