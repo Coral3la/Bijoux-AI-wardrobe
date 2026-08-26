@@ -141,7 +141,8 @@ bijoux/
 │   │   ├── enums.py             THE closed vocabulary — single source of truth
 │   │   ├── api/v1/
 │   │   │   ├── router.py
-│   │   │   └── routes/          auth.py, items.py, looks.py, trips.py, me.py
+│   │   │   └── routes/          auth.py, items.py, weather.py, looks.py,
+│   │   │                        trips.py, me.py
 │   │   ├── services/
 │   │   │   ├── storage.py       Cloudinary upload + transform URLs
 │   │   │   ├── vision.py        image → tags

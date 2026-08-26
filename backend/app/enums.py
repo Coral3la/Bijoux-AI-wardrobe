@@ -115,6 +115,24 @@ class Material(Vocabulary):
     OTHER = "other"
 
 
+# The one vocabulary here that is not an `items` column. It names the sky rather
+# than a garment, and it lives beside the others because the reason they are
+# closed applies to it unchanged: `partly_cloudy` and `Partly Cloudy` and
+# `partlycloudy` are the same weather and would be three i18n keys. Open-Meteo
+# answers in WMO 4677 integers and `app/services/weather.py` maps them; the
+# eight values below are what `GET /weather` and the frontend agree on.
+# `DECISIONS.md` 144.
+class Condition(Vocabulary):
+    CLEAR = "clear"
+    PARTLY_CLOUDY = "partly_cloudy"
+    CLOUDY = "cloudy"
+    FOG = "fog"
+    DRIZZLE = "drizzle"
+    RAIN = "rain"
+    SNOW = "snow"
+    THUNDERSTORM = "thunderstorm"
+
+
 SUBCATEGORIES: dict[Category, tuple[str, ...]] = {
     Category.TOP: (
         "t_shirt",

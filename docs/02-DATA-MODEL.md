@@ -185,6 +185,26 @@ Two rows of that table are claims rather than bookkeeping, and they are stated h
 processing · ready · failed
 ```
 
+### `condition` — 8 values, and the one vocabulary here that is not a column
+
+```
+clear · partly_cloudy · cloudy · fog · drizzle · rain · snow · thunderstorm
+```
+
+It names the sky rather than a garment, so no table has a `condition` column and
+no migration creates a type for it. It is here because this document is
+authoritative for closed vocabularies by its own first line, and because the
+argument that closed every list above applies to it unchanged — `partly_cloudy`
+and `Partly Cloudy` and `partlycloudy` are the same weather and would be three
+i18n keys. Added at task 2.1, which is where `GET /weather` first has to return
+a value; `AUDITS.md` **O-8** makes the same case for `occasion` and is still
+open. `DECISIONS.md` 144.
+
+Open-Meteo answers in **WMO 4677 integers**, not strings. The map from those
+twenty-eight codes onto these eight lives in `app/services/weather.py`, which is
+the only place the provider's numbering appears — an unmapped code falls back to
+`cloudy` and logs, rather than failing a request over a label. `DECISIONS.md` 146.
+
 ---
 
 ## Tables

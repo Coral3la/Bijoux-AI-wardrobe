@@ -96,6 +96,21 @@ export const MATERIALS = [
 ] as const;
 export type Material = (typeof MATERIALS)[number];
 
+// Not an item column — it names the sky. It lives in this mirror because
+// `GET /weather` returns it and the strip renders it, and because the reason
+// every other list here is closed applies unchanged: one weather, one i18n key.
+export const CONDITIONS = [
+  'clear',
+  'partly_cloudy',
+  'cloudy',
+  'fog',
+  'drizzle',
+  'rain',
+  'snow',
+  'thunderstorm',
+] as const;
+export type Condition = (typeof CONDITIONS)[number];
+
 export const SUBCATEGORIES = {
   top: ['t_shirt', 'tank', 'shirt', 'blouse', 'sweater', 'sweatshirt', 'hoodie', 'bodysuit'],
   bottom: ['jeans', 'trousers', 'shorts', 'skirt', 'leggings', 'cargo'],

@@ -201,7 +201,15 @@ Counts exclude archived rows, matching `GET /items`, so a dashboard cannot keep 
 ```
 The `rule` string is exactly what goes into the prompt. Exposing it is intentional — it makes the system inspectable and it is easy to assert on in tests.
 
-Cached in memory for 30 minutes per `(lat, lon, date)`.
+**The rule is built from `temp_max_c`.** `build_rule` takes one temperature and this response carries two, which no document settled until task 2.1. The example above decides it: min 12 with max 19 prints the 16–21°C rule, and under `temp_min_c` it would print *"Outerwear is REQUIRED, warmth 3-4"* — so the worked example is only self-consistent under the maximum. `DECISIONS.md` 142.
+
+`condition` is the closed vocabulary in `02-DATA-MODEL.md`, eight values, mapped from Open-Meteo's WMO code in `app/services/weather.py`.
+
+Cached in memory for 30 minutes per `(lat, lon, date)`, with the coordinates **rounded to 2 decimal places** before they become a key — the provider snaps to a coarser grid than that on its own, and `users.home_lat` is a `REAL`, so a cache keyed on full precision would never hit. `DECISIONS.md` 145.
+
+Failure codes, both `forecast_unavailable`: `400` when the date is beyond the forecast horizon, `502` when Open-Meteo does not answer. **This is the first code in the project used at two statuses**, and it is deliberate — the frontend branches on the code to decide what to say, and both cases say the same thing ("no forecast for that day"); the status is for the caller who needs to know whose fault it was. `DECISIONS.md` 147.
+
+**The horizon is `today + 15`** — sixteen days counting today. Measured on 2026-08-26: the provider served `2026-09-10` and refused `2026-09-11`. Bad `lat`/`lon` are `422` `validation_error` before any request leaves.
 
 ---
 

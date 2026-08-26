@@ -98,7 +98,7 @@ contradiction** — a thing no document disagrees about and nobody has looked at
 It was extended at 1.6 rather than duplicated, and **O-15** was opened by the
 same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
-task. O-14 was extended again at 1.7 and at 1.8.
+task. O-14 was extended again at 1.7 and at 1.8. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -265,6 +265,26 @@ guard.
 `end_date` no more than 16 days ahead — Open-Meteo's horizon.* It is the last day
 that needs a forecast, the number then comes from the provider rather than from
 coincidence, and `400 forecast_unavailable` keeps a single, checkable condition.
+
+**Measured at task 2.1, and the recommendation above is off by one.** A live
+call on 2026-08-26 asked for each day in turn: the provider served `2026-09-10`
+and refused `2026-09-11` with *"Parameter 'start_date' is out of allowed range
+from 2026-05-25 to 2026-09-10"*. So the last servable day is **today + 15** —
+sixteen days *counting today*, which is what "16 days" in Open-Meteo's own
+material means. Written as "no more than 16 days ahead" the constraint admits
+one day the provider will refuse, and it refuses it with a `400` rather than a
+gap, so a trip would fail inside the orchestration exactly as this item
+predicts. The correct wording is **`end_date` no more than 15 days ahead**.
+`app/services/weather.py` carries the number as `FORECAST_HORIZON_DAYS = 15`
+with the measurement beside it; whoever does 4.2 should read it from there
+rather than re-deriving it. The backward limit was measured at the same time and
+is **93 days**, which is an archive lag rather than a documented horizon and
+should not be relied on.
+
+**Also worth carrying into Stage 4:** the provider's refusal is an HTTP `400`
+with `{"error": true, "reason": "..."}`, not a 200 with empty arrays. Task 2.1
+maps that to `ForecastOutOfRangeError` and answers `400 forecast_unavailable`
+rather than treating it as the provider being down. `DECISIONS.md` 147.
 
 #### O-8 · The `occasion` vocabulary lives in the wrong document — Stage 2
 
@@ -756,6 +776,66 @@ audit*. This is the first finding out of that document and the boundary is
 holding as O-13's was.
 
 ---
+
+#### O-20 · The demo wardrobe cannot satisfy parts of the weather rule it will be given — opened at task 2.1
+
+Measured from `SEED_ITEMS` and cross-checked against the live database (64 rows
+on `demo@bijoux.app`, all `ready`; 13 more across the four real accounts). None
+of this is a defect in Stage 2's code. It is written down so that a look that
+comes back thin at a defence is read as **the wardrobe**, not as the stylist,
+and so the answer is ready rather than improvised.
+
+**Outerwear is the binding constraint, and "five items" overstates it.** The
+five split 2 / 0 / 3 across warmth 3 / 4 / 5:
+
+| Rule band | What it demands | Items that qualify |
+|---|---|---|
+| 10–15°C | outerwear, warmth 3-4 | **2** — the light blue and black double-breasted blazers, both F4, both `layer=mid` |
+| < 10°C | outerwear warmth 4-5, plus a mid layer | **3** — grey wool coat, two shearling jackets, all W5 |
+| 22–27°C | outerwear optional, only if warmth ≤ 2 | **0** |
+| 16–21°C | mid layer or light outerwear, warmth 2-3 | **2** — the same two blazers |
+
+`STAGE-2`'s acceptance criterion *"forcing 12°C produces outerwear"* therefore
+passes on a two-item choice set, and five runs will show the same two blazers.
+It is a real pass and a weak one. The coat override's **Yes** at 2.8 has nothing
+legal to return between 22°C and 27°C.
+
+**`water_resistant` is `false` on all 64 rows, so the rain modifier is
+unsatisfiable.** `build_rule` emits *"Strongly prefer water_resistant outerwear
+and closed water_resistant shoes"* whenever `precip_mm > 1`, and no item in the
+wardrobe can honour it. `DECISIONS.md` 141 establishes that the column is a
+decision rather than an unfilled field — nothing in this wardrobe is rainproof —
+so **the correct output under rain is `missing_pieces` naming a rainproof shoe**,
+and the demo should show that rather than avoid rain. Note also that *"closed"*
+is not a field at all: shoes carry `length` (`full`, `ankle`, or `None`) and
+closed-ness is not derivable from any column.
+
+**Three more dimensions too thin to vary.** `formality` 1 is one item — the
+white satin lounge shorts, W1 — and with the prompt's *"keep formality within
+one point"* it can only ever pair with F1–F2, of which there is no outerwear at
+all, making it summer-only and coat-less (`DECISIONS.md` 140 has the count;
+this is what the count does). `warmth` 4 is two items and **both are shoes**, so
+that band contributes nothing above the ankle. And `formality` 5 has no non-dress
+route: tops stop at F3, so every formal look must be one of the two slip gowns.
+
+**Two occasions have no wardrobe.** `04` licenses six. `sport` has zero
+`leggings`, zero `hoodie`, zero `sweatshirt` and two `sneakers`. `formal` is the
+dress-only case above.
+
+**No user has a home location.** `home_city`, `home_lat` and `home_lon` are
+`NULL` on all five rows including `demo@bijoux.app`, and `scripts/seed_demo.py`
+never sets them. `GET /weather` takes coordinates as parameters so task 2.1 is
+unaffected, but **2.7's forecast lookup and 2.12's weather strip have no default
+until 2.2 ships and somebody runs a `PATCH /me`**. Either seed the demo account
+with Tel Aviv at 2.2, or accept that the strip is empty on a fresh demo login.
+
+**Recommendation.** Nothing to build. Two things to decide: whether the demo
+account gets a seeded home location at 2.2 (cheap, and it makes 2.12
+demonstrable), and whether two rainproof items are worth adding to the seed
+before the defence — which would cost two photographs and a `--upload` run, and
+would make the rain branch showable instead of only describable. If neither is
+taken, this item is the answer to *"why does it keep putting her in the same
+blazer?"*.
 
 ### Noted in passing, not a documentation defect
 
