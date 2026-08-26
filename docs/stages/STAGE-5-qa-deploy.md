@@ -79,6 +79,10 @@ Rewrite the root README for a reader who has never seen the project: what it doe
 
 This is what a recruiter opens first. Give it real time.
 
+**The first instalment landed early, during Stage 1.** A root README covering what Bijoux is, the stack, running it from a clean clone, seeding the demo wardrobe, both test suites and an index of `docs/` was written and committed while Stage 1 was still open, because the project had none worth showing and every fact in that list was already true. **5.8 is not closed by it.** What it still owes is the half that depends on work not yet done: a screenshot or GIF of the packing flow (Stage 4), the architecture diagram, the evaluation results from 5.7 (`docs/eval-results.md`), the known issues from 5.4 (`KNOWN-ISSUES.md`), and what you would do next. Read the file that exists before rewriting it — the running, seeding and testing sections are measured against `package.json`, `pyproject.toml` and `07-DEPLOYMENT.md` and should be re-measured rather than re-derived.
+
+Two things were done in the same commit and do not need doing again: `docs/README.md`'s Quickstart was deleted in favour of a pointer at the root README, so that only one document answers "how do I run this"; and the root README's own claim to be that document is why the deletion happened then rather than later.
+
 ---
 
 ## Acceptance criteria
@@ -95,6 +99,8 @@ This is what a recruiter opens first. Give it real time.
 ## Commit checkpoints
 
 `test: record ai fixtures` · `test: backend suite to target` · `test(e2e): page objects` · `test(e2e): user journeys` · `docs: known issues` · `ci: github actions pipeline` · `chore: production deployment` · `docs: evaluation results` · `docs: project readme`
+
+**Task 5.8 is two commits, and the first one is already in the log under a different message.** It landed during Stage 1 as `docs: rewrite the root README as a from-clean-clone guide`, which is a narrower claim than `docs: project readme` and was the accurate one for what it contained. The line above is left as it stands rather than amended, because it is still the right message for the commit that closes 5.8 — the difference from **STAGE-1**'s two corrections is that neither the type nor the scope here is wrong, only the count, and the count is recorded in § 5.8 where a reader meets it before writing anything. A reader diffing this list against `git log` and finding one README commit they cannot place should read § 5.8 first.
 
 ## Pre-defence
 

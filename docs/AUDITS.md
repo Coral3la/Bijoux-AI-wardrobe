@@ -715,6 +715,46 @@ rather than found during a defence, and so that whoever adds two photographs
 later knows what they buy. `07-DEPLOYMENT.md`'s checklist no longer implies the
 failed states are demonstrable.
 
+#### O-19 · Two documents print a CI that has never been written — task 5.5
+
+Opened by the root-README task, not by an audit. `07-DEPLOYMENT.md` §
+*CI — `.github/workflows/ci.yml`* prints a three-job YAML block — backend,
+frontend, e2e, with a `postgres:16` service and a `-m "not eval"` step — in the
+present tense and under the filename. **`.github/workflows/` contains one file
+and it is `.gitkeep`.** The pipeline is task 5.5's to write and does not exist.
+
+**`docs/README.md` makes the same claim in one line**, and it is the second
+document rather than a restatement of the first: its *Stack at a glance* table
+carries `| CI/CD | GitHub Actions → Render (API) + Vercel (web) |` in the
+present tense, in a column where every other row names a service that is
+genuinely wired. It is named here rather than left to whoever fixes `07`,
+because a fix scoped to the document that happened to prompt the item is how
+the second copy survives it. Both lines close together or neither does.
+
+**O-13 already records that CI does not exist**, and found it from the other
+end: nothing runs the frontend suite. This item is the document half of the same
+fact, and is separate because the fix is different. O-13's recommendation is a
+line to add to `ci.yml` when it is written; this one is that until then, the
+section reads as documentation of a file rather than as a specification for one,
+and two other places rely on it doing so — `07`'s own note that "CI's
+`postgres:16` pin is task 5.5's to correct", which describes correcting a file
+that has never been created, and the pre-defence checklist's *Latest CI run
+green, Playwright HTML report available to show*, which is not a check anybody
+can currently perform.
+
+**Why it is worth an item rather than a fix in place.** The block is not wrong —
+it is 5.5's specification and `STAGE-5` § 5.5 points at it by name. What is
+wrong is that nothing on the page says so, and a specification and a description
+of deployed infrastructure are indistinguishable when both are a YAML block
+under a filename. The cheapest answer is one sentence marking it as not yet
+built; the alternative is to move the block into `STAGE-5` and leave `07` a
+pointer. Either is a decision about where a specification lives, which is why it
+is here.
+
+**`07` was not read by audit 1** — it is named under *Not covered by this
+audit*. This is the first finding out of that document and the boundary is
+holding as O-13's was.
+
 ---
 
 ### Noted in passing, not a documentation defect

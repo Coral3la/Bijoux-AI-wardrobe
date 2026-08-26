@@ -62,25 +62,8 @@ Read these in order. Every document is the single source of truth for its area â
 
 ## Quickstart
 
-```bash
-# Backend
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env          # fill in secrets
-alembic upgrade head
-uvicorn app.main:app --reload # http://localhost:8000
-
-# Frontend
-cd frontend
-npm install
-npm start                     # http://localhost:4200
-
-# E2E
-cd e2e
-npm install && npx playwright install
-npx playwright test
-```
+Prerequisites, environment variables, migrations, the two commands, the demo
+wardrobe and both test suites are in the [root README](../README.md).
 
 ---
 
