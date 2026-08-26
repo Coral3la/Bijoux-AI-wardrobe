@@ -33,7 +33,11 @@ No saving, no thumbs up/down, no wear tracking — that is Stage 3. No trips. Th
 `GET /weather` exposes both the forecast and the rule string.
 
 ### 2.2 Location search
-`GET /me/locations/search?q=` proxying Open-Meteo geocoding. `PATCH /me` accepting `home_city`, `home_lat`, `home_lon`.
+`GET /me/locations/search?q=` proxying Open-Meteo geocoding. `PATCH /me` accepting **the whole body `04-API-SPEC.md` prints** — `display_name`, `height_cm`, the three sizes, `style_notes` and the three home fields.
+
+This line named the three home fields only until the task ran. It was widened on `AUDITS.md` **O-6**'s recommendation: the stylist prompt at 2.4 reads `height_cm` and `style_notes`, `05-FRONTEND-SPEC.md` §8's profile screen is owned by no task, and a narrow `PATCH` would leave that prompt block structurally empty in every request this project ever makes. Same route, longer schema. `DECISIONS.md` 149.
+
+The demo account is seeded with a home location here too — `AUDITS.md` **O-20** measured that no row on the database had one, which leaves 2.7's forecast lookup and 2.12's strip with no default on the account a visitor signs into.
 
 ### 2.3 Wardrobe serialiser
 `services/serializer.py` → `serialize_wardrobe(items) -> str` producing the compact one-line-per-item format. Omit nulls. Uppercase `short_id` at the start of each line.
@@ -105,7 +109,7 @@ A persistent strip on the wardrobe screen showing the current temperature and co
 
 ## Commit checkpoints
 
-`feat(weather): open-meteo client and rules` · `test: weather rule boundaries` · `feat(ai): wardrobe serializer` · `feat(ai): stylist service` · `feat(ai): response validation` · `feat(db): looks schema` · `feat(api): suggest endpoint` · `feat(web): stylist screen` · `feat(web): look card` · `feat(ai): anchor item support` · `feat(web): style around this` · `feat(ai): single item swap` · `feat(web): swap button`
+`feat(weather): open-meteo client and rules` · `test: weather rule boundaries` · `feat(api): profile and location search` · `feat(ai): wardrobe serializer` · `feat(ai): stylist service` · `feat(ai): response validation` · `feat(db): looks schema` · `feat(api): suggest endpoint` · `feat(web): stylist screen` · `feat(web): look card` · `feat(ai): anchor item support` · `feat(web): style around this` · `feat(ai): single item swap` · `feat(web): swap button`
 
 ## If you fall behind
 

@@ -628,6 +628,61 @@ spy on `Router.navigate` were refused as too white-box — the spy was kept, and
 it was caught. The horizontal scroll of the chip row was declared **unmutatable**
 rather than a survivor, and it remains so: the gate has no layout.
 
+### The profile and geocoding mutation run, task 2.2
+
+Nineteen mutations plus a control, run from a pristine copy with the baseline
+green at both ends (670 passed before and after). **Two survived and both were
+fixed rather than recorded**, which makes this the first backend run where a
+survivor changed the tests rather than only the table.
+
+The control — dropping `home_city` from `UserResponse` — fails
+`test_writes_every_field_in_the_documented_body`, which is what makes the rest
+of the table readable.
+
+Caught, and the ones worth naming: reading `body["results"]` instead of
+`.get("results", ())`, which is the whole of the no-match finding; dropping
+`exclude_unset`; removing the empty-body guard; `extra="forbid"` weakened to
+`"ignore"`; the height bounds removed and, separately, weakened from `ge`/`le`
+to `gt`/`lt`, which dies only on the test that asserts both endpoints of the
+range; the query no longer stripped before it is measured; the minimum query
+length dropped to 1; `geocoding_unavailable` swapped for `forecast_unavailable`;
+the search route's auth dependency removed; the `count` parameter dropped;
+`country` read with `[]` instead of `.get`; `db.commit()` removed, which dies on
+the one test that re-reads the row through `db.refresh` rather than trusting the
+response body; and the seeded home location removed from the insert, both
+entirely and coordinates-only.
+
+**Survivor 1 — the home-location rule needs two checks and only one of them is
+usually reachable.** `UserUpdate` refuses a partial home location twice: once on
+which keys arrived, once on whether their values agree. Deleting the *keys*
+check left all 669 tests green, because every partial request the tests sent —
+a city alone, coordinates alone, a half-cleared triple — is already refused by
+the values check. The one request that reaches the keys check is
+`{"home_city": null}` on its own, which would otherwise be a `200` that clears a
+city and leaves its coordinates behind. This is 1.8's shape from a new angle:
+there, one claim was made by two near-identical methods and only one was
+tested; here, one rule is enforced by two checks and only one is reachable
+through the tests that were written. A test named for exactly that request now
+kills it.
+
+**Survivor 2 — `RESULT_LIMIT` was tested against itself, which is 1.6 repeated
+after the lesson was written down.** `test_sends_the_parameters_the_provider_documents`
+asserted `"count": str(RESULT_LIMIT)`, read out of the module under test, so
+changing the constant from 5 to 3 moved the expectation with it and the suite
+stayed green. `04-API-SPEC.md` says "up to 5". The literal is now transcribed
+from that sentence and a second test pins the constant to it, exactly as 1.6 did
+for `MAX_UPLOAD_BYTES` and 1.7 for `2000` and `180_000`. **The rule was already
+in this document, in `CONVENTIONS.md` and in `DECISIONS.md` 101, and it was
+broken anyway** — which is the honest thing to record about it: the failure mode
+is not ignorance of the rule, it is that a derived expectation looks more
+correct than a literal while it is being written.
+
+One mutation was discarded rather than recorded as a survivor. Giving
+`LocationSearchResponse.results` a default of `[]` changes no behaviour, because
+the only construction of that model supplies the field on every path — a
+mutation that cannot be reached is not a mutation that survived, which this
+document has required since 1.1.
+
 ### What mutation testing has actually found on this project
 
 Worth stating plainly, because it is not what the technique is usually sold for: **on this project mutation testing has found more false claims than bugs.**
@@ -647,6 +702,8 @@ Worth stating plainly, because it is not what the technique is usually sold for:
 - 1.8: the fifth survivor, and the pattern it belongs to is now worth stating on its own. **Where one claim is made by two near-identical pieces of code, the tests reliably exercise one of them and the suite cannot tell the difference.** At 1.5 it was per-item state: six tests, every one rendering a single item, where a per-item signal and a global one are indistinguishable. At 1.8 it was two range methods making the same "this rounds nothing" claim, with only a warmth handle ever dragged with a fraction, so rounding inside the formality one survived the whole suite. The two look unrelated and are the same shape: **the untested copy is invisible precisely because the tested copy passes**, and reading cannot find it, because the code that was not exercised is the code that looks right. The instances differ; what to do about them does not — when a claim has more than one site, test every site, and prefer one site where the duplication is avoidable.
 
 - 1.6: the third survivor, and the first that was a *test* rather than a binding. `MAX_UPLOAD_BYTES` was mutated from 1024² to 1000² and nothing failed, because every expectation about it was written in terms of it. Same lesson as 1.5 from the opposite direction — there the state was tested and the binding was not, here the behaviour was tested against itself. Both were found in code that was green, linted and type-checked, and neither would have been found by reading.
+
+- 2.2: the sixth and seventh survivors, and the second one is the first **repeat**. A constant was tested against itself — the identical failure 1.6 found in `MAX_UPLOAD_BYTES`, after the rule had been written into this document, into `CONVENTIONS.md` and into `DECISIONS.md` 101, and after 1.7 had applied it correctly to two literals on purpose. The technique caught it a second time in code that was green, linted and type-checked. **A lesson written down is not a lesson enforced**, and nothing in this project can enforce this one except deleting the behaviour and looking.
 
 The lesson generalises: the assertion under test is often a sentence in a document, not a branch in the code. Deleting the behaviour is the only way to find out whether the sentence was ever true.
 

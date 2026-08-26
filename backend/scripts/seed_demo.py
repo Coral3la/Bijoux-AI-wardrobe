@@ -56,6 +56,15 @@ DEMO_EMAIL = "demo@bijoux.app"
 DEMO_PASSWORD = "bijoux-demo-wardrobe"
 DEMO_DISPLAY_NAME = "Demo wardrobe"
 
+# Tel Aviv, at the coordinates `04-API-SPEC.md`'s own `PATCH /me` example uses.
+# Seeded because `AUDITS.md` O-20 measured that no row on the database has a
+# home location at all, which leaves 2.7's forecast lookup and 2.12's weather
+# strip with no default on the one account a visitor signs into. Two decimals
+# is all `get_forecast` keeps of them (145).
+DEMO_HOME_CITY = "Tel Aviv"
+DEMO_HOME_LAT = 32.08
+DEMO_HOME_LON = 34.78
+
 # Pinned rather than generated. `--upload` has to name a folder
 # (`bijoux/{user_id}/`) before any row exists, and `--reset` deletes the user,
 # so an id minted per run would leave every committed `public_id` in the folder
@@ -1550,6 +1559,9 @@ def _insert(db: Session, items: tuple[SeedItem, ...]) -> None:
             email=DEMO_EMAIL,
             password_hash=hash_password(DEMO_PASSWORD),
             display_name=DEMO_DISPLAY_NAME,
+            home_city=DEMO_HOME_CITY,
+            home_lat=DEMO_HOME_LAT,
+            home_lon=DEMO_HOME_LON,
         )
     )
     # Found by running it. No `relationship()` is declared between the two

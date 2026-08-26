@@ -54,7 +54,7 @@ The `user` key above and the body of `GET /auth/me` and `PATCH /me` are all the 
 
 Every field but `id`, `email`, `display_name` and `created_at` is nullable and is `null` on a fresh account.
 
-**`display_name` is the exception, and it is nullable in the column while never being `null` on a new account.** `POST /auth/register` has required it since task 0.10 — `str`, trimmed, at least one character after trimming — so nothing this API creates can have a blank one. The column stays `TEXT NULL` because four accounts predate the rule and because `PATCH /me` does not set it, so a client reading `GET /auth/me` must still handle `null`. Tightening the request did not tighten the response: `UserResponse.display_name` is `str | None`. The spelling of the constraint is not the one `DECISIONS.md` 070 proposed — see 072 for why `Field(strip_whitespace=True)` silently does nothing.
+**`display_name` is the exception, and it is nullable in the column while never being `null` on a new account.** `POST /auth/register` has required it since task 0.10 — `str`, trimmed, at least one character after trimming — so nothing this API creates can have a blank one. The column stays `TEXT NULL` because four accounts predate the rule, so a client reading `GET /auth/me` must still handle `null`. **`PATCH /me` has set it since task 2.2** — this sentence said it did not, on a document whose own `PATCH` example carried the field — and it can also clear it, which makes a blank name producible by the API for the first time. `userLabel` in the frontend has fallen back to the email address since 0.9 for the legacy rows and covers this unchanged (`DECISIONS.md` 071, 149). Tightening the request did not tighten the response: `UserResponse.display_name` is `str | None`. The spelling of the constraint is not the one `DECISIONS.md` 070 proposed — see 072 for why `Field(strip_whitespace=True)` silently does nothing.
 
 One shape for one resource — see `DECISIONS.md` 034.
 
@@ -78,9 +78,31 @@ Passwords are a minimum of 8 **characters** and a maximum of 72 **bytes** in UTF
 ```
 All fields optional. `home_lat`/`home_lon` power the weather widget and the default location for daily looks.
 
+**Built wide at task 2.2, not narrow.** `STAGE-2` 2.2 asked for `home_city`, `home_lat` and `home_lon` only; the endpoint accepts the whole body above, because `03-AI-CONTRACTS.md`'s stylist prompt reads `height_cm` and `style_notes` and no other route can ever set them — `AUDITS.md` **O-6**, closed there. `display_name` is included and this document said twice that it would not be; both sentences are corrected, and see `DECISIONS.md` 149.
+
+**Semantics are `PATCH /items/{id}`'s exactly.** An omitted field is left alone; a field sent as `null` is cleared; an unknown key is a `422` rather than being ignored; an empty body is a `422`. One partial-update rule for the whole API.
+
+**The home location is one field in three columns.** `home_city`, `home_lat` and `home_lon` are supplied together or cleared together — any other combination is a `422`. A city with no coordinates cannot be given a forecast, and coordinates with no city name have nothing to print above the weather strip. `DECISIONS.md` 151.
+
+`height_cm` is bounded by `02-DATA-MODEL.md`'s own `CHECK (height_cm BETWEEN 120 AND 230)`, refused by the request schema rather than by Postgres — an `IntegrityError` reaching the client is a `500` with no `code`. `home_lat` is `-90…90` and `home_lon` is `-180…180`.
+
+Failure codes on this endpoint: `422` `validation_error`, `401` `invalid_token`.
+
 ### `GET /me/locations/search?q=berlin`
-Proxies Open-Meteo geocoding. Returns up to 5 `{ name, country, lat, lon }`.
+```json
+← 200 { "results": [ { "name": "Berlin", "country": "Germany",
+                       "lat": 52.52437, "lon": 13.41053 } ] }
+```
+Proxies Open-Meteo geocoding. Returns up to 5 results.
 Used by both the profile screen and the trip form, so the frontend never calls a third-party API directly.
+
+**Wrapped in `results`, and no match is a `200` with an empty list** — not a `404`, which would fire on every keystroke that has not finished spelling a city. Note that the provider itself answers a no-match by **omitting the key entirely** rather than by sending an empty array; that is its shape, not ours, and it is what `app/services/geocoding.py` parses around. Verified against a live call on 2026-08-26.
+
+**`q` is trimmed and must be at least 2 characters**, which is the provider's own floor: one character matches nothing and two match only exactly. Shorter than that is a `422` and no request leaves the process.
+
+The four keys are all this returns. The provider also sends `admin1`, `country_code`, `population`, `timezone` and more, and a search for `berlin` really does come back with two places called Berlin in two countries — so `name` plus `country` does not always identify a place uniquely. Recorded as a known limitation rather than widened; `DECISIONS.md` 153.
+
+Failure codes on this endpoint: `422` `validation_error`, `502` `geocoding_unavailable`, `401` `invalid_token`.
 
 ---
 

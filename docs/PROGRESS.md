@@ -1,7 +1,9 @@
 # Progress
 
-**Current stage:** Stage 1 — Wardrobe
-**Status:** Stage 1 in progress — 1.1, 1.2a, 1.2b, 1.3, 1.4, 1.5, 1.6, 1.7 and 1.8 complete.
+**Current stage:** Stage 2 — The Stylist
+**Status:** Stage 2 in progress — 2.1 and 2.2 complete. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below).
+
+This header said "Stage 1 in progress — 1.1 … 1.8 complete" until task 2.2, four tasks after 1.9 shipped and one after the log below recorded Stage 1 as closed. A tracker that contradicts its own log is worse than a stale one, because the log reads as the correction and the header is what anybody looks at first.
 
 Claude Code updates this file at the end of every stage: tick the criteria, set the next stage, and note anything that changed relative to the plan.
 
@@ -33,7 +35,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Upload sheet (camera + gallery)
 - [x] Polling
 - [x] Filters
-- [ ] Item detail and tag editor
+- [x] Item detail and tag editor
 - [x] Seed script — the demo wardrobe
 - [ ] Golden dataset and first accuracy run
 
@@ -41,7 +43,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 `stages/STAGE-2-stylist.md` · target 5–6 days
 
 - [x] Weather service and rule table
-- [ ] Location search
+- [x] Location search
 - [ ] Wardrobe serialiser
 - [ ] Stylist service
 - [ ] Response validation
@@ -365,3 +367,26 @@ The whole task was decided by things that were measured rather than read:
 - **`forecast_unavailable` is now the first code in the project used at two statuses** — `400` beyond the horizon, `502` when the provider is silent. Narrowing of an established one-code-one-status pattern, pinned by a named test. 147.
 
 **O-20 is the item to read before the defence.** The demo wardrobe cannot satisfy part of the rule this task now emits, and it is data rather than code: **zero of 64 items are `water_resistant`**, so the rain modifier is unsatisfiable by construction; the 10–15°C band has **exactly two** qualifying items, both the same blazer cut; the 22–27°C band has none; `warmth` 4 is two items and both are shoes. No user has a `home_lat`/`home_lon`, including the demo account, so 2.12's strip has nothing to show until 2.2 ships and someone runs a `PATCH /me`. None of this fails a test and none of it will.
+
+**2026-08-26 — task 2.2, location search and the profile endpoint.** **670 backend tests pass (627 before, 43 added).** Frontend untouched and not run — this task ships no screen; `05-FRONTEND-SPEC.md` §8's profile page is owned by no numbered task and 2.2 did not invent one. New: `backend/app/api/v1/routes/me.py`, `backend/app/services/geocoding.py`, `backend/app/schemas/location.py`, `backend/tests/unit/test_geocoding.py` (11 cases), `backend/tests/integration/test_me.py` (21), `backend/tests/integration/test_locations_search.py` (9), `backend/tests/integration/test_seed_insert.py` (1). Changed: `app/schemas/user.py` (`UserUpdate`, and `DisplayName` moved in), `app/schemas/auth.py` (imports it), `app/models/user.py` (the height bounds as constants), `app/api/v1/router.py`, `scripts/seed_demo.py` (the demo home location), `tests/unit/test_seed_data.py` (one test), and seven documents besides this one. Seven entries, `DECISIONS.md` 149–155. Audit **O-6 closed**, **O-20 half answered**.
+
+Seven decisions, and the first one is a contradiction rather than a choice:
+
+- **`PATCH /me` accepts the whole body, and `display_name` is in it.** Four documents gave three answers, and `04-API-SPEC.md` and `DECISIONS.md` 072 each contradicted *themselves* — `04`'s worked example carries a field its prose says the endpoint does not set, and 072 justifies the `DisplayName` annotation by 2.2's reuse of it two paragraphs before stating that 2.2 will never use it. The reuse sentence survives; the other two are struck. 149.
+- **`DisplayName` moved to `schemas/user.py`**, which 072 did not foresee and which the import graph makes compulsory: `auth.py` already imports `UserResponse`, so reusing the alias from where it was is a cycle. 150.
+- **The home location is one field in three columns** — supplied together or cleared together, because a city with no coordinates cannot be given a forecast and coordinates with no city have nothing to label. 151.
+- **`geocoding_unavailable` is its own code**, not a widened `forecast_unavailable`. 147 spent an entry narrowing that code to two statuses of one condition, and widening it to a second condition in the same stage would undo that. 152.
+- **Four keys, wrapped in `results`, and no match is a `200` with an empty list** — a `404` would fire on every keystroke that has not finished spelling a city. `q` is trimmed and floors at two characters, which is the provider's own limit rather than a house rule. 153.
+- **Geocoding is its own module and is not cached.** 145's justification for the forecast cache does not transfer: a type-ahead sends five different prefixes on the way to one city, each asked for exactly once. 154.
+- **The height bounds live in `models/user.py` and the schema imports them.** The one mirrored limit on this project that did not have to be a copy, because both enforcers are Python. 155.
+
+Changed from the plan, and the things that were measured rather than argued:
+
+- **The provider's no-match shape was verified by a live call before the parser was written, and it is not what an empty result usually looks like.** A query matching nothing returns `200` with **no `results` key at all** rather than an empty array, so `body["results"]` raises `KeyError` on the most ordinary thing a search box does. This is 143's practice repeated on a second Open-Meteo service, and it found something for the second time. The captured bodies — a real `berlin` response and a real no-match response — are the fixtures, verbatim.
+- **Nineteen mutations plus a control, baseline green at both ends, two survivors, and both were fixed rather than recorded.** The first: `UserUpdate` refuses a partial home location with two checks and only the values check is reachable from the tests that existed, so deleting the *keys* check left 669 tests green — the one request that reaches it is `{"home_city": null}` alone, which would otherwise be a `200` that strands coordinates with no city. 1.8's "one claim, two sites" shape from a new angle.
+- **The second survivor is 1.6 repeated after the lesson was written down.** `RESULT_LIMIT` was asserted as `str(RESULT_LIMIT)` — read out of the module under test — so changing 5 to 3 moved the expectation with it. The literal is now transcribed from `04-API-SPEC.md`'s "up to 5" and pinned by a second test. The rule was already in `CONVENTIONS.md`, in `06-TESTING-STRATEGY.md` and in `DECISIONS.md` 101, and it was broken anyway; **a derived expectation looks more correct than a literal while it is being written**, which is the only useful thing to say about why.
+- **The seed's insert had never been tested at all, and 2.2's addition to it needed one.** Removing the three home columns from `_insert` left the whole suite green — 1.10 recorded the same hole for the database guard and the insert ordering. One integration test now runs `_insert(db, ())` and asserts the demo user's row; it kills both that mutation and the coordinates-only variant.
+- **`AUDITS.md`'s count of closed items was stale by four.** The preamble said "Two are closed so far" and had not moved since 1.5, while four headings below it were struck through. Corrected to six, and rewritten to be derived from the headings rather than remembered.
+- **The live demo row still has no home location.** `seed_demo.py` writes Tel Aviv from now on, but editing the script does not touch the row it inserted on 2026-08-25 — that needs one `PATCH /me` by hand or a `--reset`, and it is recorded in **O-20** rather than assumed done.
+- **`GET /me/locations/search` ships with no caller.** Nothing in the frontend calls it until Stage 4's trip form or a profile screen that no task owns, which is **O-16**'s shape — the difference is that this one was specified by `04` and built to that spec, rather than surviving as an unused query parameter.
+- **The `USER PROFILE` block is now fillable and is still empty in practice.** O-6 is closed on the mechanism, not on the experience: six of the nine fields are reachable by `curl` and by nothing else, and 2.4 will render whatever the demo account has been given by hand.

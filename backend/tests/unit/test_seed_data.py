@@ -16,7 +16,11 @@ import pytest
 from app.core.security import MAX_PASSWORD_BYTES, hash_password
 from app.enums import ItemStatus
 from app.schemas.auth import MIN_PASSWORD_LENGTH
+from app.schemas.user import UserUpdate
 from scripts.seed_demo import (
+    DEMO_HOME_CITY,
+    DEMO_HOME_LAT,
+    DEMO_HOME_LON,
     DEMO_PASSWORD,
     FAILURE_ITEMS,
     SEED_ITEMS,
@@ -136,3 +140,14 @@ def test_the_demo_password_is_one_the_api_would_have_accepted() -> None:
     assert len(DEMO_PASSWORD) >= MIN_PASSWORD_LENGTH
     assert len(DEMO_PASSWORD.encode("utf-8")) <= MAX_PASSWORD_BYTES
     assert hash_password(DEMO_PASSWORD)
+
+
+def test_the_seeded_home_location_is_one_patch_me_would_have_accepted() -> None:
+    # Same shape as the password test above: the seed writes columns directly,
+    # so nothing else checks these three against the rule the API enforces on
+    # them — including that they arrive as a set. `AUDITS.md` O-20 is why they
+    # are seeded at all.
+    update = UserUpdate(home_city=DEMO_HOME_CITY, home_lat=DEMO_HOME_LAT, home_lon=DEMO_HOME_LON)
+
+    assert update.home_city == "Tel Aviv"
+    assert (update.home_lat, update.home_lon) == (32.08, 34.78)

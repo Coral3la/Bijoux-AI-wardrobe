@@ -14,7 +14,7 @@
 │                                                 │
 │  api/v1/     auth · items · looks · trips       │
 │  services/   cloudinary · vision · stylist ·    │
-│              weather · packing                  │
+│              weather · geocoding · packing      │
 │  BackgroundTasks → async tagging queue          │
 └───┬──────────────┬──────────────┬───────────────┘
     │              │              │
@@ -149,6 +149,7 @@ bijoux/
 │   │   │   ├── stylist.py       wardrobe + context → looks
 │   │   │   ├── packing.py       trip orchestration
 │   │   │   ├── weather.py       Open-Meteo client + rule generation
+│   │   │   ├── geocoding.py     Open-Meteo geocoding, proxied for the browser
 │   │   │   └── serializer.py    wardrobe → compact prompt text
 │   │   └── prompts/             *.md prompt templates, version-controlled
 │   ├── alembic/

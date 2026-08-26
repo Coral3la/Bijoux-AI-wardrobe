@@ -92,7 +92,7 @@ Ordered by how soon the answer is needed.
 **O-1 to O-11 are audit 1's.** Items numbered from **O-12** onward were opened
 by a task rather than by an audit, and say so in their own text — the numbering
 is shared so that nothing has two names, and the next audit reads them exactly
-as it reads the rest. Two are closed so far: O-1 at task 1.4 and O-4 at 1.5.
+as it reads the rest. Six are closed so far: O-1 at task 1.4, O-4 at 1.5, O-3 and O-10 at 1.9, O-12 at 1.10 (superseded rather than taken), and **O-6 at 2.2**. This sentence read "Two are closed so far" until 2.2 and had not moved since 1.5, while four headings above it were struck through — a count that is maintained in one place and contradicted in six is worse than no count, so it is now derived by reading the headings rather than remembered.
 **O-14 is the first that records an unverified surface rather than a
 contradiction** — a thing no document disagrees about and nobody has looked at.
 It was extended at 1.6 rather than duplicated, and **O-15** was opened by the
@@ -230,7 +230,7 @@ frontend it is not. Whoever does task 5.6 owns the ordering: the limiter lands
 first, or the demo button is removed from the deployed build and the omission
 recorded in 5.4. `DECISIONS.md` 137.
 
-#### O-6 · The user profile the stylist prompt reads can never be filled in — Stage 2
+#### O-6 · ~~The user profile the stylist prompt reads can never be filled in~~ — **closed at task 2.2**
 
 `03`'s stylist user message carries a `USER PROFILE:` block —
 *"Height: 165 cm. Preferences: prefer high-rise, avoid crop tops."* `02` gives
@@ -249,6 +249,23 @@ without it the personalisation the brief sells is a prompt block that is always
 blank. If Stage 2 cannot absorb the screen, seed `demo@bijoux.app` with a height
 and a `style_notes` line at 1.10 so the mechanism is at least demonstrable, and
 record the missing screen in 5.4.
+
+**Closed at task 2.2, and the first half of the recommendation was taken in
+full.** `PATCH /me` accepts the whole body — nine fields, including
+`display_name`, which three sentences across two documents had said it would
+never set and which `04-API-SPEC.md`'s own worked example carried all along.
+`DECISIONS.md` 149 has the contradiction and what was struck.
+
+**The second half was not taken, and the gap it names is now smaller and
+sharper.** No profile screen was built: `05-FRONTEND-SPEC.md` §8 is still owned
+by no numbered task, so `height_cm`, the three sizes and `style_notes` are
+reachable by `curl` and by nothing else. What changed is that the block is no
+longer *unfillable* — the route exists, the demo account can be given a height
+and a `style_notes` line by one request, and 2.4 can be demonstrated against a
+populated profile. What is left is a missing screen rather than a missing
+mechanism, which is a 5.4 entry rather than an architectural hole. Whoever
+decides Stage 2's remaining budget should read this beside **O-5**: both are
+"one small task at the top of Stage 2" and only one of them costs money.
 
 #### O-7 · The trip constraints in `04` cannot all hold at once — Stage 4
 
@@ -829,9 +846,19 @@ unaffected, but **2.7's forecast lookup and 2.12's weather strip have no default
 until 2.2 ships and somebody runs a `PATCH /me`**. Either seed the demo account
 with Tel Aviv at 2.2, or accept that the strip is empty on a fresh demo login.
 
-**Recommendation.** Nothing to build. Two things to decide: whether the demo
+**Taken at task 2.2.** `seed_demo.py` now writes `home_city: "Tel Aviv"`,
+`home_lat: 32.08`, `home_lon: 34.78` — the coordinates `04-API-SPEC.md`'s own
+`PATCH /me` example uses — so any future `--reset` produces an account 2.12 can
+render. **The row already on the live database is not changed by that**, because
+editing the script does not touch a row it inserted three days ago: the demo
+account needs one `PATCH /me` by hand, or a `--reset`, before the strip has
+anything to show. That is the developer's to run and is recorded here rather
+than assumed done.
+
+**Recommendation.** Nothing to build. The first of the two decisions below was
+taken at 2.2 and the second is still open: whether the demo
 account gets a seeded home location at 2.2 (cheap, and it makes 2.12
-demonstrable), and whether two rainproof items are worth adding to the seed
+demonstrable — **done**), and whether two rainproof items are worth adding to the seed
 before the defence — which would cost two photographs and a `--upload` run, and
 would make the rain branch showable instead of only describable. If neither is
 taken, this item is the answer to *"why does it keep putting her in the same
