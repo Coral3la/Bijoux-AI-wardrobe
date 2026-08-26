@@ -2,7 +2,7 @@
 
 Provider: **OpenAI**, model `gpt-4o-mini-2024-07-18` for both vision tagging and stylist reasoning.
 
-The model is one constant — `OPENAI_MODEL` in `app/core/config.py` — defaulting both `OPENAI_VISION_MODEL` and `OPENAI_STYLIST_MODEL`. It is a **dated snapshot rather than the moving `gpt-4o-mini` alias**, because every eval run records its model and a curve measured against a pointer that can move is not reproducible. Task 1.11 compares it against `gpt-5.4-mini-2026-03-17` and records both. `DECISIONS.md` 078.
+The model is **two constants** in `app/core/config.py` — `OPENAI_MODEL` defaulting `OPENAI_VISION_MODEL`, and `OPENAI_STYLIST_PIN` defaulting `OPENAI_STYLIST_MODEL`. They hold the same snapshot today and are separate on purpose: task 1.11 is chartered to re-pin the vision model against `gpt-5.4-mini-2026-03-17` and measure the difference on photographs, and while one constant served both, that re-pin also moved the model behind every Stage 2 acceptance criterion. Split at task 2.4; `DECISIONS.md` 078 and 160. Both are a **dated snapshot rather than the moving `gpt-4o-mini` alias**, because every eval run records its model and a curve measured against a pointer that can move is not reproducible.
 
 Both calls use **Structured Outputs**. The wire shape is `response_format: {"type": "json_schema", "json_schema": {…}}`, and `strict` lives **inside** `json_schema` beside `name` and `schema` — this line said `{"type": "json_schema", "strict": true}` through task 0.10, which is not a shape the SDK accepts and would not have worked if copied. The block printed under *Response schema* below is the `json_schema` **value**, not the whole `response_format`. Corrected at 1.1 against the installed SDK's own type definitions.
 
@@ -206,8 +206,8 @@ shoe with no `fit` since Stage 0.
 ```
 A3F9K2 | top/shirt | oversized | long_sleeve | white | — | solid | cotton | F3 W2 | base
 7BX1QM | bottom/jeans | straight | full | light_blue | — | denim_wash | denim | F2 W2 | base | rise:high
-P04FFE | shoes/boots | — | ankle | black | gold | solid | leather | F3 W4 | standalone | water_resistant
-ZZ81KA | outerwear/blazer | relaxed | regular | beige | — | solid | wool | F4 W3 | outer
+SEFA38 | shoes/boots | — | ankle | black | gold | solid | leather | F3 W4 | standalone | water_resistant
+EH8VVQ | outerwear/blazer | relaxed | regular | beige | — | solid | wool | F4 W3 | outer
 ```
 
 Format: `SHORT_ID | category/subcategory | fit | length | color | color_secondary | pattern | material | F{formality} W{warmth} | layer | extras`
@@ -290,10 +290,17 @@ STYLING PRINCIPLES
 
 CONSTRAINTS
 - Obey the weather rule for each day exactly. It is not a suggestion.
+- Where the wardrobe holds nothing that satisfies the weather rule, dress the
+  day from the closest items it does hold — the nearest available warmth, and
+  water resistance only if something has it. Never refuse to build a look, and
+  never return an empty one, because an ideal item is absent.
+- An explicit outerwear instruction from the user overrides the weather rule.
+  Where none is given, the weather rule decides.
 - Obey the user's stated preferences. They override styling principles.
 - If the wardrobe cannot satisfy the request, still return your best look and
   report the shortfall in `missing_pieces`. Never silently return a bad outfit,
-  and never invent an item to fill the gap.
+  and never invent an item to fill the gap. `missing_pieces` is a note beside a
+  complete look and never a replacement for one.
 
 REASONING
 - `reasoning` is one or two sentences explaining WHY these pieces work
@@ -321,11 +328,23 @@ Single day:
 ```
 Date: 2026-03-14
 Occasion: work
+Notes: meeting with a client
 Weather: 18°C, no rain.
 Weather rule: Use warmth 2-3 for the base. A mid layer or light
 outerwear (warmth 2-3) is optional.
+Outerwear: the user has asked for outerwear. Include one.
 Build 1 look.
 ```
+
+**`Notes` and `Outerwear` were added at task 2.4, and they close a gap rather
+than extend the contract.** `04-API-SPEC.md` has specified `notes` and
+`include_outerwear` on `POST /looks/suggest` since Stage 0, and this block —
+the only message that reaches the model — had a line for neither, so two fields
+on the wire had nowhere to go. Both lines are **omitted entirely** when the
+field is null: `include_outerwear` is three-state, and a null means *the weather
+rule decides* rather than *no outerwear*. `Outerwear` is printed after the
+weather rule because it overrides it, and the CONSTRAINTS block says which wins
+in words. `DECISIONS.md` 158.
 
 Anchored — the user picked an item to build around:
 ```
@@ -337,7 +356,7 @@ explain the tension in `reasoning`.
 
 Swap — the user rejected one item in an existing look:
 ```
-LOCKED: A3F9K2, ZZ81KA, P04FFE
+LOCKED: A3F9K2, EH8VVQ, SEFA38
 These items MUST appear unchanged.
 Replace only the shoes with a different option from the wardrobe.
 Do not return the previously rejected item ZR44QW.
@@ -369,21 +388,14 @@ The reuse target is computed as `min(days * 4, days + 8)` and injected. Without 
 {
   "looks": [
     {
-      "look_id": "d1_morning",
       "day": 1,
       "occasion": "work",
       "title": "Morning meetings",
-      "item_ids": ["A3F9K2", "7BX1QM", "P04FFE", "ZZ81KA"],
+      "item_ids": ["A3F9K2", "7BX1QM", "SEFA38", "EH8VVQ"],
       "reasoning": "The high-rise straight jean balances the oversized shirt and the tucked front keeps the waist defined.",
-      "weather_note": "18°C in the morning — the blazer is enough without a coat.",
-      "confidence": "high"
+      "weather_note": "18°C in the morning — the blazer is enough without a coat."
     }
   ],
-  "packing_list": {
-    "item_ids": ["A3F9K2", "7BX1QM", "..."],
-    "reuse_summary": "8 items across 5 looks — the jeans appear on 3 days.",
-    "by_category": { "top": 3, "bottom": 2, "shoes": 2, "outerwear": 1 }
-  },
   "missing_pieces": [
     {
       "category": "shoes",
@@ -391,13 +403,38 @@ The reuse target is computed as `min(days * 4, days + 8)` and injected. Without 
       "reason": "no water-resistant option suitable for the rainy day"
     }
   ],
-  "message": "Packed for four days in Berlin, including one dressier evening."
+  "message": "A work outfit for a mild day."
 }
 ```
 
-`packing_list` is `null` for single-day requests. `missing_pieces` is `[]` when nothing is missing.
+`missing_pieces` is `[]` when nothing is missing.
 
-The model returns **JSON only** — no prose outside the structure. Everything the user reads is a field in this object, rendered by the UI.
+**Built at task 2.4 as `STYLIST_SCHEMA` in `app/services/stylist.py`, verified
+against one live call, and narrower than this document was before that task in
+three ways.** `DECISIONS.md` 157.
+
+- **`packing_list` is not in the schema yet, and this is staging rather than
+  disagreement.** It arrives at Stage 4 together with the trip user message and
+  the reuse arithmetic, because its `by_category` map cannot be expressed in
+  strict mode as written — strict mode requires `additionalProperties: false`
+  and every key named, so a free-form category map has to become a fixed list of
+  keys, and that list is a decision for the task that has a reader for it.
+  Shipping it now would mean the model emitting `packing_list: null` on every
+  call this project makes for two stages.
+- **`look_id` and `confidence` are struck.** Neither has a column in
+  `02-DATA-MODEL.md`, a renderer in `05-FRONTEND-SPEC.md` or a task, and in
+  strict mode every property is one the model must produce on every call —
+  `AUDITS.md` O-9 asked for exactly this decision before a schema was built from
+  this block. `day` survives the same test only just: it is what keys a look to
+  its day at Stage 4.
+- **No `minItems`.** It is not verified against this pin, and "one look per
+  expected day" is rule 4 of the validation table below, which is `validate_look_response`'s.
+
+The schema's `name` is `outfit_recommendation`, beside `garment_tags` for
+Contract 1.
+
+The model returns **JSON only** — no prose outside the structure. Everything the
+user reads is a field in this object, rendered by the UI.
 
 ### Validation — `validate_look_response()`
 

@@ -5,11 +5,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_VERSION = "0.1.0"
 
-# One pin, in one place, defaulting both knobs below. Dated rather than the
-# moving `gpt-4o-mini` alias: `06-TESTING-STRATEGY.md` records the model with
-# every eval run, and an accuracy curve measured against a pointer that can
-# move underneath it is not reproducible. `DECISIONS.md` 078.
+# The vision pin. Dated rather than the moving `gpt-4o-mini` alias:
+# `06-TESTING-STRATEGY.md` records the model with every eval run, and an
+# accuracy curve measured against a pointer that can move underneath it is not
+# reproducible. `DECISIONS.md` 078.
 OPENAI_MODEL = "gpt-4o-mini-2024-07-18"
+
+# The stylist pin — the same snapshot, and a second constant rather than a
+# second reference to the first since task 2.4. Task 1.11 is chartered to
+# re-pin `OPENAI_MODEL` against a newer model and to measure the difference on
+# a golden set of *photographs*; while the two shared one constant, that re-pin
+# also silently changed the model behind every Stage 2 acceptance criterion,
+# all of which are about how the stylist behaves. One constant could not carry
+# two independent decisions. Verified against a live call at 2.4.
+# `DECISIONS.md` 160.
+OPENAI_STYLIST_PIN = "gpt-4o-mini-2024-07-18"
 
 
 class Settings(BaseSettings):
@@ -33,7 +43,7 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str = ""
     OPENAI_VISION_MODEL: str = OPENAI_MODEL
-    OPENAI_STYLIST_MODEL: str = OPENAI_MODEL
+    OPENAI_STYLIST_MODEL: str = OPENAI_STYLIST_PIN
     OPENAI_TIMEOUT_SECONDS: int = 30
 
     USE_FAKE_AI: bool = False

@@ -29,9 +29,10 @@ from scripts.seed_demo import FAILURE_ITEMS, SEED_ITEMS
 WARDROBE_SIZE = 150
 BUDGET_TOKENS = 6_000
 
-# Legal under `app/core/short_id.py`'s alphabet, and both are `03`'s own. The
-# other two ids that document uses — `P04FFE` and `ZZ81KA` — contain `0` and `1`
-# and could not be generated; they are not borrowed here.
+# Legal under `app/core/short_id.py`'s alphabet, and both are `03`'s own. Two of
+# that document's other ids contained a `0` and a `1` when this file was written
+# and could not have been generated, which is why only these two were borrowed;
+# task 2.4 replaced them (`AUDITS.md` O-22) and all five are legal now.
 TOP_ID = "A3F9K2"
 JEANS_ID = "7BX1QM"
 

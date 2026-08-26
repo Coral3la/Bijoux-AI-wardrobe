@@ -92,7 +92,7 @@ Ordered by how soon the answer is needed.
 **O-1 to O-11 are audit 1's.** Items numbered from **O-12** onward were opened
 by a task rather than by an audit, and say so in their own text — the numbering
 is shared so that nothing has two names, and the next audit reads them exactly
-as it reads the rest. Six are closed so far: O-1 at task 1.4, O-4 at 1.5, O-3 and O-10 at 1.9, O-12 at 1.10 (superseded rather than taken), and **O-6 at 2.2**. This sentence read "Two are closed so far" until 2.2 and had not moved since 1.5, while four headings above it were struck through — a count that is maintained in one place and contradicted in six is worse than no count, so it is now derived by reading the headings rather than remembered.
+as it reads the rest. Eight are closed so far: O-1 at task 1.4, O-4 at 1.5, O-3 and O-10 at 1.9, O-12 at 1.10 (superseded rather than taken), O-6 at 2.2, and **O-9 and O-22 at 2.4**. This sentence read "Two are closed so far" until 2.2 and had not moved since 1.5, while four headings above it were struck through — a count that is maintained in one place and contradicted in six is worse than no count, so it is now derived by reading the headings rather than remembered.
 **O-14 is the first that records an unverified surface rather than a
 contradiction** — a thing no document disagrees about and nobody has looked at.
 It was extended at 1.6 rather than duplicated, and **O-15** was opened by the
@@ -321,7 +321,7 @@ same request and break grouping — applies here unchanged. Leaving it in `04`
 means the six values are enforced by whichever request schema happens to
 remember them.
 
-#### O-9 · The stylist returns a `confidence` nothing can consume — Stage 2
+#### O-9 · ~~The stylist returns a `confidence` nothing can consume~~ — **closed at task 2.4**
 
 `03`'s look object carries `"confidence": "high"` (line 347). `02`'s `looks`
 table has no column for it, `05` renders `reasoning`, `weather_note` and
@@ -337,6 +337,14 @@ model must produce on every call, so keeping it costs tokens on every request to
 carry a number the project has already decided is a fluency signal. If it is
 kept instead, it needs a column in `02` and a named reader — the same two things
 086 required of the vision `confidence` before it would keep a branch.
+
+**Taken at task 2.4, and `look_id` went with it.** `STYLIST_SCHEMA` carries six
+properties in a look and neither of those two is among them; `03`'s response
+block is edited to match, and a test pins the list so a future tidy that "adds
+back what the document shows" fails rather than costs tokens. `look_id` was
+found by the same question asked one field along — a model-invented string with
+no column, no renderer and no task, where `day` already keys a look to its day.
+`DECISIONS.md` 157.
 
 #### O-10 · ~~`cloudinary-url.pipe.ts` is referenced by three documents and built by no task~~ — **closed at task 1.9**
 
@@ -864,7 +872,7 @@ would make the rain branch showable instead of only describable. If neither is
 taken, this item is the answer to *"why does it keep putting her in the same
 blazer?"*.
 
-#### O-21 · The swimwear/sleepwear exclusion has no vocabulary member to match on — task 2.4
+#### O-21 · The swimwear/sleepwear exclusion has no vocabulary member to match on — resolved in direction at 2.4, open until tasks 2.6a and 2.7
 
 `01-ARCHITECTURE.md` line 93 and `STAGE-2` 2.4 both promise the same thing in
 almost the same words: *"the only server-side exclusions are unambiguous ones —
@@ -898,7 +906,30 @@ actually does and what 002 argues for everywhere except this sentence. The third
 is the smallest change and the first is the only one that delivers what the
 documents currently claim.
 
-#### O-22 · Two of `03`'s worked example ids could never have been generated — a doc-only commit
+**Resolved in direction at task 2.4 and still open, which is the honest state.**
+The developer took the first option as a **product** decision rather than a
+documentation repair: a person photographing their wardrobe uploads swimwear and
+sleepwear, and the app should hold them rather than pretend they are not clothes.
+It is deliberately **not** implemented inside 2.4 — adding a `Category` member
+cascades into `SUBCATEGORIES`, `FIELD_APPLIES_TO`, `LAYERS_BY_CATEGORY`, the
+`enums.ts` mirror and 1.2a's category-dependent validation, none of which this
+task owns — so it is scheduled as **task 2.6a**, before 2.7, which is the first
+task that needs the filter.
+
+**One thing the recommendation above understates, found while scheduling it:**
+`items.category` is a PostgreSQL `ENUM` type, `item_category`, created by
+migration `0001`. Adding two members is a **migration** (`ALTER TYPE … ADD
+VALUE`), not only two constants, and it renumbers what follows — `0003` for the
+vocabulary, Stage 3's feedback to `0004`, Stage 4's trips to `0005`. 2.6a is also
+charged with *measuring* whether that statement runs inside Alembic's transaction
+on PostgreSQL 18 rather than assuming it from the version number.
+
+`01-ARCHITECTURE.md:93` and `STAGE-2` 2.4 are **annotated as pending 2.6a rather
+than struck**, and `services/stylist.py` filters nothing: the exclusion lives at
+2.7 beside `ready`-only and `is_archived`, where 2.3 already said it belonged.
+This item closes when 2.6a and that filter have both landed.
+
+#### O-22 · ~~Two of `03`'s worked example ids could never have been generated~~ — **closed at task 2.4**
 
 `03-AI-CONTRACTS.md` uses four illustrative `short_id`s. Two of them are
 impossible: **`P04FFE` contains `0` and `ZZ81KA` contains `1`**, and
@@ -930,6 +961,76 @@ legal.
 **Recommendation.** A dedicated documentation commit replacing both ids with
 generated-legal ones in all seven places at once. `ZR44QW`, the fourth id in the
 file, is already legal and needs no change.
+
+**Done at task 2.4 rather than as its own commit, and the reason is the staging
+constraint rather than convenience.** 2.4 edits `03-AI-CONTRACTS.md` anyway — the
+response schema, the system prompt and the request block — so a separate doc-only
+commit would have been a second commit touching the same file, and commits on
+this project are staged by hand with no `git add -i`. `SEFA38` replaces `P04FFE`
+and `EH8VVQ` replaces `ZZ81KA` in all seven places, both produced by
+`generate_short_id()` rather than typed, so they are legal by construction. The
+new `tests/unit/test_stylist.py` uses all five of the document's ids, which is
+the first time every worked id in `03` has been usable in a test.
+
+#### O-23 · `tag_item` reads `choices[0].message` unguarded, and three measured failures walk straight through it — Stage 5, or whoever next opens `vision.py`
+
+Found at task 2.4 while establishing what actually escapes the OpenAI SDK, which
+`DECISIONS.md` 044 requires of any third-party client and which had been done for
+Cloudinary and Open-Meteo and never for OpenAI.
+
+**Measured against openai 2.52.0 with a local HTTP server standing in for the
+API** — the full table is in `DECISIONS.md` 161. Three of the results are not
+`OpenAIError`, and are not exceptions at all until our own code touches what came
+back:
+
+| Response | What `create()` does |
+|---|---|
+| `200`, `text/html` body | returns a **`str`** |
+| `200`, JSON of the wrong shape | returns a `ChatCompletion` with `choices=None` |
+| `200`, `choices: []` | returns it as-is |
+
+`vision.py`'s `tag_item` does `completion.choices[0].message` with no guard, so
+those three surface as `AttributeError`, `TypeError` and `IndexError` — none of
+which its docstring or `03-AI-CONTRACTS.md` names, and none of which is the
+`ValueError` the function documents.
+
+**Nothing is broken today, and that is why this is an audit item rather than a
+fix.** Every caller of `tag_item` is `app/services/tagging.py`, whose
+`tag_and_store` ends in `except Exception` (`DECISIONS.md` 088) precisely because
+a `BackgroundTask` has no handler above it — so all three land as a `failed` row
+with a message, which is the right outcome by accident rather than by design.
+`stylist.py` at 2.4 does guard them, into the single `ValueError` it documents,
+because 2.7 maps its failures to a `502` and has no equivalent backstop.
+
+**Recommendation.** Give `tag_item` the same three-line guard `stylist._content`
+has. Not taken at 2.4 because `vision.py` belongs to 1.2b and the change would
+ride into a commit about the stylist — the shape `DECISIONS.md` 082 refused for
+the same reason one stage earlier.
+
+#### O-24 · The model filled `day` from the date, and nothing would have caught it — task 2.5
+
+Measured, not read. The live call that verified `STYLIST_SCHEMA` at task 2.4 was
+a single-day request for **2026-03-14**, and the model answered `"day": 14`.
+
+`day` is in `03`'s look object because a trip has one look per day, and on a
+single-day request the only sensible value is `1` — which is what `USE_FAKE_AI`
+returns, so **the fake and the real model disagree about what the field means**,
+and the fake is the one that is right. Nothing in 2.4 validates it: `day` is
+carried through untouched, and `03`'s validation rule 4 counts `len(looks)`
+rather than reading any look's `day`.
+
+Nothing is broken at 2.4 — one look is one look whatever it is numbered. It
+becomes real at Stage 4, where `day` is how a look is attached to a date, and at
+2.6 if look persistence ever writes it to a column.
+
+**Recommendation, and it is a decision rather than a repair.** One of three, at
+2.5. Strike `day` for the same reason `look_id` and `confidence` were struck at
+2.4, and let Stage 4 reintroduce it with the trip schema it belongs to. Or keep
+it and have the single-day user message say `Day: 1` explicitly, so the model is
+told rather than left to infer from a date it can see. Or keep it and add a
+validation rule that looks are numbered `1..n`, which is the only option that
+survives a model ignoring the instruction. The evidence says an unexplained
+integer beside a date will be filled from the date.
 
 ### Noted in passing, not a documentation defect
 

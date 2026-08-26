@@ -64,7 +64,7 @@ from app.db.session import engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.item import Item  # noqa: E402
 from app.models.user import User  # noqa: E402
-from app.services import vision  # noqa: E402
+from app.services import stylist, vision  # noqa: E402
 
 # The copy above is only load-bearing if environment really does beat dotenv.
 # Asserting it here turns that assumption into an import-time failure instead of
@@ -101,7 +101,13 @@ def _no_live_openai(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPa
 
     `_client` rather than `tag_item`, because it is the single door: every call
     in this project goes through it, and a fake installed here cannot be routed
-    around by importing the function from somewhere else."""
+    around by importing the function from somewhere else.
+
+    **Both doors, since task 2.4.** `stylist.py` has its own `_client` — the two
+    contracts are pinned to their own models (`DECISIONS.md` 160) — so "the
+    single door" became two the moment it landed, and a guard naming one of them
+    is the same gap this fixture was written to close, one module along. The
+    stylist call is also the expensive one: it carries the whole wardrobe."""
     if request.node.get_closest_marker("eval"):
         return
 
@@ -112,6 +118,7 @@ def _no_live_openai(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPa
         )
 
     monkeypatch.setattr(vision, "_client", _refuse)
+    monkeypatch.setattr(stylist, "_client", _refuse)
 
 
 @pytest.fixture(autouse=True)

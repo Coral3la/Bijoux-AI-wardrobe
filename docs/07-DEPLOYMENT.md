@@ -33,7 +33,8 @@ CLOUDINARY_UPLOAD_FOLDER=bijoux
 CLOUDINARY_REMOVE_BACKGROUND=false
 
 OPENAI_API_KEY=
-# Both default to OPENAI_MODEL in app/core/config.py, the single pin.
+# Two pins in app/core/config.py, separate since task 2.4: OPENAI_MODEL for
+# vision, OPENAI_STYLIST_PIN for the stylist.
 # Uncomment only to override; set-but-empty would override it with "".
 #OPENAI_VISION_MODEL=
 #OPENAI_STYLIST_MODEL=

@@ -32,7 +32,7 @@
 
 The backend is the only component that holds secrets. The browser never touches the OpenAI key, and never talks to Cloudinary directly (see "Upload path" below).
 
-The diagram names the model family. **The pin is a dated snapshot, `gpt-4o-mini-2024-07-18`**, held once as `OPENAI_MODEL` in `app/core/config.py` and defaulting both the vision and stylist settings — `DECISIONS.md` 078.
+The diagram names the model family. **The pin is a dated snapshot, `gpt-4o-mini-2024-07-18`**, held in `app/core/config.py` as **two constants** — `OPENAI_MODEL` for vision and `OPENAI_STYLIST_PIN` for the stylist. Same snapshot, separate on purpose since task 2.4: 1.11 re-pins the vision model against a newer one and measures the difference on photographs, and one constant would have moved the stylist with it. `DECISIONS.md` 078 and 160.
 
 ---
 
@@ -74,7 +74,7 @@ The diagram names the model family. **The pin is a dated snapshot, `gpt-4o-mini-
 ## Flow 2 — Requesting an outfit
 
 ```
-1. POST /api/v1/looks/suggest  { occasion, date, wants_outerwear? }
+1. POST /api/v1/looks/suggest  { occasion, date, include_outerwear? }
 2. Backend fetches user's ready items  (single query, no filtering by season)
 3. Backend fetches forecast for user's saved lat/lon from Open-Meteo
 4. Backend converts temperature → an explicit rule sentence  (03-AI-CONTRACTS)
@@ -92,6 +92,8 @@ The diagram names the model family. **The pin is a dated snapshot, `gpt-4o-mini-
 A 150-item wardrobe serialises to about 4,600 tokens in the compact format — 30.7 per item, measured with `tiktoken` at task 2.3 rather than estimated, and `03-AI-CONTRACTS.md` is where that figure lives. This line said "roughly 7,000" until the measurement, which was the largest of three disagreeing estimates in three documents. That fits comfortably in a single request and costs a fraction of a cent with `gpt-4o-mini`. There is therefore **no retrieval layer, no embeddings, and no vector database** in this project.
 
 Aggressive pre-filtering is also actively harmful to quality: filtering out "summer" items in winter prevents the model from suggesting a summer dress with boots and a leather jacket, which is exactly the kind of combination that makes the product feel smart. The only server-side exclusions are unambiguous ones — swimwear and sleepwear — and they are configurable.
+
+**Neither word is in the vocabulary yet, so that last sentence describes a filter nothing can run** — `Category` has seven members and `SUBCATEGORIES` has no swimwear or sleepwear value, which is `AUDITS.md` **O-21**. The resolution is to add both as first-class categories, because a user photographing their wardrobe will upload them and pretending otherwise is not an answer; that is task **2.6a**, and the filter itself belongs to 2.7 beside `ready`-only and `is_archived`. `services/stylist.py` at 2.4 filters nothing and serialises exactly the wardrobe it is handed. Pending rather than struck.
 
 If a wardrobe ever exceeds 400 items, the fallback is documented in `03-AI-CONTRACTS.md`. It is not implemented.
 

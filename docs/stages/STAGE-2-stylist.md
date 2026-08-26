@@ -45,11 +45,19 @@ The demo account is seeded with a home location here too — `AUDITS.md` **O-20*
 Unit test the token budget: 150 items must serialise to under 6,000 tokens. Use `tiktoken` to assert it.
 
 ### 2.4 Stylist service
-`services/stylist.py` → `suggest_looks(wardrobe, context) -> StylistResponse`.
+`services/stylist.py` → `suggest_looks(wardrobe, context, correction=None) -> StylistResponse`.
 
-Prompt in `app/prompts/stylist_system.md`. User message assembled per `03-AI-CONTRACTS.md`. Structured Outputs with the response schema. `USE_FAKE_AI` branch returning a recorded fixture.
+Prompt in `app/prompts/stylist_system.md`. User message assembled per `03-AI-CONTRACTS.md`. Structured Outputs with the response schema. `USE_FAKE_AI` branch returning a deterministic look.
 
 Send the **whole wardrobe**. The only server-side exclusion is swimwear and sleepwear, and it is a configurable list.
+
+**Two lines above are what the task found rather than what it was given, and both are recorded rather than quietly done.**
+
+The exclusion has nothing to match on: neither word is in `Category` or `SUBCATEGORIES` (`AUDITS.md` **O-21**). It is not struck, because the product answer is that a user photographing their wardrobe uploads swimwear and sleepwear and the app should handle them — so both become first-class categories at new task **2.6a**, and 2.7 applies the filter beside `ready`-only and `is_archived`. `suggest_looks` filters nothing; it serialises exactly the wardrobe it is handed, which is what lets it be tested as a format.
+
+And the `USE_FAKE_AI` branch **cannot** return a recorded fixture. `short_id`s are generated per row, so literal ids in a fixture would fail 2.5's hallucination guard on every call and no E2E journey could ever see a look card. The fake picks from the wardrobe it is given — first shoes, then a top and bottom, else a dress — and says out loud in `reasoning` that it is a placeholder. `DECISIONS.md` 159.
+
+`correction` is in the signature because 2.5 owns the retry and a violation has to reach the model somehow; it is 1.2b's `tag_item(image_url, correction=…)` shape on the second contract.
 
 ### 2.5 Response validation
 `validate_look_response()` implementing all six rules in order. The first rule — every returned ID exists in **this user's** wardrobe — is the hallucination guard and must never be relaxed.
@@ -60,6 +68,14 @@ Unit tests: each of the six rules failing independently, against hand-built resp
 
 ### 2.6 Look persistence
 Migration `0002_looks` creating `looks` and `look_items`. Every suggestion is persisted with `is_saved=false` before the response returns — this costs nothing and is what makes the evaluation story possible later.
+
+### 2.6a Vocabulary — swimwear and sleepwear
+
+Opened by **O-21** and scheduled here because 2.7 is the first task that needs the filter, and because landing it after `0002_looks` leaves that migration at the number `02-DATA-MODEL.md` already prints.
+
+Add `swimwear` and `sleepwear` to `Category` in `02-DATA-MODEL.md` first, then `app/enums.py` (`SUBCATEGORIES`, `FIELD_APPLIES_TO`, `LAYERS_BY_CATEGORY` all take entries), then `frontend/src/app/shared/models/enums.ts` and its spec. Migration `0003` does the `ALTER TYPE item_category ADD VALUE` — `category` is a PostgreSQL `ENUM` type created by `0001`, not a `TEXT` column, so this is a migration and not only a constant. **Measure whether `ALTER TYPE … ADD VALUE` runs inside Alembic's transaction on PostgreSQL 18 before writing it**; do not assume from the version number. `02`'s migration table renumbers with it: Stage 3's feedback becomes `0004`, Stage 4's trips `0005`.
+
+Nothing already committed is re-tagged — no seed row would match either value, so the demo wardrobe is unaffected. One knock-on: the vision prompt renders `SUBCATEGORIES`, so `PROMPT_VERSION` changes the moment this lands. Harmless while 1.11 is unrun, and a reason to land it before 1.11 rather than after.
 
 ### 2.7 Suggest endpoint
 `POST /looks/suggest` orchestrating: fetch wardrobe → fetch forecast → build rule → serialise → call stylist → validate → persist → hydrate IDs into full item objects → return.
@@ -109,7 +125,7 @@ A persistent strip on the wardrobe screen showing the current temperature and co
 
 ## Commit checkpoints
 
-`feat(weather): open-meteo client and rules` · `test: weather rule boundaries` · `feat(api): profile and location search` · `feat(ai): wardrobe serializer` · `feat(ai): stylist service` · `feat(ai): response validation` · `feat(db): looks schema` · `feat(api): suggest endpoint` · `feat(web): stylist screen` · `feat(web): look card` · `feat(ai): anchor item support` · `feat(web): style around this` · `feat(ai): single item swap` · `feat(web): swap button`
+`feat(weather): open-meteo client and rules` · `test: weather rule boundaries` · `feat(api): profile and location search` · `feat(ai): wardrobe serializer` · `feat(ai): stylist service` · `feat(ai): response validation` · `feat(db): looks schema` · `feat(core): swimwear and sleepwear categories` · `feat(api): suggest endpoint` · `feat(web): stylist screen` · `feat(web): look card` · `feat(ai): anchor item support` · `feat(web): style around this` · `feat(ai): single item swap` · `feat(web): swap button`
 
 ## If you fall behind
 

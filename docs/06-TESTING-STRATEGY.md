@@ -715,7 +715,9 @@ TypeScript, Page Object Model — the same structure as the Jones assignment.
 
 ### The key mechanism: `USE_FAKE_AI`
 
-The backend reads an environment flag. When `USE_FAKE_AI=true`, `vision.py` and `stylist.py` return recorded fixtures instead of calling OpenAI.
+The backend reads an environment flag. When `USE_FAKE_AI=true`, `vision.py` and `stylist.py` answer without calling OpenAI.
+
+**Neither answers with a recorded fixture, and the stylist cannot.** `vision.py` returns a hand-written placeholder until task 5.1 records real ones — a rule broken on purpose with a name on it, `DECISIONS.md` 081. `stylist.py` returns a look **built from the wardrobe it was handed**: `short_id`s are generated per row by `scripts/seed_demo.py`, so a fixture carrying literal ids would name items that do not exist in the database it is running against, and 2.5's rule 1 — the hallucination guard — would answer `502` to every fake call. Journeys 6 and 7 below exist to see a look card; a fake that can only produce a `502` would make both of them assert the opposite of what they are for. `DECISIONS.md` 159.
 
 ```python
 # app/services/vision.py
@@ -822,6 +824,8 @@ Harder, because there is no single correct outfit. Do not try to score taste. Sc
 def test_stylist_obeys_weather_rules():
     for temp, requires_outerwear in [(32, False), (25, False), (12, True), (5, True)]:
         response = suggest_looks(DEMO_WARDROBE, context_at(temp))
+        # `.items` is the hydrated shape `POST /looks/suggest` returns at 2.7.
+        # `suggest_looks` itself answers `item_ids` — see 03's response schema.
         has_outer = any(i.category == "outerwear" for i in response.looks[0].items)
         assert has_outer == requires_outerwear
 ```
