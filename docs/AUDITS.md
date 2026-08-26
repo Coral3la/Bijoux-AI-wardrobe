@@ -98,7 +98,7 @@ contradiction** — a thing no document disagrees about and nobody has looked at
 It was extended at 1.6 rather than duplicated, and **O-15** was opened by the
 same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
-task. O-14 was extended again at 1.7 and at 1.8. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day.
+task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -863,6 +863,73 @@ before the defence — which would cost two photographs and a `--upload` run, an
 would make the rain branch showable instead of only describable. If neither is
 taken, this item is the answer to *"why does it keep putting her in the same
 blazer?"*.
+
+#### O-21 · The swimwear/sleepwear exclusion has no vocabulary member to match on — task 2.4
+
+`01-ARCHITECTURE.md` line 93 and `STAGE-2` 2.4 both promise the same thing in
+almost the same words: *"the only server-side exclusions are unambiguous ones —
+swimwear and sleepwear — and they are configurable."* `DECISIONS.md` 002 carries
+the argument they rest on.
+
+**Neither word exists anywhere in the closed vocabulary.** `Category` has seven
+members — `top`, `bottom`, `dress`, `outerwear`, `shoes`, `bag`, `accessory` —
+and `SUBCATEGORIES` has no swimwear or sleepwear value under any of them.
+`grep -i "swimwear\|sleepwear"` over `02-DATA-MODEL.md`, `enums.py` and
+`enums.ts` returns nothing. A configurable exclusion list therefore has no field
+to be configured against: the closest a filter could get today is
+`subcategory == "shorts"`, which would exclude real trousers, or a substring
+match on `display_name`, which is free text and is the one column
+`DECISIONS.md` 156 just decided the AI layer does not read.
+
+Opened at task 2.3, which is when the question was asked and *not* answered:
+2.3's serialiser applies no filter at all — `ready`-only, `is_archived` and any
+exclusion list belong to the caller at 2.7 — so nothing is broken today. What is
+recorded here is that **2.4 is written as though the list exists**, and it does
+not.
+
+**Recommendation.** One of three, at 2.4 and not before. Add `swimwear` and
+`sleepwear` to `02-DATA-MODEL.md`'s vocabulary and both mirrors, which is the
+honest fix and re-tags nothing already committed (no seed row would match, so
+the demo wardrobe is unaffected). Or make the list configurable over
+`(category, subcategory)` pairs and ship it **empty**, which keeps the promise
+structurally true and costs one setting. Or strike the promise from `01` and
+`STAGE-2` 2.4 and say the wardrobe goes in whole — which is what the code
+actually does and what 002 argues for everywhere except this sentence. The third
+is the smallest change and the first is the only one that delivers what the
+documents currently claim.
+
+#### O-22 · Two of `03`'s worked example ids could never have been generated — a doc-only commit
+
+`03-AI-CONTRACTS.md` uses four illustrative `short_id`s. Two of them are
+impossible: **`P04FFE` contains `0` and `ZZ81KA` contains `1`**, and
+`app/core/short_id.py`'s alphabet is `ABCDEFGHJKMNPQRSTUVWXYZ23456789` —
+`02-DATA-MODEL.md` line 301 spells out why (*"no `0`/`O`/`1`/`I`/`L`"*): a
+character pair the model can transcribe wrongly is a hallucinated item, which is
+precisely what `validate_look_response` exists to catch at 2.5.
+
+Nothing reads these ids, so nothing is broken. The reason it is worth a line is
+that this document is the one a reader consults to learn what a `short_id`
+*looks like*, and two of its four examples teach the wrong alphabet.
+
+**Seven occurrences, and they must move together** — a partial fix would leave
+one garment carrying two ids across the file:
+
+| Line | Block |
+|---|---|
+| 200, 201 | the wardrobe serialisation example |
+| 310 | `LOCKED: A3F9K2, ZZ81KA, P04FFE` |
+| 346 | the response-schema example's `item_ids` |
+
+Found at task 2.3, which was editing lines 200–201 and deliberately did not
+touch the ids: the task's commit scope was the format, and a change that has to
+be consistent across three blocks is not a thing to slip into a commit about
+something else. 2.3 also declined to borrow either id for its tests, which is
+why `tests/unit/test_serializer.py` uses only `A3F9K2` and `7BX1QM` — both
+legal.
+
+**Recommendation.** A dedicated documentation commit replacing both ids with
+generated-legal ones in all seven places at once. `ZR44QW`, the fourth id in the
+file, is already legal and needs no change.
 
 ### Noted in passing, not a documentation defect
 

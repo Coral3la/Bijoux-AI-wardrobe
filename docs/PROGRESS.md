@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 2 — The Stylist
-**Status:** Stage 2 in progress — 2.1 and 2.2 complete. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below).
+**Status:** Stage 2 in progress — 2.1, 2.2 and 2.3 complete. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below).
 
 This header said "Stage 1 in progress — 1.1 … 1.8 complete" until task 2.2, four tasks after 1.9 shipped and one after the log below recorded Stage 1 as closed. A tracker that contradicts its own log is worse than a stale one, because the log reads as the correction and the header is what anybody looks at first.
 
@@ -44,7 +44,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 
 - [x] Weather service and rule table
 - [x] Location search
-- [ ] Wardrobe serialiser
+- [x] Wardrobe serialiser
 - [ ] Stylist service
 - [ ] Response validation
 - [ ] Looks schema
@@ -390,3 +390,17 @@ Changed from the plan, and the things that were measured rather than argued:
 - **The live demo row still has no home location.** `seed_demo.py` writes Tel Aviv from now on, but editing the script does not touch the row it inserted on 2026-08-25 — that needs one `PATCH /me` by hand or a `--reset`, and it is recorded in **O-20** rather than assumed done.
 - **`GET /me/locations/search` ships with no caller.** Nothing in the frontend calls it until Stage 4's trip form or a profile screen that no task owns, which is **O-16**'s shape — the difference is that this one was specified by `04` and built to that spec, rather than surviving as an unused query parameter.
 - **The `USER PROFILE` block is now fillable and is still empty in practice.** O-6 is closed on the mechanism, not on the experience: six of the nine fields are reachable by `curl` and by nothing else, and 2.4 will render whatever the demo account has been given by hand.
+
+**2026-08-26 — task 2.3, wardrobe serialiser.** **685 backend tests pass (670 before, 15 added).** Frontend untouched and not run — this task ships no screen and changes no wire shape the browser reads. New: `backend/app/services/serializer.py` (67 lines), `backend/tests/unit/test_serializer.py` (246 lines, 15 tests). Changed: `backend/requirements.txt` (`tiktoken`), and four documents besides this one. One entry, `DECISIONS.md` 156. Audits **O-21 and O-22 opened**.
+
+The whole task was decided by one measurement and by one document disagreeing with itself:
+
+- **The token budget was measured and all three prior estimates were wrong.** 30.7 tokens per item; **4,604 for 150 items**, min 4,588 / max 4,617 over 20 runs, ±0.3%. `03-AI-CONTRACTS.md` said ~28/item and ~4,200 (9% low), `DECISIONS.md` 002 said ~4,000 (13% low), `01-ARCHITECTURE.md` said ~7,000 (52% high). One canonical figure now lives in `03` and the other two quote it, because three independent estimates is how they came to disagree. 156.
+- **The stage file and the contract disagreed about what a null looks like, and the example was right.** `STAGE-2` 2.3 says "omit nulls"; `03`'s worked example has kept the column and filled it with an em dash since Stage 0. The line is positional and the model gets no key, so omitting a *middle* field shifts every later value one column left and a material is read as a pattern. Omission survives at the end of the line, where there is no column to shift. Not a tidy of a stale sentence — both were live, and one was wrong.
+- **The 30%-headroom rule proposed alongside the 6,000 ceiling was unsatisfiable with the test beside it.** 30% *under* 6,000 is ≤4,200, which at the real density is 136 items — fewer than the 150 the test asserts. The ceiling is a margin **above** real output, and 6,000 is ~30% above 4,604 and above the across-run max. Threshold kept, ratio corrected.
+- **`color_secondary` was added to the format, and it is a contract change made on a measurement.** 9 of the 64 seed rows are two-tone; the slot costs 303 tokens across 150 items, ~2 an item, 7%. Measured both ways: removing it again would have given 4,302, so it is not what moved the number. `display_name` stays out on the opposite arithmetic, with the cost written down rather than implied — nothing in this feature can refer to *the interview blazer* by that name.
+- **`tiktoken` reaches the network on a cold cache, and this was observed rather than assumed.** `encoding_for_model('gpt-4o-mini-2024-07-18')` resolves to `o200k_base` — the dated snapshot does not raise, which was the risk flagged at orientation. First call 3.43s and `$TMPDIR/data-gym-cache` went 0 → 1 files; second call 0.287s. `TIKTOKEN_CACHE_DIR` is the offline mechanism and belongs to **O-19**'s CI.
+- **The mirror caught a defect the tree never saw.** `_shirt(color_primary=…)` collided with the helper's own keyword — `TypeError`, not a wrong assertion, so it would have been caught anyway; what the mirror bought was catching it before the file landed. `.upper()` was **not** written: the alphabet has no lower case, so the stage file's "uppercase `short_id`" is true by construction and the line would be dead code. Response-side normalisation is 2.5's.
+- **Two audit items, both found by reading the contract rather than by building against it.** **O-21**: `01` and `STAGE-2` 2.4 promise a configurable swimwear/sleepwear exclusion and neither word exists in the vocabulary, so 2.4 is written against a list that has no field to match on. **O-22**: `P04FFE` and `ZZ81KA` contain `0` and `1`, which `short_id`'s alphabet forbids; seven occurrences across three blocks, left verbatim because a partial fix gives one garment two ids.
+
+**The serialiser filters nothing**, deliberately. `ready`-only, `is_archived` and O-21's exclusion list are all 2.7's, so the function is a format and is testable as one — which is also why it is total: an untagged row serialises as `—/—` and `F— W—` rather than raising.

@@ -25,6 +25,7 @@ openai
 
 # Development and CI
 pytest
+tiktoken
 pytest-asyncio
 ruff
 mypy

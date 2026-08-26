@@ -89,7 +89,7 @@ The diagram names the model family. **The pin is a dated snapshot, `gpt-4o-mini-
 
 ### The whole wardrobe goes into the prompt
 
-A 150-item wardrobe serialises to roughly 7,000 tokens in the compact format. That fits comfortably in a single request and costs a fraction of a cent with `gpt-4o-mini`. There is therefore **no retrieval layer, no embeddings, and no vector database** in this project.
+A 150-item wardrobe serialises to about 4,600 tokens in the compact format — 30.7 per item, measured with `tiktoken` at task 2.3 rather than estimated, and `03-AI-CONTRACTS.md` is where that figure lives. This line said "roughly 7,000" until the measurement, which was the largest of three disagreeing estimates in three documents. That fits comfortably in a single request and costs a fraction of a cent with `gpt-4o-mini`. There is therefore **no retrieval layer, no embeddings, and no vector database** in this project.
 
 Aggressive pre-filtering is also actively harmful to quality: filtering out "summer" items in winter prevents the model from suggesting a summer dress with boots and a leather jacket, which is exactly the kind of combination that makes the product feel smart. The only server-side exclusions are unambiguous ones — swimwear and sleepwear — and they are configurable.
 

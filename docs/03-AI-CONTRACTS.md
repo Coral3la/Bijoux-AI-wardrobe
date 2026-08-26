@@ -192,18 +192,48 @@ One function serves both single-day recommendations and trip packing. A single d
 
 ### Wardrobe serialisation (`services/serializer.py`)
 
-Each item becomes one compact line. Nulls are omitted.
+Each item becomes one compact line.
+
+**The line is positional and the model is given no key**, so the core slots are
+always written — an em dash (`—`, U+2014) where the item has no value — and only
+the *trailing extras* are omitted. Dropping a core field instead would shift
+every later value one column left, and a material would be read as a pattern.
+`STAGE-2` 2.3's one-line "omit nulls" is the narrower half of this rule: the
+extras are what it describes. Written down at task 2.3, which is when the two
+readings were found to disagree; the example below has shown the em dash for a
+shoe with no `fit` since Stage 0.
 
 ```
-A3F9K2 | top/shirt | oversized | long_sleeve | white | solid | cotton | F3 W2 | base
-7BX1QM | bottom/jeans | straight | full | light_blue | denim_wash | denim | F2 W2 | base | rise:high
-P04FFE | shoes/boots | — | ankle | black | solid | leather | F3 W4 | standalone | water_resistant
-ZZ81KA | outerwear/blazer | relaxed | regular | beige | solid | wool | F4 W3 | outer
+A3F9K2 | top/shirt | oversized | long_sleeve | white | — | solid | cotton | F3 W2 | base
+7BX1QM | bottom/jeans | straight | full | light_blue | — | denim_wash | denim | F2 W2 | base | rise:high
+P04FFE | shoes/boots | — | ankle | black | gold | solid | leather | F3 W4 | standalone | water_resistant
+ZZ81KA | outerwear/blazer | relaxed | regular | beige | — | solid | wool | F4 W3 | outer
 ```
 
-Format: `SHORT_ID | category/subcategory | fit | length | color | pattern | material | F{formality} W{warmth} | layer | extras`
+Format: `SHORT_ID | category/subcategory | fit | length | color | color_secondary | pattern | material | F{formality} W{warmth} | layer | extras`
 
-About 28 tokens per item. A 150-item wardrobe is roughly 4,200 tokens — comfortably within a single request.
+**Extras are ordered `rise` then `water_resistant`.** Both are reachable on one
+item — a waterproof bottom has each — and the order is arbitrary but fixed, so
+that a line is a function of the item and not of the order the code happened to
+test two flags in.
+
+`color_secondary` was added to the format at task 2.3. Colour coordination is
+what this contract exists to get right and about one item in seven is two-tone,
+so a line carrying one colour describes those items wrongly. Measured cost: 303
+tokens across 150 items, about 2 per item. `DECISIONS.md` 156.
+
+**`display_name` is deliberately not in the line**, and the cost is real rather
+than theoretical: it is free text beside a closed vocabulary, the model refers
+to items by `short_id`, and it can name them from `subcategory` plus the two
+colours. What that gives up is that a garment its owner calls *the interview
+blazer* cannot be asked for, or referred to back, by that name anywhere in this
+feature. `DECISIONS.md` 156.
+
+**Measured at task 2.3 with `tiktoken` against `o200k_base`, not estimated:
+30.7 tokens per item — a 150-item wardrobe is about 4,600 tokens**, comfortably
+within a single request. This is the canonical figure; `01-ARCHITECTURE.md` and
+`DECISIONS.md` 002 quote it rather than carrying estimates of their own. The
+unit test's ceiling is 6,000, which is roughly 30% above real output.
 
 ### Weather rules — computed in Python, never inferred by the model
 
