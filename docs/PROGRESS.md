@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 2 — The Stylist
-**Status:** Stage 2 in progress — 2.1 to 2.6 complete; **2.6a** is next, and it takes migration `0003`. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below).
+**Status:** Stage 2 in progress — 2.1 to 2.6a complete; **2.7** is next, and it owns the swimwear/sleepwear filter that closes O-21. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below).
 
 This header said "Stage 1 in progress — 1.1 … 1.8 complete" until task 2.2, four tasks after 1.9 shipped and one after the log below recorded Stage 1 as closed. A tracker that contradicts its own log is worse than a stale one, because the log reads as the correction and the header is what anybody looks at first.
 
@@ -48,7 +48,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Stylist service
 - [x] Response validation
 - [x] Looks schema
-- [ ] Vocabulary — swimwear and sleepwear (2.6a, opened by O-21)
+- [x] Vocabulary — swimwear and sleepwear (2.6a, opened by O-21)
 - [ ] Suggest endpoint
 - [ ] Stylist screen
 - [ ] Look card
@@ -59,7 +59,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 ## Stage 3 — Feedback  *(cut line — reduce to "save a look" if behind)*
 `stages/STAGE-3-feedback.md` · target 3 days
 
-- [ ] Migration 0003
+- [ ] Migration 0004
 - [ ] Save a look
 - [ ] Thumbs up/down
 - [ ] Wear tracking
@@ -69,7 +69,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 ## Stage 4 — Trip Packing  *(signature feature — do not cut)*
 `stages/STAGE-4-packing.md` · target 5 days
 
-- [ ] Migration 0004
+- [ ] Migration 0005
 - [ ] Multi-day forecast
 - [ ] Packing orchestration
 - [ ] Trip endpoints
@@ -448,3 +448,17 @@ The task was decided by three things the documents did not agree on, and by one 
 - **Six mutations, all caught, control green at both ends** — and the first mutation run in this project that had to rebuild a schema to execute at all. `06-TESTING-STRATEGY.md` has recorded since before 1.1 that a mutated migration never runs, because `conftest.py` upgrades a database that already holds the revision; the answer is `alembic downgrade 0001` before each cycle, with `DATABASE_URL` overridden to `TEST_DATABASE_URL` for that one command. **The second half of that trap was walked into here before it was written down:** the first "final control" came back red with four failures, because the test database was still on the previous cycle's mutated schema. It is in `06` now.
 - **The two cascade tests defend different edges, and the pair only became clear under mutation.** Removing `ON DELETE CASCADE` from `look_items.look_id` kills the look-deletion test **and nothing else** — deleting a *user* still empties `look_items`, because `look_items.item_id → items` cascades first and takes the rows with it. So the user-deletion test does not defend the looks-side cascade; only the look-deletion test does. Two tests that read as near-duplicates measure two different constraints.
 - **`downgrade()` was run, not assumed.** `0002 -> 0001` drops both tables cleanly; it was exercised seven times over the mutation run.
+
+**2026-08-27 — task 2.6a, the swimwear and sleepwear vocabulary.** **808 backend tests pass (764 before, 44 added) and 303 frontend tests pass (302 before, 1 added).** The frontend *was* run this time, unlike at 2.5 and 2.6: this task changes a value mirror the browser reads. New: `backend/alembic/versions/0003_vocabulary.py`. Changed: `backend/app/enums.py`, `frontend/src/app/shared/models/enums.ts` and its spec, `frontend/public/i18n/en.json`, `backend/tests/unit/test_enums.py`, `backend/tests/unit/test_vision.py`, `backend/tests/integration/test_items_rows.py`, three code comments carrying a renumbered migration, and nine documents besides this one. One entry, `DECISIONS.md` 167. Audit **O-21 half closed** — the vocabulary exists; 2.7 owns the filter.
+
+**The migration has not been applied to the developer's database.** The suite migrates `TEST_DATABASE_URL` itself, so the 808 above ran against the real schema; `DATABASE_URL` is two `alembic upgrade head` runs behind — `0002` from the last task and `0003` from this one.
+
+- **The transaction question was measured, and it passed.** On PostgreSQL 18.6 both `ALTER TYPE item_category ADD VALUE IF NOT EXISTS` statements run inside the transaction `alembic/env.py` opens, so `0003` is an ordinary migration with no `autocommit_block()`. What PostgreSQL still refuses is *using* a value in the transaction that added it, and `0003` uses neither. Measured on the test container before the file was written, which is what `STAGE-2` 2.6a asked for.
+- **`downgrade()` does nothing, on purpose, and that is the trade this task actually made.** PostgreSQL has no `DROP VALUE`; the honest reversal is a type swap that rebuilds `items.category` and fails once any row carries either label. A `NotImplementedError` would have been more honest and would have **blocked `alembic downgrade 0001`** — the step every mutation run in `06` starts from, established one task ago at 2.6. The no-op buys that practice at the price of a type that widens irreversibly, and `IF NOT EXISTS` is what keeps the re-upgrade clean. 167.
+- **Appended, not inserted, and the reason is that `ADD VALUE` appends.** Grouping the two next to `dress` in Python would have left `02`, `enums.py`, `enums.ts` and the `item_category` type in two different orders with nothing comparing them. The cost is visible: the filter chips now read *…Bags, Accessories, Swimwear, Sleepwear*.
+- **`fit` and `length` apply to both; the three narrowed `fit` words were left alone.** A cover-up is `flowy`, a rash guard is `slim`, a nightdress has a hem — so both pass the test `02` already uses. `skinny`, `wide` and `bodycon` stay narrowed, so a bodycon swimsuit nulls out; widening them would be a claim about garments this wardrobe does not contain.
+- **One file was missing from the task list, and reading two templates is what found it.** `filter-bar.ts` and `tag-editor.ts` render `i18n.t('vocabulary.category.' + value)` over every member of `CATEGORIES`, and `I18nService.t` falls back to the raw key — so without ten new keys in `frontend/public/i18n/en.json` the filter bar would have grown a chip reading `vocabulary.category.swimwear`. **Nothing tests that seam and nothing in this project can**, which is the same shape as the upload limits in `CONVENTIONS.md`: no test compares a TypeScript constant against a JSON dictionary. It is recorded rather than fixed.
+- **Seven mutations, all caught, control green at both ends — and one of them is the only reason a test was written at all.** Deleting `0003` entirely fails **exactly two tests**, both the new parametrised integration test, while 806 stay green: every unit test over `app/enums.py` passes happily against a database that has never heard of either label, because `items.category` is an ENUM type and not text. That mutation needed a **virgin database** to execute — `conftest.py` upgrades a target that already holds the revision, which is `06`'s recorded trap — so the run used a throwaway `bijoux_mutation` database, dropped and recreated per cycle, and never touched `bijoux_test`. The other six: the layer row, the `fit` applicability, `_SLEEVED`, the declaration order, an emptied subcategory tuple, and one of the two `ADD VALUE` statements.
+- **`PROMPT_VERSION` moved, and this is the task that spent the licence to move it.** Half the vision prompt is rendered from `enums.py`. Harmless only because 1.11 is unrun — with a golden-set baseline in hand this task would have invalidated it, which is the whole reason it was scheduled before 1.11 rather than after.
+- **The renumber went one way only.** `0004` feedback and `0005` trips are corrected everywhere a reader would be *sent* to the wrong file — `02`'s table, `04:208`, `05:165`, both stage-file headings, this file's checklists, and three code comments. The dated entries in `DECISIONS.md` and in this file's log still name `0003` and `0004`, and were left alone: they record what was decided on the day, and 167 carries the pointer.
+- **Neither category has a photograph anywhere.** Not in the 64-item seed wardrobe, not in 1.11's golden set. Nothing was re-tagged and nothing needed to be — but the vision model's ability to tell a bikini from a bra is untested and stays that way until someone photographs one.

@@ -205,7 +205,7 @@ Re-runs vision tagging. `409` with `code: "item_edited"` if `user_edited` is tru
   "never_worn": 34, "most_worn": [ { item } ]
 }
 ```
-Drives the wardrobe dashboard. `never_worn` and `most_worn` return zeros until Stage 3 — `wear_count` and `last_worn_at` arrive with migration `0003`. Zero rather than the arithmetic truth: with no wear data at all, *every* item is unworn, and reporting `never_worn = total` would be correct today and would silently change meaning when the columns land.
+Drives the wardrobe dashboard. `never_worn` and `most_worn` return zeros until Stage 3 — `wear_count` and `last_worn_at` arrive with migration `0004`. Zero rather than the arithmetic truth: with no wear data at all, *every* item is unworn, and reporting `never_worn = total` would be correct today and would silently change meaning when the columns land.
 
 Counts exclude archived rows, matching `GET /items`, so a dashboard cannot keep counting deleted garments. `total` is every non-archived row including `processing` and `failed`; `by_category` and `by_color` omit rows whose tag is still `null`, so their values do not sum to `total` and a category with no items is absent rather than zero.
 

@@ -22,7 +22,7 @@ No luggage-size optimisation, no laundry modelling, no per-day accessory swaps b
 
 ## Tasks, in order
 
-### 4.1 Migration 0004
+### 4.1 Migration 0005
 `trips` table plus `looks.trip_id`.
 
 ### 4.2 Multi-day forecast

@@ -872,7 +872,7 @@ would make the rain branch showable instead of only describable. If neither is
 taken, this item is the answer to *"why does it keep putting her in the same
 blazer?"*.
 
-#### O-21 · The swimwear/sleepwear exclusion has no vocabulary member to match on — resolved in direction at 2.4, open until tasks 2.6a and 2.7
+#### O-21 · The swimwear/sleepwear exclusion has no vocabulary member to match on — vocabulary landed at 2.6a, open until 2.7's filter
 
 `01-ARCHITECTURE.md` line 93 and `STAGE-2` 2.4 both promise the same thing in
 almost the same words: *"the only server-side exclusions are unambiguous ones —
@@ -928,6 +928,32 @@ on PostgreSQL 18 rather than assuming it from the version number.
 than struck**, and `services/stylist.py` filters nothing: the exclusion lives at
 2.7 beside `ready`-only and `is_archived`, where 2.3 already said it belonged.
 This item closes when 2.6a and that filter have both landed.
+
+**Half landed at task 2.6a, 2026-08-27, and the half that landed is the one this
+item is named after.** `Category` has nine members, `SUBCATEGORIES` gives
+`swimwear` five and `sleepwear` three, `FIELD_APPLIES_TO` and
+`LAYERS_BY_CATEGORY` carry both, `enums.ts` mirrors the values, and migration
+`0003` taught the `item_category` type the two labels. **There is now a field to
+be configured against.** `DECISIONS.md` 167.
+
+Two things the recommendation above got right and one it did not. Right: the
+first option was the honest fix, and nothing already committed was re-tagged —
+no seed row matched either value, so the demo wardrobe is untouched. Right
+again: it *is* a migration, and the renumber landed with it (`0004` feedback,
+`0005` trips). Not right: it called the cascade "`SUBCATEGORIES`,
+`FIELD_APPLIES_TO`, `LAYERS_BY_CATEGORY`, the `enums.ts` mirror and 1.2a's
+category-dependent validation" and stopped there. **It missed
+`frontend/public/i18n/en.json`** — `filter-bar.ts` and `tag-editor.ts` render
+`i18n.t('vocabulary.category.' + value)` over every member of `CATEGORIES`, and
+`I18nService.t` falls back to the raw key, so without ten new keys the filter bar
+would have grown a chip reading `vocabulary.category.swimwear`. Nothing tests
+that seam and nothing can today; it was found by reading the two templates.
+
+**Still open, and what closes it is one filter.** `POST /looks/suggest` at 2.7
+excluding both categories beside `ready`-only and `is_archived`, from a list
+that is configurable. Until then `01-ARCHITECTURE.md:96` describes a filter that
+is merely unwritten rather than one that cannot be written, which is the
+sentence that changed.
 
 #### O-22 · ~~Two of `03`'s worked example ids could never have been generated~~ — **closed at task 2.4**
 

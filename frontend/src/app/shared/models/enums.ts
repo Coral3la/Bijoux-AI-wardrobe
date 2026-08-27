@@ -5,6 +5,9 @@
 export const ITEM_STATUSES = ['processing', 'ready', 'failed'] as const;
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
 
+// Appended rather than grouped with the garments, for the reason app/enums.py
+// gives: migration 0003 added them to the item_category type with ALTER TYPE
+// … ADD VALUE, which appends, and the two orders are kept identical.
 export const CATEGORIES = [
   'top',
   'bottom',
@@ -13,6 +16,8 @@ export const CATEGORIES = [
   'shoes',
   'bag',
   'accessory',
+  'swimwear',
+  'sleepwear',
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
 
@@ -119,6 +124,8 @@ export const SUBCATEGORIES = {
   shoes: ['sneakers', 'boots', 'heels', 'flats', 'sandals', 'loafers'],
   bag: ['tote', 'crossbody', 'shoulder', 'clutch', 'backpack'],
   accessory: ['belt', 'scarf', 'hat', 'sunglasses', 'jewelry'],
+  swimwear: ['swimsuit', 'bikini', 'swim_shorts', 'cover_up', 'rash_guard'],
+  sleepwear: ['pajamas', 'nightdress', 'robe'],
 } as const satisfies Record<Category, readonly string[]>;
 
 export type Subcategory = (typeof SUBCATEGORIES)[Category][number];

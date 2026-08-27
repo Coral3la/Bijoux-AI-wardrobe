@@ -111,7 +111,7 @@ class ItemStatsResponse(BaseModel):
     by_color: dict[str, int]
     processing: int
     failed: int
-    # Both wait for migration 0003, which adds `wear_count` and
+    # Both wait for migration 0004, which adds `wear_count` and
     # `last_worn_at` at Stage 3. Zero rather than `total`, which
     # is what "nothing has been worn yet" would honestly report:
     # that number would change meaning when the columns arrive,

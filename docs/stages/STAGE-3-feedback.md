@@ -26,7 +26,7 @@ No trips. No recommendation model trained on feedback — feedback is fed back a
 
 ## Tasks, in order
 
-### 3.1 Migration 0003
+### 3.1 Migration 0004
 `looks.feedback`, `looks.worn_at`, `items.wear_count`, `items.last_worn_at`.
 
 ### 3.2 Save a look

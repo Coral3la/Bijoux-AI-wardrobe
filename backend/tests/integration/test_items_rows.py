@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.routes import items as items_route
 from app.core.short_id import generate_short_id
+from app.enums import SUBCATEGORIES, Category
 from app.models.item import Item
 from app.models.user import User
 
@@ -482,3 +483,25 @@ def test_reading_your_own_item_succeeds(
 
     assert response.status_code == 200
     assert response.json()["short_id"] == item.short_id
+
+
+# --- the vocabulary the database has to know too, task 2.6a ------------------
+
+
+@pytest.mark.parametrize("category", [Category.SWIMWEAR, Category.SLEEPWEAR])
+def test_the_category_type_accepts_the_two_values_0003_added(
+    db: Session,
+    make_item: Callable[..., Item],
+    category: Category,
+) -> None:
+    # The only test in the suite that can tell migration `0003` was written.
+    # `items.category` is the `item_category` ENUM type, not text, so every
+    # unit test over `app/enums.py` passes on a database that has never heard
+    # of either value and the first real write is a DataError. Round-tripped
+    # rather than only inserted: the read is what proves the label came back as
+    # the member rather than as whatever the driver made of it.
+    item = make_item(category=category, subcategory=SUBCATEGORIES[category][0])
+
+    stored = db.execute(select(Item).where(Item.id == item.id)).scalar_one()
+
+    assert stored.category is category

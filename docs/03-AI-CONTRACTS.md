@@ -72,7 +72,7 @@ The enum lists are rendered from `app/enums.py` into that `{{VOCABULARY}}` place
                  "color_secondary","pattern","material","formality","warmth",
                  "layer","water_resistant","display_name","confidence"],
     "properties": {
-      "category":        { "type": "string", "enum": ["top","bottom","dress","outerwear","shoes","bag","accessory"] },
+      "category":        { "type": "string", "enum": ["top","bottom","dress","outerwear","shoes","bag","accessory","swimwear","sleepwear"] },
       "subcategory":     { "type": "string" },
       "fit":             { "type": ["string","null"] },
       "length":          { "type": ["string","null"] },

@@ -6,7 +6,7 @@ returns.
 
 **Three documented columns are deliberately absent.** `02-DATA-MODEL.md` prints
 `feedback` and `worn_at` on `looks` for readability and adds them in migration
-`0003`; `trip_id` arrives with `0004`, which is also what creates the `trips`
+`0004`; `trip_id` arrives with `0005`, which is also what creates the `trips`
 table it references. A model declaring a column the database lacks breaks every
 query against it — the rule `items.wear_count` established at task 0.7.
 

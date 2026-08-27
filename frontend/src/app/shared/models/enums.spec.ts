@@ -22,6 +22,22 @@ describe('the closed vocabulary mirror', () => {
   // under test, so a value added on one side of the hand-mirror fails here
   // instead of moving the expectation with it. Nothing can compare this file
   // against app/enums.py, which is what makes the literal worth writing out.
+  // The order is load-bearing on this one: it is also the item_category type's
+  // sort order, which migration 0003 appended to.
+  it('mirrors the nine categories in order', () => {
+    expect([...CATEGORIES]).toEqual([
+      'top',
+      'bottom',
+      'dress',
+      'outerwear',
+      'shoes',
+      'bag',
+      'accessory',
+      'swimwear',
+      'sleepwear',
+    ]);
+  });
+
   it('mirrors the eight weather conditions', () => {
     expect([...CONDITIONS]).toEqual([
       'clear',

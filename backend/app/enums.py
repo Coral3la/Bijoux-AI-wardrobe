@@ -31,6 +31,12 @@ class Category(Vocabulary):
     SHOES = "shoes"
     BAG = "bag"
     ACCESSORY = "accessory"
+    # Appended rather than grouped with the garments, so this list and the
+    # `item_category` type's sort order stay identical: migration `0003` adds
+    # them with `ALTER TYPE … ADD VALUE`, which appends. Declaration order is
+    # also what `_categories()` renders the vision prompt from.
+    SWIMWEAR = "swimwear"
+    SLEEPWEAR = "sleepwear"
 
 
 class Layer(Vocabulary):
@@ -150,21 +156,44 @@ SUBCATEGORIES: dict[Category, tuple[str, ...]] = {
     Category.SHOES: ("sneakers", "boots", "heels", "flats", "sandals", "loafers"),
     Category.BAG: ("tote", "crossbody", "shoulder", "clutch", "backpack"),
     Category.ACCESSORY: ("belt", "scarf", "hat", "sunglasses", "jewelry"),
+    Category.SWIMWEAR: ("swimsuit", "bikini", "swim_shorts", "cover_up", "rash_guard"),
+    Category.SLEEPWEAR: ("pajamas", "nightdress", "robe"),
 }
 
 # Which categories a field describes at all. Outside them the attribute does not
 # exist, so the value is nulled rather than corrected: `02-DATA-MODEL.md` makes
 # all three always-nullable, and any other answer would be a substituted value.
 FIELD_APPLIES_TO: dict[str, frozenset[Category]] = {
-    "fit": frozenset({Category.TOP, Category.BOTTOM, Category.DRESS, Category.OUTERWEAR}),
+    "fit": frozenset(
+        {
+            Category.TOP,
+            Category.BOTTOM,
+            Category.DRESS,
+            Category.OUTERWEAR,
+            Category.SWIMWEAR,
+            Category.SLEEPWEAR,
+        }
+    ),
     "length": frozenset(
-        {Category.TOP, Category.BOTTOM, Category.DRESS, Category.OUTERWEAR, Category.SHOES}
+        {
+            Category.TOP,
+            Category.BOTTOM,
+            Category.DRESS,
+            Category.OUTERWEAR,
+            Category.SHOES,
+            Category.SWIMWEAR,
+            Category.SLEEPWEAR,
+        }
     ),
     "rise": frozenset({Category.BOTTOM}),
 }
 
-_SLEEVED = frozenset({Category.TOP, Category.DRESS, Category.OUTERWEAR})
-_HEMMED = frozenset({Category.BOTTOM, Category.DRESS, Category.OUTERWEAR})
+_SLEEVED = frozenset(
+    {Category.TOP, Category.DRESS, Category.OUTERWEAR, Category.SWIMWEAR, Category.SLEEPWEAR}
+)
+_HEMMED = frozenset(
+    {Category.BOTTOM, Category.DRESS, Category.OUTERWEAR, Category.SWIMWEAR, Category.SLEEPWEAR}
+)
 
 # Words narrower than the field they belong to; a word absent from here applies
 # wherever its field does. `a_line` and `flowy` are absent deliberately — an
@@ -210,6 +239,8 @@ LAYERS_BY_CATEGORY: dict[Category, LayerRule] = {
     Category.SHOES: LayerRule(admits=frozenset({Layer.STANDALONE}), answer=Layer.STANDALONE),
     Category.BAG: LayerRule(admits=frozenset({Layer.STANDALONE}), answer=Layer.STANDALONE),
     Category.ACCESSORY: LayerRule(admits=frozenset({Layer.STANDALONE}), answer=Layer.STANDALONE),
+    Category.SWIMWEAR: LayerRule(admits=frozenset({Layer.STANDALONE}), answer=Layer.STANDALONE),
+    Category.SLEEPWEAR: LayerRule(admits=frozenset({Layer.STANDALONE}), answer=Layer.STANDALONE),
 }
 
 # `PATCH /items/{id}` clears these when the category changes, because there it is

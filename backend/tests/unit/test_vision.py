@@ -175,6 +175,8 @@ def test_the_layer_table_reaches_the_prompt_for_every_category() -> None:
         "  shoes          standalone",
         "  bag            standalone",
         "  accessory      standalone",
+        "  swimwear       standalone",
+        "  sleepwear      standalone",
     ):
         assert line in vision.SYSTEM_PROMPT, line
 
@@ -190,20 +192,22 @@ def test_the_narrowed_fit_words_reach_the_prompt() -> None:
 
 def test_the_narrowed_length_words_reach_the_prompt() -> None:
     for line in (
-        "  sleeveless     top · dress · outerwear",
-        "  short_sleeve   top · dress · outerwear",
-        "  long_sleeve    top · dress · outerwear",
-        "  mini           bottom · dress · outerwear",
-        "  midi           bottom · dress · outerwear",
-        "  maxi           bottom · dress · outerwear",
+        "  sleeveless     top · dress · outerwear · swimwear · sleepwear",
+        "  short_sleeve   top · dress · outerwear · swimwear · sleepwear",
+        "  long_sleeve    top · dress · outerwear · swimwear · sleepwear",
+        "  mini           bottom · dress · outerwear · swimwear · sleepwear",
+        "  midi           bottom · dress · outerwear · swimwear · sleepwear",
+        "  maxi           bottom · dress · outerwear · swimwear · sleepwear",
     ):
         assert line in vision.SYSTEM_PROMPT, line
 
 
 def test_each_fields_applicability_reaches_the_prompt() -> None:
     for line in (
-        "  applies to     top · bottom · dress · outerwear — null for any other category",
-        "  applies to     top · bottom · dress · outerwear · shoes — null for any other category",
+        "  applies to     top · bottom · dress · outerwear · swimwear · sleepwear"
+        " — null for any other category",
+        "  applies to     top · bottom · dress · outerwear · shoes · swimwear · sleepwear"
+        " — null for any other category",
         "  applies to     bottom — null for any other category",
     ):
         assert line in vision.SYSTEM_PROMPT, line

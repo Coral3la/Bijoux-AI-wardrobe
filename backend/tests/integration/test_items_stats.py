@@ -110,7 +110,7 @@ def test_the_wear_numbers_are_zero_until_stage_3(
     make_user: Callable[..., User],
     authorization: Callable[[User], dict[str, str]],
 ) -> None:
-    # `wear_count` and `last_worn_at` arrive with migration 0003. Reporting
+    # `wear_count` and `last_worn_at` arrive with migration 0004. Reporting
     # `never_worn = total` would be true today and would silently change
     # meaning when the columns land.
     user = make_user()

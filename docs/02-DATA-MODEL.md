@@ -18,11 +18,24 @@ These live in `backend/app/enums.py` and are mirrored in `frontend/src/app/share
 
 **The category-dependent rules below are the one exception, and they live in `app/enums.py` alone.** `enums.ts` mirrors the *values*, not the rules. Copying the rules into a second language would add a hand-written copy with nothing comparing it to anything, in the same position as the upload limits and the password rules `CONVENTIONS.md` records — and it would have been written before the screen that wants it existed. What the tag editor does instead is written into task 1.9. `DECISIONS.md` 085.
 
-### `category` — 7 values
+### `category` — 9 values
 
 ```
 top · bottom · dress · outerwear · shoes · bag · accessory
+swimwear · sleepwear
 ```
+
+**`swimwear` and `sleepwear` were added at task 2.6a, and they are appended
+rather than inserted.** Migration `0003` adds them to the `item_category` type
+with `ALTER TYPE … ADD VALUE`, which appends, and `app/enums.py` and
+`enums.ts` are kept in the same order so the three lists can be compared by
+eye. They are first-class categories rather than subcategories of something
+else because a person photographing their wardrobe uploads both, and the answer
+to a garment the app cannot name is not to pretend it is not a garment —
+`AUDITS.md` **O-21**, `DECISIONS.md` 167. Nothing already committed is
+re-tagged: no seed row matches either value. The server-side exclusion
+`01-ARCHITECTURE.md` describes is what these two exist to be matched on, and it
+belongs to task 2.7, beside `ready`-only and `is_archived`.
 
 ### `subcategory` — validated against the parent category
 
@@ -34,7 +47,14 @@ outerwear:  jacket · coat · blazer · cardigan · vest · puffer
 shoes:      sneakers · boots · heels · flats · sandals · loafers
 bag:        tote · crossbody · shoulder · clutch · backpack
 accessory:  belt · scarf · hat · sunglasses · jewelry
+swimwear:   swimsuit · bikini · swim_shorts · cover_up · rash_guard
+sleepwear:  pajamas · nightdress · robe
 ```
+
+`swim_shorts` rather than `shorts`, because no subcategory may appear under two
+categories — both mirrors' specs assert it, and a `shorts` that meant trousers
+in one place and swimwear in another would break the one property that makes
+`(category, subcategory)` an exact match.
 
 ### Category-dependent validity
 
@@ -62,7 +82,9 @@ skinny · slim · straight · relaxed · oversized · wide · bodycon · a_line 
 
 Always nullable. A value outside this list is coerced to `NULL` rather than rejected — an absent attribute is better than a wrong one, and neither the stylist nor any filter requires it.
 
-**`fit` applies to `top`, `bottom`, `dress` and `outerwear`, and to nothing else.** A bag has no meaningful silhouette, and neither has a shoe or a belt — not one of the nine words above describes one. On `shoes`, `bag` and `accessory` the field is `NULL`.
+**`fit` applies to `top`, `bottom`, `dress`, `outerwear`, `swimwear` and `sleepwear`, and to nothing else.** A bag has no meaningful silhouette, and neither has a shoe or a belt — not one of the nine words above describes one. On `shoes`, `bag` and `accessory` the field is `NULL`.
+
+The two added at 2.6a are in the list because they pass the same test the other four do rather than by association: a cover-up is `flowy`, a rash guard is `slim`, a robe is `oversized`. **The three narrowed rows below were left alone**, so `skinny`, `wide` and `bodycon` null out on both. A bodycon swimsuit is the one real loss, on a field that is nullable by design.
 
 **Three of the nine words are narrower than the field itself.** Every word not named here applies wherever the field does.
 
@@ -72,7 +94,7 @@ Always nullable. A value outside this list is coerced to `NULL` rather than reje
 | `wide` | `bottom` · `dress` | Wide-leg. `dress` is in the list because a wide-leg **jumpsuit** is category `dress` |
 | `bodycon` | `top` · `bottom` · `dress` | A bodycon coat is not a garment |
 
-`slim`, `straight`, `relaxed` and `oversized` describe all four categories the field applies to. `a_line` and `flowy` are left unconstrained deliberately: an A-line top is a real cut, and a rule that coerced it away would manufacture exactly the wrong answer these three rows exist to prevent. `DECISIONS.md` 085.
+`slim`, `straight`, `relaxed` and `oversized` describe all six categories the field applies to. `a_line` and `flowy` are left unconstrained deliberately: an A-line top is a real cut, and a rule that coerced it away would manufacture exactly the wrong answer these three rows exist to prevent. `DECISIONS.md` 085.
 
 ### `length`
 
@@ -89,8 +111,8 @@ Always nullable, on the same terms as `fit`. One flat list covering three axes �
 
 | Values | Apply to | Why |
 |---|---|---|
-| `sleeveless · short_sleeve · long_sleeve` | `top` · `dress` · `outerwear` | A pair of jeans has no sleeves |
-| `mini · midi · maxi` | `bottom` · `dress` · `outerwear` | A t-shirt has no hem length. `outerwear` is in the list because a maxi coat is a real garment |
+| `sleeveless · short_sleeve · long_sleeve` | `top` · `dress` · `outerwear` · `swimwear` · `sleepwear` | A pair of jeans has no sleeves. A rash guard and a pyjama top both have them, and a swimsuit is `sleeveless` |
+| `mini · midi · maxi` | `bottom` · `dress` · `outerwear` · `swimwear` · `sleepwear` | A t-shirt has no hem length. `outerwear` is in the list because a maxi coat is a real garment, and the two added at 2.6a because a nightdress and a sarong cover-up both have a hem |
 
 `crop`, `regular`, `longline`, `ankle` and `full` are unconstrained within the five categories the field applies to. They genuinely span the axes — cropped trousers and a cropped top, ankle boots and ankle trousers — and a rule over them would coerce correct answers away. **This is the point at which the flat list stops being enforced**, and the reason it stops here rather than earlier or later is that these five are the only words in it that describe more than one axis.
 
@@ -170,6 +192,14 @@ A shirt is `base`, a cardigan is `mid`, a coat is `outer`, a dress is `standalon
 | `shoes` | `standalone` | `standalone` |
 | `bag` | `standalone` | `standalone` |
 | `accessory` | `standalone` | `standalone` |
+| `swimwear` | `standalone` | `standalone` |
+| `sleepwear` | `standalone` | `standalone` |
+
+The two rows added at 2.6a take the plainest answer in the table for a plain
+reason: neither is layered in any look this application builds, because task
+2.7 excludes both from the wardrobe the stylist is sent. A determinate answer
+also means a wrong `layer` on either is corrected rather than refused, which
+leaves `top` the only category in this document that reports an error.
 
 Two rows of that table are claims rather than bookkeeping, and they are stated here in their own right so that a later reader can disagree with them by name instead of re-deriving the table.
 
@@ -300,7 +330,7 @@ Notes worth understanding:
   `coerced` is the **accepted** answer's discarded values and no others (`DECISIONS.md` 086) — the record 084 found missing, where a real garment attribute the model observed was correctly nulled and remembered by nothing. It is written as `[]` when nothing was discarded, and is **absent** on a `failed` row, where there is no accepted answer to have discarded from. `prompt_version` is written on both paths, so a row can be traced to the prompt that tagged it or failed to.
 - **`short_id`** is 6 characters from an unambiguous alphabet — `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, no `0`/`O`/`1`/`I`/`L`. Generate, check uniqueness, retry on collision. It carries no index of its own: the `UNIQUE` constraint already creates one, and a second would be an exact duplicate maintained on every write. "Check uniqueness" is done by *inserting* and catching the violation on `uq_items_short_id`, not by selecting first — the same race-free pattern 037 chose for `uq_users_email`. The generator lives in `app/core/short_id.py` (`DECISIONS.md` 052).
 - **`updated_at` is maintained by the ORM, not by the database.** `DEFAULT now()` fires on insert only; PostgreSQL has no column-level `ON UPDATE` and migration `0001` installs no trigger. Task 1.3 added `onupdate=text("now()")` to `Item.updated_at`, which is a **Core-level** default: it applies to ORM flushes and to `update()` statements, and **not** to raw `text()` SQL or to anything typed into `psql`. Database-level truth is a trigger and needs its own migration; it was not built. The startup sweep reads this column to decide which `processing` rows have been abandoned, so the two are one decision and neither survives the other's removal — `DECISIONS.md` 088.
-- **`wear_count` and `last_worn_at` are shown above but do not exist yet.** Migration `0003` adds them, per the table below. The ORM model added at task 0.7 deliberately omits both, because a model declaring a column the database lacks breaks every query against it.
+- **`wear_count` and `last_worn_at` are shown above but do not exist yet.** Migration `0004` adds them, per the table below. The ORM model added at task 0.7 deliberately omits both, because a model declaring a column the database lacks breaks every query against it.
 
 ---
 
@@ -378,10 +408,23 @@ One Alembic migration per stage, never a single mega-migration.
 |---|---|---|
 | `0001_initial` | 0 | extensions, enum types, `users`, `items` |
 | `0002_looks` | 2 | `looks`, `look_items` |
-| `0003_feedback` | 3 | `looks.feedback`, `looks.worn_at`, `items.wear_count`, `items.last_worn_at` |
-| `0004_trips` | 4 | `trips`, `looks.trip_id` |
+| `0003_vocabulary` | 2 | `item_category` gains `swimwear` and `sleepwear` |
+| `0004_feedback` | 3 | `looks.feedback`, `looks.worn_at`, `items.wear_count`, `items.last_worn_at` |
+| `0005_trips` | 4 | `trips`, `looks.trip_id` |
 
-Stage 3's columns are shown inline in the table definitions above for readability, but they are added by migration `0003`. If Stage 3 is cut, migration `0003` is simply never written. **`looks.trip_id` is the same case one stage further out**, and is named here because the `looks` DDL above shows it as a foreign key to a table that does not exist until Stage 4: migration `0002` creates `looks` **without** it, and `0004` adds it alongside `trips`. Added at the 2026-08-18 audit — the migrations table already said so and this paragraph did not.
+**`0003` renumbered the two that follow it**, which is what a migration inserted
+mid-project costs; it was scheduled after `0002_looks` precisely so that the
+migration this table already named kept its number. It is also the only
+migration here that creates nothing: two `ALTER TYPE … ADD VALUE` statements,
+and **a `downgrade()` that does nothing on purpose** — PostgreSQL has no `DROP
+VALUE`, the only true reversal is a type swap that fails once any row carries
+either label, and a downgrade that raised would block the `alembic downgrade
+0001` every mutation run starts from. `ADD VALUE IF NOT EXISTS` is what makes
+the re-upgrade over two surviving labels clean. That both statements run inside
+the transaction `alembic/env.py` opens was **measured on PostgreSQL 18.6 at
+2.6a**, not inferred from the version number.
+
+Stage 3's columns are shown inline in the table definitions above for readability, but they are added by migration `0004`. If Stage 3 is cut, migration `0004` is simply never written. **`looks.trip_id` is the same case one stage further out**, and is named here because the `looks` DDL above shows it as a foreign key to a table that does not exist until Stage 4: migration `0002` creates `looks` **without** it, and `0005` adds it alongside `trips`. Added at the 2026-08-18 audit — the migrations table already said so and this paragraph did not.
 
 Migrations are written by hand from the DDL above, never autogenerated — autogenerate does not faithfully reproduce `CITEXT`, partial indexes or `CHECK` constraints. Alembic reads `DATABASE_URL` from `app.core.config.settings`, never from `alembic.ini`, which is committed to the repository.
 

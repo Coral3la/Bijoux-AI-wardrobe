@@ -65,7 +65,14 @@ def bare(category: str, **overrides: Any) -> dict[str, Any]:
     return {"category": category, "subcategory": SUBCATEGORIES[Category(category)][0], **overrides}
 
 
-_GARMENTS = (Category.TOP, Category.BOTTOM, Category.DRESS, Category.OUTERWEAR)
+_GARMENTS = (
+    Category.TOP,
+    Category.BOTTOM,
+    Category.DRESS,
+    Category.OUTERWEAR,
+    Category.SWIMWEAR,
+    Category.SLEEPWEAR,
+)
 _CARRIED = (Category.SHOES, Category.BAG, Category.ACCESSORY)
 
 
@@ -94,7 +101,9 @@ def test_color_primary_values_are_the_documented_seventeen_in_order() -> None:
     ]
 
 
-def test_category_values_are_the_documented_seven_in_order() -> None:
+def test_category_values_are_the_documented_nine_in_order() -> None:
+    # Order is not cosmetic: `0003` appended swimwear and sleepwear to the
+    # `item_category` type, and this list is what keeps the two in step.
     assert Category.values() == [
         "top",
         "bottom",
@@ -103,6 +112,8 @@ def test_category_values_are_the_documented_seven_in_order() -> None:
         "shoes",
         "bag",
         "accessory",
+        "swimwear",
+        "sleepwear",
     ]
 
 
@@ -344,9 +355,16 @@ def test_the_caller_s_mapping_is_not_mutated() -> None:
 # is authoritative for all four and is what they are transcribed from.
 
 
-def test_fit_applies_to_the_four_garment_categories() -> None:
+def test_fit_applies_to_the_six_garment_categories() -> None:
     assert FIELD_APPLIES_TO["fit"] == frozenset(
-        {Category.TOP, Category.BOTTOM, Category.DRESS, Category.OUTERWEAR}
+        {
+            Category.TOP,
+            Category.BOTTOM,
+            Category.DRESS,
+            Category.OUTERWEAR,
+            Category.SWIMWEAR,
+            Category.SLEEPWEAR,
+        }
     )
 
 
@@ -367,8 +385,12 @@ def test_the_narrowed_fit_words_are_the_three_agreed_at_1_2a() -> None:
 
 
 def test_the_narrowed_lengths_are_the_sleeve_words_and_the_hem_words() -> None:
-    sleeved = frozenset({Category.TOP, Category.DRESS, Category.OUTERWEAR})
-    hemmed = frozenset({Category.BOTTOM, Category.DRESS, Category.OUTERWEAR})
+    sleeved = frozenset(
+        {Category.TOP, Category.DRESS, Category.OUTERWEAR, Category.SWIMWEAR, Category.SLEEPWEAR}
+    )
+    hemmed = frozenset(
+        {Category.BOTTOM, Category.DRESS, Category.OUTERWEAR, Category.SWIMWEAR, Category.SLEEPWEAR}
+    )
     assert VALUE_APPLIES_TO["length"] == {
         Length.SLEEVELESS: sleeved,
         Length.SHORT_SLEEVE: sleeved,
@@ -400,6 +422,8 @@ def test_the_layer_table_is_the_one_in_the_data_model() -> None:
         Category.SHOES: standalone,
         Category.BAG: standalone,
         Category.ACCESSORY: standalone,
+        Category.SWIMWEAR: standalone,
+        Category.SLEEPWEAR: standalone,
     }
 
     # dict() rather than the bare name so that the table stays on the left: ruff's

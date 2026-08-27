@@ -162,7 +162,7 @@ The editor is always open rather than behind an **Edit tags** control, because t
 
 **Retag is one control.** It sends the unforced request; a `409 item_edited` opens a second step naming what will be discarded, and only that step sends `force=true`. Forcing straight away whenever `user_edited` is set would mean the `409` is never produced from the UI, and Stage 1's sixth acceptance criterion would stay a route test (122). **Delete arms on the first press and deletes on the second** — not `window.confirm`, which returns `undefined` in the test environment, and not a modal (126).
 
-Wear count and last worn remain *(Stage 3)*: the columns arrive at migration `0003`, so the section says so rather than rendering a zero that would change meaning when they land.
+Wear count and last worn remain *(Stage 3)*: the columns arrive at migration `0004`, so the section says so rather than rendering a zero that would change meaning when they land.
 
 **"Style around this" is not built, and this is where it was promised.** The line that said *"Primary action on this screen … do not bury it behind the edit and delete actions"* described a navigation into the stylist with `anchor_item_id` pre-set — a Stage 2 screen, out of scope for the whole of Stage 1, and named in no Stage 1 task. It is not cut: it is the first thing this screen should gain when the stylist exists, and the reasoning for it stands — it is the shortest path from *I am looking at this garment* to *here is what goes with it*. Recorded here so that whoever builds Stage 2 finds it, on 090's test: ownership, not affordance.
 
