@@ -72,6 +72,16 @@ export class AuthService {
     this.clearSession();
   }
 
+  // The profile save answers with the whole user, so the session's copy is
+  // replaced from that response rather than re-fetched. Its own method beside
+  // accept() and clearSession() so that userSignal keeps one writer per reason:
+  // this one changes the profile and never the token. Without it the stylist
+  // goes on answering `home_location_missing` until the next reload, because
+  // it reads home_lat/home_lon off exactly this signal.
+  acceptProfile(user: User): void {
+    this.userSignal.set(user);
+  }
+
   // The server rejected the credential. Distinct from logout() so that the
   // notice has exactly one writer and no call ordering to get wrong.
   rejectSession(): void {

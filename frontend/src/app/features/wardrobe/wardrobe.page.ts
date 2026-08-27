@@ -6,7 +6,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Params, Router } from '@angular/router';
+import { ActivatedRoute, Params, Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
@@ -42,7 +42,7 @@ function scale(value: string | null): number | undefined {
 @Component({
   selector: 'app-wardrobe-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilterBar, ItemCard, PendingStrip, UploadSheet],
+  imports: [FilterBar, ItemCard, PendingStrip, RouterLink, UploadSheet],
   template: `
     <main class="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
       <header class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -58,6 +58,17 @@ function scale(value: string | null): number | undefined {
         @if (auth.currentUser(); as user) {
           <p class="text-sm">{{ i18n.t('wardrobe.signedInAs', { name: label(user) }) }}</p>
         }
+        <!-- The only way into /profile, and it sits in the account row rather
+             than beside the item count because that is what the row is: who is
+             signed in, and the two things they can do about it. inline-flex
+             because min-height does not apply to an inline element, so the
+             anchor would miss the 44px target the button beside it keeps. -->
+        <a
+          routerLink="/profile"
+          class="inline-flex min-h-11 items-center rounded-md px-3 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {{ i18n.t('wardrobe.profile') }}
+        </a>
         <button
           type="button"
           (click)="signOut()"

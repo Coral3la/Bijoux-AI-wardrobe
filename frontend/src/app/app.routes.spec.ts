@@ -43,6 +43,23 @@ describe('routes', () => {
     expect(await navigate('/stylist')).toBe('/stylist');
   });
 
+  it('resolves the profile rather than falling through to the wildcard', async () => {
+    expect(await navigate('/profile')).toBe('/profile');
+  });
+
+  it('guards the profile route', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter(routes),
+        { provide: AuthService, useValue: { isAuthenticated: () => false } },
+      ],
+    });
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/profile');
+
+    expect(router.url).toBe('/login');
+  });
+
   it('guards the stylist route', async () => {
     TestBed.configureTestingModule({
       providers: [

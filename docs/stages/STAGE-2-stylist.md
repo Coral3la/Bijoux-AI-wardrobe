@@ -35,7 +35,7 @@ No saving, no thumbs up/down, no wear tracking — that is Stage 3. No trips. Th
 ### 2.2 Location search
 `GET /me/locations/search?q=` proxying Open-Meteo geocoding. `PATCH /me` accepting **the whole body `04-API-SPEC.md` prints** — `display_name`, `height_cm`, the three sizes, `style_notes` and the three home fields.
 
-This line named the three home fields only until the task ran. It was widened on `AUDITS.md` **O-6**'s recommendation: the stylist prompt at 2.4 reads `height_cm` and `style_notes`, `05-FRONTEND-SPEC.md` §8's profile screen is owned by no task, and a narrow `PATCH` would leave that prompt block structurally empty in every request this project ever makes. Same route, longer schema. `DECISIONS.md` 149.
+This line named the three home fields only until the task ran. It was widened on `AUDITS.md` **O-6**'s recommendation: the stylist prompt at 2.4 reads `height_cm` and `style_notes`, `05-FRONTEND-SPEC.md` §8's profile screen was owned by no task — 2.10a owns it now — and a narrow `PATCH` would leave that prompt block structurally empty in every request this project ever makes. Same route, longer schema. `DECISIONS.md` 149.
 
 The demo account is seeded with a home location here too — `AUDITS.md` **O-20** measured that no row on the database had one, which leaves 2.7's forecast lookup and 2.12's strip with no default on the account a visitor signs into.
 
@@ -136,6 +136,15 @@ Frontend: a primary **Style around this** button on the item detail screen, navi
 
 This is the original problem the product exists to solve — *I am holding this garment and do not know what goes with it.* Roughly half a day.
 
+### 2.10a Profile screen — the home city the stylist needs
+`/profile`, and the route into it from the wardrobe header. A form over `PATCH /me`: display name, height, the three sizes, style notes, and the home city through the `GET /me/locations/search` type-ahead. `05-FRONTEND-SPEC.md` §8 already specifies the screen.
+
+**Nothing on the backend is in scope, and that was measured rather than assumed.** `PATCH /me` has accepted the whole nine-field body since 2.2 (`DECISIONS.md` 149), the geocoder proxy has shipped with no caller since the same task, and `seed_demo.py` writes the demo account's Tel Aviv. What is missing is the only thing that can reach any of it — which is `AUDITS.md` **O-6**'s second half, recommended after 2.12 and unwritten since.
+
+**It goes ahead of 2.11 because it is not a refinement.** `POST /looks/suggest` answers `400 home_location_missing` on an account with no `home_lat`/`home_lon`, and every route to setting one today is a `curl`. The swap improves a look the user can already get; this decides whether she can get one. It goes ahead of 2.12 because the weather strip is drawn from the home location this screen sets.
+
+The three home columns are one field (`DECISIONS.md` 151): the picker writes `home_city`, `home_lat` and `home_lon` together or clears all three, and `UserUpdate` answers `422` to any other combination. Roughly half a day.
+
 ### 2.11 Swap a single item
 Add `locked_item_ids`, `replace_role`, and `exclude_item_ids` to the same endpoint. Inject the `LOCKED` block. Add validation rule 8: all locked items present, the excluded item absent.
 
@@ -143,8 +152,12 @@ Frontend: a small ↻ badge on each item in the look card. Tapping it locks the 
 
 Most looks are fine except one piece, usually the shoes. "Try again" rerolls everything and throws away the good parts. Roughly half a day, same endpoint, no new infrastructure.
 
-### 2.12 Weather strip
+### 2.12 Weather strip — and the only way into the stylist
 A persistent strip on the wardrobe screen showing the current temperature and condition for the user's home location, tappable through to the stylist. Small piece of work, disproportionate effect on how alive the app feels.
+
+**It carries the general "style me" entry point, and that is the larger half of the task.** `/stylist` opens on the general request form — occasion, date, coat, notes, no anchor — and nothing in the application links to it: `app.routes.ts` has said so since 2.8, there is no nav shell, and 2.10's "Style around this" is a route in from one garment rather than a way to ask for a look at all. This strip is the only entry point `05-FRONTEND-SPEC.md` draws.
+
+**So the tap target does not depend on the forecast.** An account with no home location has no temperature to print, and a strip that rendered nothing in that case would leave the wardrobe with no route to the stylist. It degrades instead: the strip stays, the temperature is replaced by a prompt to set a home city that links to 2.10a's screen, and the tap into `/stylist` is there either way.
 
 ---
 
@@ -164,8 +177,10 @@ A persistent strip on the wardrobe screen showing the current temperature and co
 
 ## Commit checkpoints
 
-`feat(weather): open-meteo client and rules` · `test: weather rule boundaries` · `feat(api): profile and location search` · `feat(ai): wardrobe serializer` · `feat(ai): stylist service` · `feat(ai): response validation` · `feat(db): looks schema` · `feat(core): swimwear and sleepwear categories` · `feat(api): suggest endpoint` · `feat(web): stylist screen` · `feat(web): look card` · `feat(ai): anchor item support` · `feat(web): style around this` · `feat(ai): single item swap` · `feat(web): swap button`
+`feat(weather): open-meteo client and rules` · `test: weather rule boundaries` · `feat(api): profile and location search` · `feat(ai): wardrobe serializer` · `feat(ai): stylist service` · `feat(ai): response validation` · `feat(db): looks schema` · `feat(core): swimwear and sleepwear categories` · `feat(api): suggest endpoint` · `feat(web): stylist screen` · `feat(web): look card` · `feat(ai): anchor item support` · `feat(web): style around this` · `feat(web): profile and home city` · `feat(ai): single item swap` · `feat(web): swap button` · `feat(web): weather strip`
 
 ## If you fall behind
 
-Cut the weather strip and the coat override. If pressed further, cut the swap (2.11) — but **keep the anchor (2.10)**. The anchor is the original use case; the swap is refinement on top of it.
+Cut the coat override, and cut the weather strip's *forecast* — but not the strip itself: it carries the only link into `/stylist`, so what is cut is the temperature, not the tap target. If pressed further, cut the swap (2.11) — but **keep the anchor (2.10)**. The anchor is the original use case; the swap is refinement on top of it.
+
+**2.10a is not on this list.** Without a home city the stylist answers `400` on every request and there is nothing to demonstrate at all.

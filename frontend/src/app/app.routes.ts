@@ -36,6 +36,15 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/stylist/stylist.page').then((m) => m.StylistPage),
   },
+  // Above the wildcard for the same reason, and with no link into it: `app.html`
+  // is a bare router-outlet, and STAGE-2 2.10a specifies the screen without
+  // saying how it is reached. The wardrobe header is where 05-FRONTEND-SPEC.md
+  // §2 would put it; that is not this task's to decide.
+  {
+    path: 'profile',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/profile/profile.page').then((m) => m.ProfilePage),
+  },
   { path: '', pathMatch: 'full', redirectTo: 'wardrobe' },
   { path: '**', redirectTo: 'wardrobe' },
 ];

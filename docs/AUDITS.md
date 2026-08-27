@@ -256,10 +256,15 @@ full.** `PATCH /me` accepts the whole body — nine fields, including
 never set and which `04-API-SPEC.md`'s own worked example carried all along.
 `DECISIONS.md` 149 has the contradiction and what was struck.
 
-**The second half was not taken, and the gap it names is now smaller and
-sharper.** No profile screen was built: `05-FRONTEND-SPEC.md` §8 is still owned
-by no numbered task, so `height_cm`, the three sizes and `style_notes` are
-reachable by `curl` and by nothing else. What changed is that the block is no
+**The second half was not taken at 2.2, and was taken at 2.10 — as a task
+rather than as a screen.** No profile screen was built at 2.2: `height_cm`, the
+three sizes and `style_notes` stayed reachable by `curl` and by nothing else,
+and `05-FRONTEND-SPEC.md` §8 stayed owned by nobody through five more tasks.
+**`STAGE-2` 2.10a now owns it**, placed before the swap rather than after 2.12
+as this recommendation proposed: `home_location_missing` arrived at 2.7 and
+made the screen a blocker on the stylist working at all, which is a stronger
+claim than the empty prompt block this item was opened about. `DECISIONS.md`
+174. What changed is that the block is no
 longer *unfillable* — the route exists, the demo account can be given a height
 and a `style_notes` line by one request, and 2.4 can be demonstrated against a
 populated profile. What is left is a missing screen rather than a missing
