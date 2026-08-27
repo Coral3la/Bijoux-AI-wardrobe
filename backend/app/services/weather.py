@@ -100,6 +100,9 @@ WMO_CONDITIONS: Final[dict[int, Condition]] = {
 # table reads "22–27" and "≥ 28" and the provider answers 31.7, so every edge
 # has a gap the table does not name: 27.9 belongs to the band below 28.
 # `DECISIONS.md` 148.
+_COLD: Final = "Outerwear is REQUIRED, warmth 3-4."
+_COLDEST: Final = "Outerwear is REQUIRED, warmth 4-5, plus a mid layer."
+
 _BANDS: Final[tuple[tuple[float, str], ...]] = (
     (28, "Use items with warmth 1-2 only. Do NOT include any outerwear."),
     (22, "Use items with warmth 1-2. Outerwear optional and only if warmth <= 2."),
@@ -107,9 +110,15 @@ _BANDS: Final[tuple[tuple[float, str], ...]] = (
         16,
         "Use warmth 2-3 for the base. A mid layer or light outerwear (warmth 2-3) is optional.",
     ),
-    (10, "Outerwear is REQUIRED, warmth 3-4."),
+    (10, _COLD),
 )
-_COLDEST: Final = "Outerwear is REQUIRED, warmth 4-5, plus a mid layer."
+
+# The two bands that make outerwear compulsory, named rather than matched. A
+# `"REQUIRED" in rule` test would read the table's prose, and a re-typed pair of
+# sentences in `stylist.py` would be a third copy of what `03-AI-CONTRACTS.md`
+# already says once; this way the set is the same objects the table is built
+# from, and a reworded band changes both at once.
+_OUTERWEAR_REQUIRED: Final = frozenset({_COLD, _COLDEST})
 
 _RAIN = "Rain expected. Strongly prefer water_resistant outerwear and closed water_resistant shoes."
 _WIND = "Windy. Avoid flowy or a_line items."
@@ -155,6 +164,18 @@ def build_rule(temp_c: float, precip_mm: float, wind_kph: float) -> str:
     if wind_kph > 30:
         rule = f"{rule} {_WIND}"
     return rule
+
+
+def requires_outerwear(rule: str) -> bool:
+    """Whether a rule from `build_rule` makes outerwear compulsory.
+
+    Read by `validate_look_response`'s rule 6 (2.5), which cannot ask the
+    temperature: the stylist is given a sentence, never a number, and the band
+    table is the only thing that knows which sentences are the demanding two.
+    `startswith` rather than equality because the rain and wind modifiers are
+    appended to the band, and rain is exactly when the coldest bands fire.
+    """
+    return any(rule.startswith(band) for band in _OUTERWEAR_REQUIRED)
 
 
 def condition_for(code: int) -> Condition:

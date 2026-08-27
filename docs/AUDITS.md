@@ -1007,7 +1007,7 @@ has. Not taken at 2.4 because `vision.py` belongs to 1.2b and the change would
 ride into a commit about the stylist — the shape `DECISIONS.md` 082 refused for
 the same reason one stage earlier.
 
-#### O-24 · The model filled `day` from the date, and nothing would have caught it — task 2.5
+#### O-24 · ~~The model filled `day` from the date, and nothing would have caught it~~ — **closed at task 2.5**
 
 Measured, not read. The live call that verified `STYLIST_SCHEMA` at task 2.4 was
 a single-day request for **2026-03-14**, and the model answered `"day": 14`.
@@ -1031,6 +1031,20 @@ told rather than left to infer from a date it can see. Or keep it and add a
 validation rule that looks are numbered `1..n`, which is the only option that
 survives a model ignoring the instruction. The evidence says an unexplained
 integer beside a date will be filled from the date.
+
+**Closed at task 2.5. The first option was taken, and one fact this item did not
+have is what decided it.** `day` is struck from `STYLIST_SCHEMA`, from `Look` and
+from `_fake_response`. This item says the field "becomes real at Stage 4, where
+`day` is how a look is attached to a date, and at 2.6 if look persistence ever
+writes it to a column" — **`02-DATA-MODEL.md` gives `looks` a `for_date` and a
+`trip_id` and no day column at any stage**, so 2.6 does not write it and neither
+does 4's DDL. That leaves the field with no reader anywhere in the plan, which
+is exactly the test `look_id` and `confidence` failed at 2.4 under O-9. Of the
+other two options, the instruction does not survive a model that ignores it, and
+the numbering rule would spend the project's one retry on an integer nothing
+reads — in a table whose rules 7 and 8 already belong to 2.10 and 2.11. Stage 4
+reintroduces a day number beside the trip message that gives it a meaning.
+`DECISIONS.md` 163.
 
 ### Noted in passing, not a documentation defect
 

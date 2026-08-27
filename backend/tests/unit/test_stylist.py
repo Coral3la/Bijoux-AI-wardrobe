@@ -100,7 +100,6 @@ def _context(**overrides: Any) -> stylist.StylistContext:
 def _answer(**overrides: Any) -> dict[str, Any]:
     """`03-AI-CONTRACTS.md`'s response example, single-day."""
     look: dict[str, Any] = {
-        "day": 1,
         "occasion": "work",
         "title": "Morning meetings",
         "item_ids": [TOP_ID, JEANS_ID, BOOTS_ID, BLAZER_ID],
@@ -151,12 +150,13 @@ def test_the_root_carries_exactly_the_three_documented_keys() -> None:
     ]
 
 
-def test_a_look_carries_exactly_the_six_documented_keys() -> None:
+def test_a_look_carries_exactly_the_five_documented_keys() -> None:
     # `confidence` and `look_id` are struck from `03`'s look object: neither has
     # a column, a renderer or a task, and in strict mode every property is one
     # the model must produce on every call. `AUDITS.md` O-9, `DECISIONS.md` 157.
+    # `day` is struck at 2.5 on the same test, once a live call had shown it
+    # being filled from the date. `AUDITS.md` O-24, `DECISIONS.md` 163.
     assert list(stylist.STYLIST_SCHEMA["schema"]["properties"]["looks"]["items"]["properties"]) == [
-        "day",
         "occasion",
         "title",
         "item_ids",
@@ -500,7 +500,6 @@ async def test_the_fake_echoes_the_requested_occasion(fake: None) -> None:
     answer = await stylist.suggest_looks(WARDROBE, _context(occasion="evening"))
 
     assert answer.looks[0].occasion == "evening"
-    assert answer.looks[0].day == 1
     assert answer.missing_pieces == ()
 
 
@@ -576,7 +575,11 @@ async def test_truncated_json_is_a_value_error(monkeypatch: pytest.MonkeyPatch) 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "payload",
-    ['{"unexpected": true}', "[]", '{"looks": [{"day": 1}], "missing_pieces": [], "message": "x"}'],
+    [
+        '{"unexpected": true}',
+        "[]",
+        '{"looks": [{"occasion": "work"}], "missing_pieces": [], "message": "x"}',
+    ],
 )
 async def test_an_answer_of_the_wrong_shape_is_a_value_error(
     monkeypatch: pytest.MonkeyPatch, payload: str
@@ -646,9 +649,7 @@ async def test_returned_ids_are_not_normalised_here(monkeypatch: pytest.MonkeyPa
 
 
 def test_the_response_is_immutable() -> None:
-    look = stylist.Look(
-        day=1, occasion="work", title="t", item_ids=(), reasoning="r", weather_note="w"
-    )
+    look = stylist.Look(occasion="work", title="t", item_ids=(), reasoning="r", weather_note="w")
 
     with pytest.raises(AttributeError):
-        look.day = 2  # type: ignore[misc]
+        look.occasion = "evening"  # type: ignore[misc]

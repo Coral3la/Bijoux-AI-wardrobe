@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 2 — The Stylist
-**Status:** Stage 2 in progress — 2.1, 2.2 and 2.3 complete. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below).
+**Status:** Stage 2 in progress — 2.1 to 2.5 complete. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below).
 
 This header said "Stage 1 in progress — 1.1 … 1.8 complete" until task 2.2, four tasks after 1.9 shipped and one after the log below recorded Stage 1 as closed. A tracker that contradicts its own log is worse than a stale one, because the log reads as the correction and the header is what anybody looks at first.
 
@@ -46,7 +46,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Location search
 - [x] Wardrobe serialiser
 - [x] Stylist service
-- [ ] Response validation
+- [x] Response validation
 - [ ] Looks schema
 - [ ] Vocabulary — swimwear and sleepwear (2.6a, opened by O-21)
 - [ ] Suggest endpoint
@@ -424,3 +424,17 @@ The task was decided by measurements, and two of them contradicted what the docu
 **Still true from 2.1, and it is now load-bearing rather than a note: O-20.** The demo wardrobe cannot satisfy two branches of the rule table this service sends — zero of 64 rows are `water_resistant`, and the 22–27°C band has no qualifying items. The prompt's new never-refuse sentence is what keeps the stylist dressing that wardrobe instead of arguing with it.
 
 **One coupling from Stage 1 is now closed.** The `OPENAI_MODEL` note above — "split the constant at 2.4 or accept that the re-pin invalidates Stage 2's observations" — was split.
+
+**2026-08-26 — task 2.5, response validation.** **760 backend tests pass (736 before, 24 added).** Frontend untouched and not run — this task ships no screen and changes no wire shape the browser reads. New: `backend/tests/unit/test_look_validation.py` (14 tests). Changed: `backend/app/services/stylist.py` (`validate_look_response`, `LookValidation`, and `day` struck), `backend/app/services/weather.py` (`requires_outerwear`, 10 parametrised cases in `test_weather.py`), `backend/tests/unit/test_stylist.py` (the four tests that named `day`), and six documents besides this one. Two entries, `DECISIONS.md` 163 and 164. Audit **O-24 closed**.
+
+The task was decided by three things the documents did not agree on, and by one column that was not there:
+
+- **Five rules run, not the six `STAGE-2` asked for, and the missing one has no field to read.** `03`'s rule 5 checks `packing_list.item_ids`, and `STYLIST_SCHEMA` carries no `packing_list` — 157 deferred it to Stage 4 because its `by_category` map cannot be expressed under `additionalProperties: false`. A rule written against a field that arrives in two stages is untested code. Rules 7 and 8 arrive with the anchor at 2.10 and the swap at 2.11. So 2.5 runs 1, 2, 3, 4 and 6, and both the stage file and `06` are corrected to say so.
+- **`day` is struck, and what decided it was `02-DATA-MODEL.md` rather than the live call.** O-24 recorded the model answering `"day": 14` for a request dated 2026-03-14 while the fake answered `1`, and offered three options. The one fact the audit did not have is that **the `looks` table has `for_date` and no day column, at any stage** — so "it becomes real at 2.6 if persistence writes it to a column" is answered: it does not. That is 157's own test, failed by the one field that had survived it. Stage 4 reintroduces a day number beside the trip schema that gives it a meaning. 163.
+- **Rule 6 as printed would have answered `502` to a correct look.** 158 gave an explicit `include_outerwear: false` precedence over the weather rule and the prompt says so in words; the rule as written then fails a look that obeyed the user at 12°C, spends the retry, and returns `stylist_failed` for the one answer that did as it was told. Narrowed: rule 6 does not run when the user asked for no outerwear, recorded in `03` beside the rule. 164.
+- **The retry seam is one task further out than the first contract's, and the reason is arithmetic.** `validate_tags` can re-call the model because a retry needs one extra argument. Re-calling the stylist needs the whole wardrobe and context, so a validator holding those would *be* 2.7's orchestrator — and every "hand-built response object" unit test the stage file asks for would have become `async` for nothing. `validate_look_response` is synchronous, calls nothing, raises nothing and ships no exception class; it returns the first violation beside the normalised response and 2.7 spends the retry. `STAGE-2` 2.4's "2.5 owns the retry" clause is corrected in place.
+- **Normalisation returns with the verdict, and `.upper()` is the whole of it.** 156 assigned case-folding the model's ids here; `LookValidation.response` carries them upper-cased so there is one place an id can change case and 2.7 cannot hydrate from the raw ones by accident. No `.strip()` — nothing measured pads an id. Transliteration is impossible by construction: `short_id`'s alphabet drops *both* halves of every confusable pair, so a returned `0` maps to no legal character and is a hallucination rather than a typo.
+- **Rule 6 asks its question of a sentence, never a temperature**, through a new `weather.requires_outerwear(rule)` built from the two band constants themselves rather than a `"REQUIRED" in rule` test or a third copy of `03`'s prose. `startswith`, because the rain and wind modifiers are appended — and rain is exactly when the cold bands fire.
+- **Sixteen mutations, all caught, control green at both ends.** Including the four that would otherwise read as taste: the rule order reversed so rule 2 reports before rule 1, rule 3 read by category instead of by layer, `.upper()` deleted, and the `include_outerwear` guard deleted. The last two close the one hole the first run left open — the `logger.warning` deleted, and the same line stripped of its `extra=` — caught by a test that reads `record.violation` rather than `caplog.text`, which is `test_weather.py`'s lesson: the development formatter drops every extra silently, so a test written against the rendered text passes with the violation missing.
+
+**`stylist.py` now imports `weather.py`** — the first edge between the two Stage 2 services. Harmless today, since `weather.py` imports only `enums.py`, and worth knowing before anything in it reaches back the other way.

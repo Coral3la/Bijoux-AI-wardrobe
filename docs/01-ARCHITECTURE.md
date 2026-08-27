@@ -80,9 +80,11 @@ The diagram names the model family. **The pin is a dated snapshot, `gpt-4o-mini-
 4. Backend converts temperature → an explicit rule sentence  (03-AI-CONTRACTS)
 5. Backend serialises the wardrobe to compact one-line-per-item text
 6. Backend calls OpenAI with response_format = strict JSON schema
-7. Backend validates: every returned short_id exists in THIS user's wardrobe
+7. Backend validates: 03-AI-CONTRACTS' table, in order, first violation wins
+     - rule 1 is the hallucination guard — every returned short_id exists in
+       THIS user's wardrobe, matched after upper-casing what the model sent
      - invalid → one retry with the violation named in the message
-     - still invalid → 502 with a clean error
+     - still invalid → 502 with code stylist_failed
 8. Backend hydrates short_ids into full item objects (image URLs, names)
 9. Angular renders the look card
 ```

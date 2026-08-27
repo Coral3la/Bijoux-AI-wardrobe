@@ -57,14 +57,16 @@ The exclusion has nothing to match on: neither word is in `Category` or `SUBCATE
 
 And the `USE_FAKE_AI` branch **cannot** return a recorded fixture. `short_id`s are generated per row, so literal ids in a fixture would fail 2.5's hallucination guard on every call and no E2E journey could ever see a look card. The fake picks from the wardrobe it is given — first shoes, then a top and bottom, else a dress — and says out loud in `reasoning` that it is a placeholder. `DECISIONS.md` 159.
 
-`correction` is in the signature because 2.5 owns the retry and a violation has to reach the model somehow; it is 1.2b's `tag_item(image_url, correction=…)` shape on the second contract.
+`correction` is in the signature because a violation has to reach the model somehow; it is 1.2b's `tag_item(image_url, correction=…)` shape on the second contract. "2.5 owns the retry" is what this line said until 2.5 ran and found the seam is one task further out: 2.5 words the violation, **2.7 spends the retry**, because re-calling the stylist takes the whole wardrobe and context and a validator that held those would be the orchestrator. `DECISIONS.md` 164.
 
 ### 2.5 Response validation
-`validate_look_response()` implementing all six rules in order. The first rule — every returned ID exists in **this user's** wardrobe — is the hallucination guard and must never be relaxed.
+`validate_look_response()` implementing the rules of `03-AI-CONTRACTS.md`'s table in order. The first rule — every returned ID exists in **this user's** wardrobe — is the hallucination guard and must never be relaxed.
 
-One retry naming the violation, then `502` with `code: "stylist_failed"`.
+**Five rules, not six, and the missing one is arithmetic rather than a cut.** Rule 5 reads `packing_list.item_ids` and `STYLIST_SCHEMA` has no `packing_list`: it was deferred to Stage 4 at task 2.4 because its `by_category` map cannot be expressed in strict mode as written (`DECISIONS.md` 157). A rule with no field to read cannot be implemented, and writing it against a field that arrives in two stages would be untested code. Rules 7 and 8 arrive with the anchor at 2.10 and the swap at 2.11. So 2.5 runs 1, 2, 3, 4 and 6.
 
-Unit tests: each of the six rules failing independently, against hand-built response objects.
+One retry naming the violation, then `502` with `code: "stylist_failed"` — **both of which are 2.7's.** `validate_look_response` is synchronous, calls nothing and raises nothing; it returns the first violation beside the response with its ids upper-cased, and the endpoint that holds the wardrobe and the context decides whether to spend the retry. `DECISIONS.md` 164.
+
+Unit tests: each of the five rules failing independently, against hand-built response objects.
 
 ### 2.6 Look persistence
 Migration `0002_looks` creating `looks` and `look_items`. Every suggestion is persisted with `is_saved=false` before the response returns — this costs nothing and is what makes the evaluation story possible later.

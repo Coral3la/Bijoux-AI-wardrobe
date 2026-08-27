@@ -56,7 +56,7 @@ Every boundary in the mapping table gets both sides asserted. Also unit-tested w
 - `validate_tag_dict()` — every coercion and every rejection path
 - `validate_tags()` — the retry and the give-up, with the vision call mocked. From task 1.2b that means: a clean answer accepted without a call at all, every coercion accepted and never retried, the `top`/`layer` error retried once with the violation in the correction, the give-up after exactly one retry, the eleven required fields each missing in turn, and the coercion log. The signature is `async validate_tags(raw, image_url)` — the URL is there because the retry is a second call to the model
 - `vision.py`'s rendered prompt — the category rules, **pinned literally**. Every other prompt assertion in that file derives its expectation from `enums.py` and would move with a mutated table; these are transcribed from `02-DATA-MODEL.md`, for the reason two subsections below
-- `validate_look_response()` — all eight rules, each failing independently, including anchor present and locked items preserved
+- `validate_look_response()` — every rule of `03`'s table that has a field to read, each failing independently, including anchor present and locked items preserved. **Five of the eight at task 2.5** — rule 5 waits for the `packing_list` Stage 4 designs, and rules 7 and 8 for the anchor at 2.10 and the swap at 2.11, so this line is a running total rather than a list to satisfy in one task. 2.5 also pins the two things the table does not print: an id is matched after `.upper()`, and rule 6 does not run when the user asked for no outerwear
 
 ---
 

@@ -4,11 +4,16 @@ to OpenAI.
 `suggest_looks` assembles the three AI-free pieces Stage 2 built before it —
 `build_rule` (2.1), the profile columns (2.2) and `serialize_wardrobe` (2.3) —
 into the two messages `03-AI-CONTRACTS.md` specifies, and returns the model's
-answer parsed and **unjudged**. Every rule in `03`'s validation table belongs to
-`validate_look_response` at 2.5, including the hallucination guard and the one
-retry; this module only exposes `correction` so that retry has a door. That is
-1.2b's split between `tag_item` and `validate_tags`, applied to the second
-contract.
+answer parsed and **unjudged**.
+
+`validate_look_response` is what judges it — `03`'s validation table, the five
+of its eight rules that have a field to read at Stage 2, run in the documented
+order against the wardrobe that was actually sent. It calls nothing, raises
+nothing and owns no loop: it returns a verdict beside the normalised response,
+and 2.7 decides whether to spend the one retry through `correction=` or to
+answer `502 stylist_failed`. That is 1.2b's split between `tag_item` and
+`validate_tags` with the retry one seam further out, because re-calling the
+stylist takes the whole request rather than one extra argument.
 
 Pure with respect to the request: it holds no `Session` and reads no `Settings`
 beyond the model pin and the fake flag, so 2.7 can decide *what* wardrobe the
@@ -30,8 +35,8 @@ exception — and not five.
 
 import json
 import logging
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
@@ -46,9 +51,10 @@ from openai.types.chat import (
 from openai.types.shared_params.response_format_json_schema import JSONSchema
 
 from app.core.config import settings
-from app.enums import Category
+from app.enums import Category, Layer
 from app.schemas.item import ItemResponse
 from app.services.serializer import serialize_wardrobe
+from app.services.weather import requires_outerwear
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +69,6 @@ PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "stylist_system.
 SYSTEM_PROMPT: Final = PROMPT_PATH.read_text(encoding="utf-8")
 
 _LOOK_PROPERTIES: dict[str, Any] = {
-    "day": {"type": "integer"},
     "occasion": {"type": "string"},
     "title": {"type": "string"},
     "item_ids": {"type": "array", "items": {"type": "string"}},
@@ -101,11 +106,19 @@ def _object(properties: dict[str, Any]) -> dict[str, Any]:
 # that would be null on every call this project makes for two stages.
 # `03-AI-CONTRACTS.md` says so in the same words.
 #
-# `confidence` and `look_id` are struck from `03`'s look object rather than
-# deferred: neither has a column, a renderer or a task, and in strict mode every
-# property is one the model must produce on every call. `AUDITS.md` O-9 asked
-# for that decision before this schema existed; `DECISIONS.md` 086 refused the
-# vision `confidence` a branch on the same evidence.
+# `confidence`, `look_id` and `day` are struck from `03`'s look object rather
+# than deferred: none has a column, a renderer or a task, and in strict mode
+# every property is one the model must produce on every call. `AUDITS.md` O-9
+# asked for that decision before this schema existed; `DECISIONS.md` 086 refused
+# the vision `confidence` a branch on the same evidence.
+#
+# `day` survived O-9 at 2.4 and lost the same argument at 2.5, on a measurement
+# rather than on principle: the one live call answered `"day": 14` for a request
+# dated 2026-03-14 while `USE_FAKE_AI` answered `1`, so the model and the fake
+# disagreed about what the field meant and nothing read either. `02-DATA-MODEL.md`
+# gives a look `for_date`, not a day number, so no stage has a column for it.
+# Stage 4 reintroduces it beside the trip schema that needs it. `AUDITS.md` O-24,
+# `DECISIONS.md` 163.
 #
 # No `minItems` anywhere. It is not verified against this pin, and "at least one
 # look" is rule 4 of `03`'s validation table, which is 2.5's.
@@ -164,7 +177,6 @@ class MissingPiece:
 
 @dataclass(frozen=True, slots=True)
 class Look:
-    day: int
     occasion: str
     title: str
     item_ids: tuple[str, ...]
@@ -291,7 +303,6 @@ def _fake_response(wardrobe: Sequence[ItemResponse], context: StylistContext) ->
     return StylistResponse(
         looks=(
             Look(
-                day=1,
                 occasion=context.occasion,
                 title="Placeholder look",
                 item_ids=tuple(item.short_id for item in chosen if item is not None),
@@ -338,14 +349,13 @@ def _build(payload: Any) -> StylistResponse:
     Shape is `STYLIST_SCHEMA`'s guarantee and is not re-checked field by field;
     what this catches is an answer that is not that shape **at all**, which the
     measured leniencies above make reachable. Semantics — every id real, shoes
-    present, no two outer layers — are `validate_look_response`'s at 2.5, and
-    normalising the case of a returned id is 2.5's too (`DECISIONS.md` 156).
+    present, no two outer layers — are `validate_look_response`'s below, and so
+    is normalising the case of a returned id (`DECISIONS.md` 156).
     """
     try:
         return StylistResponse(
             looks=tuple(
                 Look(
-                    day=look["day"],
                     occasion=look["occasion"],
                     title=look["title"],
                     item_ids=tuple(look["item_ids"]),
@@ -406,3 +416,152 @@ async def suggest_looks(
     # json.JSONDecodeError subclasses ValueError, so a truncated answer and an
     # empty one are one exception type for the caller to catch.
     return _build(json.loads(_content(completion)))
+
+
+@dataclass(frozen=True, slots=True)
+class LookValidation:
+    """The verdict, and the response the caller should go on to use.
+
+    `response` is normalised rather than the object that went in: the model's
+    ids are upper-cased before rule 1 looks them up (`DECISIONS.md` 156), and
+    2.7 persists and hydrates from this field so an id cannot be case-shifted in
+    one place and not another. `violation` is the first rule that failed, worded
+    for the model, or `None`.
+    """
+
+    response: StylistResponse
+    violation: str | None
+
+    @property
+    def ok(self) -> bool:
+        return self.violation is None
+
+
+def _normalised(response: StylistResponse) -> StylistResponse:
+    """`.upper()` on every returned id, and nothing else.
+
+    `app/core/short_id.py`'s alphabet is upper-case only, so case is the one
+    difference between what a model might send and what a row holds that is not
+    a hallucination. It is deliberately not `.strip()` as well: nothing has been
+    measured that pads an id, and a guess about whitespace would be code no test
+    can justify. Transliteration is not an option at all — the alphabet drops
+    *both* halves of every confusable pair, so a returned `0` maps to no legal
+    character and is a hallucination rather than a typo.
+    """
+    return replace(
+        response,
+        looks=tuple(
+            replace(look, item_ids=tuple(item_id.upper() for item_id in look.item_ids))
+            for look in response.looks
+        ),
+    )
+
+
+def _unknown_id(looks: tuple[Look, ...], known: Mapping[str, ItemResponse]) -> str | None:
+    for look in looks:
+        for item_id in look.item_ids:
+            if item_id not in known:
+                return f"unknown item id {item_id}; it is not in the wardrobe you were given"
+    return None
+
+
+def _incomplete(looks: tuple[Look, ...], known: Mapping[str, ItemResponse]) -> str | None:
+    for look in looks:
+        categories = {known[item_id].category for item_id in look.item_ids}
+        if Category.SHOES not in categories:
+            return "the look has no shoes"
+        if Category.DRESS in categories:
+            continue
+        if not {Category.TOP, Category.BOTTOM} <= categories:
+            return "the look has neither a top and a bottom nor a dress"
+    return None
+
+
+def _two_outer_layers(looks: tuple[Look, ...], known: Mapping[str, ItemResponse]) -> str | None:
+    # By `layer`, not by category, which is the prompt's own wording — "Never
+    # place two `outer` layer items". `LAYERS_BY_CATEGORY` lets outerwear be
+    # `mid`, so a blazer worn under a coat is a legal look and two coats are not.
+    for look in looks:
+        outer = [item_id for item_id in look.item_ids if known[item_id].layer is Layer.OUTER]
+        if len(outer) > 1:
+            return f"the look contains two outer layer items: {outer[0]} and {outer[1]}"
+    return None
+
+
+def _wrong_count(looks: tuple[Look, ...]) -> str | None:
+    # `03`'s rule 4 is `len(looks) == expected_days`; a single-day request is a
+    # trip of length one, so the expected count is 1 and is not a parameter until
+    # Stage 4 has a request that can ask for another number.
+    if len(looks) != 1:
+        return f"you returned {len(looks)} looks and exactly 1 was requested"
+    return None
+
+
+def _missing_outerwear(
+    looks: tuple[Look, ...], known: Mapping[str, ItemResponse], context: StylistContext
+) -> str | None:
+    """Rule 6, and the one narrowing `03`'s table does not print.
+
+    It does not run when the user asked for no outerwear. `DECISIONS.md` 158
+    gave an explicit `include_outerwear` precedence over the weather rule and
+    the system prompt says so in words, so a look that obeyed the user at 12°C
+    is correct — and enforcing the rule over it would spend the retry and then
+    answer `502` to the one answer that did what it was told.
+    """
+    if context.include_outerwear is False:
+        return None
+    if not requires_outerwear(context.weather_rule):
+        return None
+    for look in looks:
+        if not any(known[item_id].category is Category.OUTERWEAR for item_id in look.item_ids):
+            return "the weather rule requires outerwear and the look contains none"
+    return None
+
+
+def _violation(
+    response: StylistResponse, wardrobe: Sequence[ItemResponse], context: StylistContext
+) -> str | None:
+    """`03`'s table, in `03`'s order, stopping at the first failure.
+
+    The order is load-bearing rather than cosmetic. Rule 1 is what makes every
+    later rule able to look an id up at all, so it runs first and returns before
+    the rest can raise a `KeyError` on a hallucinated id. One violation rather
+    than a list because it is a sentence sent back to the model, and one
+    concrete instruction is likelier to be obeyed than five.
+
+    Rule 5 is absent: it reads `packing_list.item_ids`, and `STYLIST_SCHEMA`
+    carries no `packing_list` until Stage 4 designs it beside the trip message
+    (`DECISIONS.md` 157). Rules 7 and 8 arrive with the anchor at 2.10 and the
+    swap at 2.11.
+    """
+    known = {item.short_id: item for item in wardrobe}
+    return (
+        _unknown_id(response.looks, known)
+        or _incomplete(response.looks, known)
+        or _two_outer_layers(response.looks, known)
+        or _wrong_count(response.looks)
+        or _missing_outerwear(response.looks, known, context)
+    )
+
+
+def validate_look_response(
+    response: StylistResponse,
+    wardrobe: Sequence[ItemResponse],
+    context: StylistContext,
+) -> LookValidation:
+    """One answer judged against the wardrobe it was built from.
+
+    `wardrobe` is the sequence that was **sent** to the model, not every row the
+    user owns. After 2.6a that is the narrower list — `ready`, not archived, no
+    swimwear or sleepwear — and an id the model was never shown is a
+    hallucination whether or not the garment is in the drawer.
+
+    Calls nothing and raises nothing. The retry, the give-up log and
+    `502 stylist_failed` are 2.7's, which is the only place that holds the
+    request needed to ask the model a second time.
+    """
+    normalised = _normalised(response)
+    violation = _violation(normalised, wardrobe, context)
+    if violation is not None:
+        logger.warning("Stylist response rejected", extra={"violation": violation})
+    return LookValidation(response=normalised, violation=violation)

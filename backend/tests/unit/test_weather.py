@@ -29,6 +29,7 @@ from app.services.weather import (
     build_rule,
     condition_for,
     get_forecast,
+    requires_outerwear,
 )
 
 # Captured verbatim on 2026-08-26 from
@@ -123,6 +124,23 @@ def test_rain_modifier_appended() -> None:
 def test_wind_modifier_appended() -> None:
     rule = build_rule(14, precip_mm=0, wind_kph=45)
     assert "Avoid flowy or a_line items" in rule
+
+
+# --- requires_outerwear ---------------------------------------------------
+
+
+@pytest.mark.parametrize("temp", [15, 10, 9, -5])
+def test_the_two_demanding_bands_require_outerwear(temp: int) -> None:
+    # Rule 6 of `03`'s validation table asks this question of a sentence, never
+    # of a temperature — `validate_look_response` is given the rule and not the
+    # forecast. Both bands are asserted with their modifiers appended, because
+    # rain is exactly when the cold bands fire.
+    assert requires_outerwear(build_rule(temp, precip_mm=5, wind_kph=45))
+
+
+@pytest.mark.parametrize("temp", [35, 28, 27, 22, 21, 16])
+def test_the_milder_bands_do_not_require_outerwear(temp: int) -> None:
+    assert not requires_outerwear(build_rule(temp, precip_mm=5, wind_kph=45))
 
 
 # --- build_rule: what the table does not pin down -------------------------

@@ -388,7 +388,6 @@ The reuse target is computed as `min(days * 4, days + 8)` and injected. Without 
 {
   "looks": [
     {
-      "day": 1,
       "occasion": "work",
       "title": "Morning meetings",
       "item_ids": ["A3F9K2", "7BX1QM", "SEFA38", "EH8VVQ"],
@@ -421,12 +420,17 @@ three ways.** `DECISIONS.md` 157.
   keys, and that list is a decision for the task that has a reader for it.
   Shipping it now would mean the model emitting `packing_list: null` on every
   call this project makes for two stages.
-- **`look_id` and `confidence` are struck.** Neither has a column in
+- **`look_id`, `confidence` and `day` are struck.** None has a column in
   `02-DATA-MODEL.md`, a renderer in `05-FRONTEND-SPEC.md` or a task, and in
   strict mode every property is one the model must produce on every call —
   `AUDITS.md` O-9 asked for exactly this decision before a schema was built from
-  this block. `day` survives the same test only just: it is what keys a look to
-  its day at Stage 4.
+  this block. `day` survived that test at 2.4 and lost it at 2.5 on a
+  measurement: the one live call answered `"day": 14` for a request dated
+  2026-03-14 while `USE_FAKE_AI` answered `1`, so an unexplained integer beside
+  a date was being filled from the date and the two disagreed about what the
+  field meant. A look is keyed to its day by `looks.for_date`, which is the
+  column `02-DATA-MODEL.md` actually has; Stage 4 reintroduces a day number
+  beside the trip schema that needs one. `AUDITS.md` O-24, `DECISIONS.md` 163.
 - **No `minItems`.** It is not verified against this pin, and "one look per
   expected day" is rule 4 of the validation table below, which is `validate_look_response`'s.
 
@@ -440,18 +444,28 @@ user reads is a field in this object, rendered by the UI.
 
 Run in this order. Any failure triggers **one** retry with the violation named explicitly, then a `502`.
 
+**Five of the eight run at Stage 2**, and the split is by what has a field to
+read rather than by preference. `validate_look_response` is a synchronous
+function in `app/services/stylist.py` that calls nothing and raises nothing: it
+returns the first violation and the response with its ids normalised, and the
+retry, the give-up and `502 stylist_failed` belong to `POST /looks/suggest` at
+2.7 — the only place holding the wardrobe and the context a second call needs.
+`DECISIONS.md` 164.
+
 1. **Every `item_id` exists in this user's wardrobe.** This is the hallucination guard and it is non-negotiable. An unknown ID is never rendered.
 2. Every look contains shoes, and either (a top and a bottom) or a dress.
 3. No look contains two `outer` items.
 4. `len(looks) == expected_days`.
-5. Every item in `packing_list.item_ids` appears in at least one look.
-6. When the weather rule required outerwear, each look for that day contains an `outerwear` item.
+5. Every item in `packing_list.item_ids` appears in at least one look. **Stage 4, with the field it reads.** `STYLIST_SCHEMA` carries no `packing_list` until the trip message is designed beside it (`DECISIONS.md` 157), so this rule has nothing to look at before then and 2.5 does not implement it.
+6. When the weather rule required outerwear, each look for that day contains an `outerwear` item — **unless the user asked for no outerwear.** `DECISIONS.md` 158 gave an explicit `include_outerwear: false` precedence over the weather rule and the system prompt says so in words, so a look that obeyed the user at 12°C is correct; enforcing this rule over it would spend the retry and then answer `502` to the one answer that did as it was told. Narrowed at 2.5. Rule 6 reads the rule *sentence* through `weather.requires_outerwear`, never a temperature — the stylist is never sent a number.
 7. When `anchor_item_id` was supplied, it appears in the returned look.
 8. When `locked_item_ids` were supplied, every one of them appears, and the rejected item does not.
 
-Rules 7 and 8 are fully deterministic and make excellent E2E assertions — the requested item is either there or it is not.
+Rules 7 and 8 are fully deterministic and make excellent E2E assertions — the requested item is either there or it is not. They arrive with the anchor at 2.10 and the swap at 2.11, which are the tasks that put the fields on the wire.
 
-Rule 6 is the one that catches real drift. Assert it in tests against a recorded response fixture.
+Rule 3 is read by `layer`, not by category: the system prompt says *"Never place two `outer` layer items"*, and `LAYERS_BY_CATEGORY` admits `mid` for outerwear, so a cardigan under a coat is a legal look and two coats are not. Rule 1 is checked against **the wardrobe that was sent**, which after 2.6a is narrower than everything the user owns — an id the model was never shown is a hallucination whether or not the garment is in the drawer.
+
+Rule 6 is the one that catches real drift. Assert it against hand-built `StylistResponse` objects, which is what `tests/unit/test_look_validation.py` does. **There is no recorded response fixture and there cannot be one:** `short_id`s are generated per row, so a fixture naming literal ids describes items no database holds and fails rule 1 — the hallucination guard — on every call (`DECISIONS.md` 159).
 
 ---
 
