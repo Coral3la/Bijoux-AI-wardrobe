@@ -25,6 +25,11 @@ const SUGGEST_ERROR_KEYS: Readonly<Record<string, string>> = {
   wardrobe_too_small: 'stylist.error.wardrobeTooSmall',
   home_location_missing: 'stylist.error.homeLocationMissing',
   forecast_unavailable: 'stylist.error.forecastUnavailable',
+  // The one 422 on this endpoint a correct client can provoke: the anchor was
+  // a real garment when the button was tapped and is not one the stylist can
+  // be shown now. Its own code so it can say that, rather than falling into
+  // `validation_error`, which talks about the occasion and the date.
+  anchor_unavailable: 'stylist.error.anchorUnavailable',
   stylist_failed: 'stylist.error.stylistFailed',
   validation_error: 'stylist.error.validation',
 };

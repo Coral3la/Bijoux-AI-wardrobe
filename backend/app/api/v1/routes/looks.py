@@ -99,7 +99,37 @@ def _wardrobe(db: Session, user: User) -> list[ItemResponse]:
     return [ItemResponse.model_validate(row) for row in rows]
 
 
-async def _context(request: LookSuggestRequest, user: User) -> StylistContext:
+def _anchor(request: LookSuggestRequest, wardrobe: Sequence[ItemResponse]) -> ItemResponse | None:
+    """The anchored row, matched against the wardrobe that is about to be sent.
+
+    `04-API-SPEC.md` asks for a `422` when the anchor "does not belong to this
+    user", and this is that check widened by one step on purpose. A row she owns
+    but the stylist never sees — still `processing`, archived, or in an excluded
+    category — cannot appear in a look either: rule 1 would refuse the id as a
+    hallucination, so letting it through buys two model calls and a `502` for a
+    question one lookup answers here, before anything leaves the process.
+
+    Its own code rather than `validation_error`, because this is the one `422`
+    on this endpoint a correct client can provoke — the user tapped "Style
+    around this" on a real garment — and the client has something to say about
+    it that "check the occasion and the date" does not cover.
+    """
+    if request.anchor_item_id is None:
+        return None
+
+    anchor = next((item for item in wardrobe if item.id == request.anchor_item_id), None)
+    if anchor is None:
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "anchor_unavailable",
+            "anchor_item_id: that item is not one this wardrobe can be styled around.",
+        )
+    return anchor
+
+
+async def _context(
+    request: LookSuggestRequest, user: User, anchor: ItemResponse | None
+) -> StylistContext:
     """The request, the profile and the sky, in the shape `suggest_looks` takes.
 
     The forecast is for the user's **home** location: `04-API-SPEC.md`'s body
@@ -135,6 +165,8 @@ async def _context(request: LookSuggestRequest, user: User) -> StylistContext:
         weather_rule=build_rule(forecast.temp_max_c, forecast.precip_mm, forecast.wind_kph),
         notes=request.notes,
         include_outerwear=request.include_outerwear,
+        # The `short_id`, which is the only spelling the prompt and rule 7 use.
+        anchor_id=anchor.short_id if anchor is not None else None,
         height_cm=user.height_cm,
         style_notes=user.style_notes,
     )
@@ -261,7 +293,10 @@ async def suggest_look(
             f"Add at least {MIN_WARDROBE_ITEMS} items so I have something to work with.",
         )
 
-    context = await _context(request, current_user)
+    # Beside the small-wardrobe check and for its reason: both are answerable
+    # from rows already in hand, so a request that cannot be served costs
+    # neither the forecast nor the model.
+    context = await _context(request, current_user, _anchor(request, wardrobe))
 
     try:
         validation = await _judged(wardrobe, context)

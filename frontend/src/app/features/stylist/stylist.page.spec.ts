@@ -1,12 +1,15 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ActivatedRoute, Router, provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import en from '../../../../public/i18n/en.json';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { WardrobeStore } from '../../core/state/wardrobe.store';
+import { Item } from '../../shared/models/item.model';
 import { SuggestResponse } from '../../shared/models/look.model';
 import { User } from '../../shared/models/user.model';
 import { Weather } from '../../shared/models/weather.model';
@@ -15,7 +18,12 @@ import { STATUS_INTERVAL_MS, StylistPage } from './stylist.page';
 
 let fixture: ComponentFixture<StylistPage>;
 let mock: HttpTestingController;
+let router: Router;
 let currentUser: User | null;
+// The `?anchor=` the page is constructed under, and what the wardrobe store
+// holds when it looks there first. Both reset in beforeEach.
+let anchorParam: string | null;
+let collection: Item[];
 
 function user(overrides: Partial<User> = {}): User {
   return {
@@ -44,6 +52,38 @@ function weather(overrides: Partial<Weather> = {}): Weather {
     wind_kph: 12,
     condition: 'clear',
     rule: 'Use warmth 1-2 only.',
+    ...overrides,
+  };
+}
+
+function item(overrides: Partial<Item> = {}): Item {
+  return {
+    id: 'item-1',
+    short_id: 'AB12CD',
+    status: 'ready',
+    image_public_id: 'bijoux/users/1/abc',
+    image_url: 'https://res.cloudinary.com/demo/image/upload/w_300/abc.jpg',
+    category: 'bottom',
+    subcategory: 'jeans',
+    fit: 'relaxed',
+    length: null,
+    rise: 'high',
+    color_primary: 'blue',
+    color_secondary: null,
+    pattern: 'solid',
+    material: 'denim',
+    formality: 2,
+    warmth: 2,
+    layer: 'base',
+    water_resistant: false,
+    display_name: 'light blue mom jeans',
+    attributes: {},
+    ai_confidence: 0.9,
+    user_edited: false,
+    error_message: null,
+    is_archived: false,
+    created_at: '2026-08-19T09:00:00Z',
+    updated_at: '2026-08-19T09:00:00Z',
     ...overrides,
   };
 }
@@ -100,6 +140,19 @@ function suggestRequest() {
   return mock.expectOne(`${environment.apiUrl}/looks/suggest`);
 }
 
+function anchorPin(): string | null {
+  const pinned = [...element().querySelectorAll('p')].find((candidate) =>
+    candidate.textContent?.includes('Building around'),
+  );
+  return pinned?.textContent?.trim() ?? null;
+}
+
+function clearAnchorButton(): HTMLButtonElement | null {
+  return element().querySelector<HTMLButtonElement>(
+    `button[aria-label="${en['stylist.anchor.clear']}"]`,
+  );
+}
+
 // The page asks for the forecast on construction, so every render answers it.
 // `null` leaves the request open for a test that wants to inspect it.
 async function render(forecast: Weather | null = weather()): Promise<void> {
@@ -134,14 +187,31 @@ async function type(value: string): Promise<void> {
 describe('StylistPage', () => {
   beforeEach(async () => {
     currentUser = user();
+    anchorParam = null;
+    collection = [];
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
+        provideRouter([{ path: 'stylist', children: [] }]),
         { provide: AuthService, useValue: { currentUser: () => currentUser } },
+        {
+          // The key is honoured rather than ignored, for the reason
+          // item-detail.page.spec.ts records: a stub answering every key the
+          // same way cannot tell `anchor` from anything else, and a mutation
+          // that renamed it would survive.
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: { get: (key: string) => (key === 'anchor' ? anchorParam : null) },
+            },
+          },
+        },
+        { provide: WardrobeStore, useValue: { items: () => collection } },
       ],
     });
     mock = TestBed.inject(HttpTestingController);
+    router = TestBed.inject(Router);
 
     const loading = TestBed.inject(I18nService).load();
     mock.expectOne('/i18n/en.json').flush(en);
@@ -337,5 +407,100 @@ describe('StylistPage', () => {
     mock.expectNone((candidate) => candidate.url === `${environment.apiUrl}/weather`);
     expect(text()).not.toContain('°C');
     expect(form()).not.toBeNull();
+  });
+
+  // --- the anchor, task 2.10 ------------------------------------------------
+
+  it('pins the anchored garment from the collection without a request', async () => {
+    anchorParam = 'item-1';
+    collection = [item()];
+    await render();
+
+    mock.expectNone(`${environment.apiUrl}/items/item-1`);
+    expect(anchorPin()).toBe('Building around: light blue mom jeans');
+  });
+
+  it('fetches the anchored garment when the collection has none', async () => {
+    // The deep-link case: /stylist has no wardrobe screen behind it, so the
+    // store is empty on a cold arrival and the row has to be asked for.
+    anchorParam = 'item-9';
+    await render();
+    mock.expectOne(`${environment.apiUrl}/items/item-9`).flush(item({ id: 'item-9' }));
+    await fixture.whenStable();
+
+    expect(anchorPin()).toBe('Building around: light blue mom jeans');
+  });
+
+  it('names an anchored garment that has no name', async () => {
+    anchorParam = 'item-1';
+    collection = [item({ display_name: null })];
+    await render();
+
+    expect(anchorPin()).toBe('Building around: Untitled item');
+  });
+
+  it('sends the anchor as the row’s UUID', async () => {
+    anchorParam = 'item-1';
+    collection = [item()];
+    await render();
+    await submit();
+
+    expect(suggestRequest().request.body).toEqual({
+      occasion: 'casual',
+      date: todayInLocalTime(),
+      anchor_item_id: 'item-1',
+    });
+  });
+
+  it('drops an anchor it cannot fetch rather than sending it', async () => {
+    // An id this client cannot name is one it must not send: the pin would have
+    // nothing to show and the endpoint would answer `anchor_unavailable`.
+    anchorParam = 'gone';
+    await render();
+    mock
+      .expectOne(`${environment.apiUrl}/items/gone`)
+      .flush({ code: 'not_found' }, { status: 404, statusText: 'Not Found' });
+    await fixture.whenStable();
+    await submit();
+
+    expect(anchorPin()).toBeNull();
+    expect(suggestRequest().request.body).not.toHaveProperty('anchor_item_id');
+  });
+
+  it('clears the anchor and the query parameter on ×', async () => {
+    anchorParam = 'item-1';
+    collection = [item()];
+    await render();
+
+    clearAnchorButton()!.click();
+    await fixture.whenStable();
+    await submit();
+
+    expect(anchorPin()).toBeNull();
+    expect(router.url).toBe('/stylist');
+    expect(suggestRequest().request.body).not.toHaveProperty('anchor_item_id');
+  });
+
+  it('sends no anchor and asks for no item when there is no parameter', async () => {
+    await render();
+    await submit();
+
+    mock.expectNone((candidate) => candidate.url.includes('/items/'));
+    expect(anchorPin()).toBeNull();
+    expect(suggestRequest().request.body).not.toHaveProperty('anchor_item_id');
+  });
+
+  it('says so when the endpoint refuses the anchor', async () => {
+    anchorParam = 'item-1';
+    collection = [item()];
+    await render();
+    await submit();
+    suggestRequest().flush(
+      { code: 'anchor_unavailable' },
+      { status: 422, statusText: 'Unprocessable Content' },
+    );
+    await fixture.whenStable();
+
+    expect(text()).toContain(en['stylist.error.anchorUnavailable']);
   });
 });

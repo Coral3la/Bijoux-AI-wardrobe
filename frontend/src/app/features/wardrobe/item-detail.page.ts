@@ -38,6 +38,22 @@ import { TagEditor } from './tag-editor';
           class="w-full rounded-lg bg-surface object-contain"
         />
 
+        <!-- The primary action on this screen, and 05-FRONTEND-SPEC.md's
+             instruction is that it is not buried behind edit and delete — so it
+             sits directly under the photograph, above the tags. Only on a ready
+             row: the stylist is shown ready, unarchived items alone, so the
+             button on any other row would navigate to a request the endpoint
+             answers anchor_unavailable to. -->
+        @if (row.status === 'ready') {
+          <a
+            routerLink="/stylist"
+            [queryParams]="{ anchor: row.id }"
+            class="inline-flex min-h-11 items-center self-start rounded-md bg-accent px-4 text-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            {{ i18n.t('item.styleAround') }}
+          </a>
+        }
+
         @if (row.user_edited) {
           <p class="text-sm">
             <span class="font-medium">{{ i18n.t('item.edited.badge') }}</span>

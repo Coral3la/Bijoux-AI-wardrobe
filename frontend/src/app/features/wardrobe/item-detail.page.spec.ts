@@ -62,6 +62,12 @@ function text(): string {
   return host().textContent ?? '';
 }
 
+function styleAroundLink(): HTMLAnchorElement | undefined {
+  return [...host().querySelectorAll('a')].find(
+    (candidate) => candidate.textContent?.trim() === 'Style around this',
+  );
+}
+
 function buttonWith(fragment: string): HTMLButtonElement {
   return [...host().querySelectorAll('button')].find((candidate) =>
     candidate.textContent?.includes(fragment),
@@ -400,5 +406,23 @@ describe('ItemDetailPage', () => {
 
     expect(text()).toContain("We couldn't delete that item");
     expect(store.items()).toHaveLength(1);
+  });
+
+  // --- "Style around this", task 2.10 --------------------------------------
+
+  it('offers the stylist the row it is looking at', async () => {
+    await seedStore([item()]);
+    await render();
+
+    expect(styleAroundLink()?.getAttribute('href')).toBe('/stylist?anchor=item-1');
+  });
+
+  it('does not offer it on a row the stylist is never shown', async () => {
+    // `processing` and `failed` rows are not `ready`, so `_wardrobe` never
+    // sends them and the endpoint would answer `anchor_unavailable`.
+    await seedStore([item({ status: 'processing' })]);
+    await render();
+
+    expect(styleAroundLink()).toBeUndefined();
   });
 });

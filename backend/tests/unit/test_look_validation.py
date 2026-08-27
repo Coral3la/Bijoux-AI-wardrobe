@@ -5,9 +5,9 @@ context, and returns a verdict. That is the whole point of the split — the
 retry, the give-up and `502 stylist_failed` are 2.7's, so every rule here is
 testable against a hand-built `StylistResponse`.
 
-Five rules run, not `03`'s eight. Rule 5 reads `packing_list.item_ids` and
+Six rules run, not `03`'s eight. Rule 5 reads `packing_list.item_ids` and
 `STYLIST_SCHEMA` carries no `packing_list` until Stage 4 (`DECISIONS.md` 157);
-rules 7 and 8 arrive with the anchor at 2.10 and the swap at 2.11.
+rule 8 waits for the swap at 2.11.
 
 Violation text is asserted by the fragment a reader would recognise rather than
 by whole sentence, because the sentence is prompt text sent to the model and
@@ -219,6 +219,40 @@ def test_rule_six_does_not_run_when_the_user_asked_for_no_outerwear() -> None:
         weather_rule=COLD_RULE,
         include_outerwear=False,
     )
+
+    assert result.ok
+
+
+# --- rule 7, the anchored item ----------------------------------------------
+
+
+def test_an_anchor_that_is_absent_from_the_look_is_rejected() -> None:
+    result = _validate(_response(_look(TOP_ID, JEANS_ID, BOOTS_ID)), anchor_id=BLAZER_ID)
+
+    assert not result.ok
+    assert f"does not contain the anchored item {BLAZER_ID}" in str(result.violation)
+
+
+def test_an_anchor_that_is_present_passes() -> None:
+    result = _validate(_response(_look(TOP_ID, JEANS_ID, BOOTS_ID, BLAZER_ID)), anchor_id=BLAZER_ID)
+
+    assert result.ok
+
+
+def test_the_anchor_is_matched_after_the_ids_are_upper_cased() -> None:
+    # The anchor is a `short_id` off a row and is upper-case by construction;
+    # the model's spelling is not. Rule 7 runs on the normalised look, so a
+    # lower-case answer naming the anchored item is a pass and not a violation
+    # about an item that is in fact there. `DECISIONS.md` 156.
+    result = _validate(
+        _response(_look(TOP_ID.lower(), JEANS_ID.lower(), BOOTS_ID.lower())), anchor_id=BOOTS_ID
+    )
+
+    assert result.ok
+
+
+def test_no_anchor_means_rule_seven_does_not_run() -> None:
+    result = _validate(_response(_look(TOP_ID, JEANS_ID, BOOTS_ID)))
 
     assert result.ok
 

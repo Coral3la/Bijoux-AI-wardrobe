@@ -290,6 +290,19 @@ from `forecast_unavailable` because the two say different things to a user:
 *we don't know where you are* is fixed on the profile screen, *we have no
 weather for that day* is not fixed by anything. `DECISIONS.md` 173.
 
+`422` with `code: "anchor_unavailable"` when `anchor_item_id` names nothing in
+the wardrobe that would actually be sent — an item belonging to another account,
+or one this account owns that is not styleable: still `processing` or `failed`,
+archived, or in an excluded category. Checked against the sent wardrobe rather
+than against ownership alone, on `wardrobe_too_small`'s reasoning: a garment the
+stylist is never shown cannot appear in a look either, so rule 1 would refuse
+the id as a hallucination and the answer would arrive as a `502` two model calls
+later, where `422` is the truth. Answered from rows already in hand, so neither
+the forecast nor the model is asked for. It is a separate code from
+`validation_error` because it is the one `422` on this endpoint a correct client
+can provoke — the user tapped "Style around this" on a real garment — and it is
+therefore the one the client has something to say about.
+
 `502` with `code: "stylist_failed"` when validation fails twice — and also when
 the model answers nothing usable, or the provider does not answer at all. **The
 one retry is spent only on a validation violation**, which is the only failure

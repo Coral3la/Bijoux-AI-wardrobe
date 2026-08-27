@@ -86,6 +86,7 @@ const DOCUMENTED_FAILURES: readonly [number, string, string][] = [
   [502, 'forecast_unavailable', 'stylist.error.forecastUnavailable'],
   [502, 'stylist_failed', 'stylist.error.stylistFailed'],
   [422, 'validation_error', 'stylist.error.validation'],
+  [422, 'anchor_unavailable', 'stylist.error.anchorUnavailable'],
 ];
 
 describe('StylistStore', () => {

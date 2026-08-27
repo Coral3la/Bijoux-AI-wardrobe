@@ -69,12 +69,14 @@ class FakeStylist:
     def __init__(self, *answers: StylistResponse | Exception) -> None:
         self.answers = list(answers)
         self.wardrobes: list[tuple[str, ...]] = []
+        self.contexts: list[Any] = []
         self.corrections: list[str | None] = []
 
     async def __call__(
         self, wardrobe: Any, context: Any, correction: str | None = None
     ) -> StylistResponse:
         self.wardrobes.append(tuple(item.short_id for item in wardrobe))
+        self.contexts.append(context)
         self.corrections.append(correction)
         answer = self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
         if isinstance(answer, Exception):
@@ -405,3 +407,161 @@ def test_an_occasion_outside_the_vocabulary_is_refused(
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"
     assert fake.calls == 0
+
+
+# --- the anchor, task 2.10 ---------------------------------------------------
+
+
+def test_the_anchor_reaches_the_stylist_as_a_short_id(
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+    cloudinary_configured: None,
+) -> None:
+    # The wire carries the UUID and the prompt prints the `short_id`; this
+    # endpoint is the only place that knows both.
+    shoes, top, bottom = wardrobe[0], wardrobe[1], wardrobe[2]
+    fake = stylist(answer(shoes.short_id, top.short_id, bottom.short_id))
+
+    response = suggest(client, user, authorization, anchor_item_id=str(top.id))
+
+    assert response.status_code == 200
+    assert fake.contexts[0].anchor_id == top.short_id
+
+
+def test_a_look_without_the_anchor_is_retried_and_then_refused(
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+    cloudinary_configured: None,
+) -> None:
+    # Rule 7 through the endpoint that owns the retry: a look which is complete
+    # and legal in every other way still fails, because the garment she is
+    # holding is not in it.
+    shoes, top, bottom, bag = wardrobe[0], wardrobe[1], wardrobe[2], wardrobe[4]
+    fake = stylist(answer(shoes.short_id, top.short_id, bottom.short_id))
+
+    response = suggest(client, user, authorization, anchor_item_id=str(bag.id))
+
+    assert response.status_code == 502
+    assert response.json()["code"] == "stylist_failed"
+    assert fake.calls == 2
+    assert f"anchored item {bag.short_id}" in str(fake.corrections[1])
+
+
+def test_a_second_answer_that_honours_the_anchor_is_accepted(
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+    cloudinary_configured: None,
+) -> None:
+    shoes, top, bottom, bag = wardrobe[0], wardrobe[1], wardrobe[2], wardrobe[4]
+    stylist(
+        answer(shoes.short_id, top.short_id, bottom.short_id),
+        answer(shoes.short_id, top.short_id, bottom.short_id, bag.short_id),
+    )
+
+    response = suggest(client, user, authorization, anchor_item_id=str(bag.id))
+
+    assert response.status_code == 200
+    assert bag.short_id in [item["short_id"] for item in response.json()["looks"][0]["items"]]
+
+
+def test_an_anchor_belonging_to_another_account_is_refused(
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    make_item: Callable[..., Item],
+    make_user: Callable[..., User],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    hers = make_item(user_id=make_user().id, status=ItemStatus.READY, category=Category.TOP)
+    fake = stylist(answer("NEVER1"))
+
+    response = suggest(client, user, authorization, anchor_item_id=str(hers.id))
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "anchor_unavailable"
+    # Answered from rows already in hand: neither Open-Meteo nor OpenAI is asked.
+    assert fake.calls == 0
+    assert forecasts == []
+
+
+@pytest.mark.parametrize(
+    ("columns", "why"),
+    [
+        ({"status": ItemStatus.PROCESSING, "category": Category.TOP}, "still being tagged"),
+        ({"status": ItemStatus.READY, "category": Category.TOP, "is_archived": True}, "archived"),
+        ({"status": ItemStatus.READY, "category": Category.SWIMWEAR}, "an excluded category"),
+    ],
+)
+def test_an_anchor_the_stylist_never_sees_is_refused(
+    columns: dict[str, Any],
+    why: str,
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    make_item: Callable[..., Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # Owned, and still not styleable. `_wardrobe` never sends it, so rule 1
+    # would call the id a hallucination — letting it through would buy two model
+    # calls and a 502 for a question this lookup answers for nothing.
+    unseen = make_item(user_id=user.id, **columns)
+    fake = stylist(answer("NEVER1"))
+
+    response = suggest(client, user, authorization, anchor_item_id=str(unseen.id))
+
+    assert response.status_code == 422, why
+    assert response.json()["code"] == "anchor_unavailable"
+    assert fake.calls == 0
+
+
+def test_an_anchor_that_is_not_a_uuid_is_the_schema_s_own_rejection(
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # A `short_id` in this field is the mistake the type is there to catch, and
+    # it never reaches `_anchor` — so the code is `validation_error`, not
+    # `anchor_unavailable`.
+    fake = stylist(answer("NEVER1"))
+
+    response = suggest(client, user, authorization, anchor_item_id=wardrobe[0].short_id)
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+    assert fake.calls == 0
+
+
+def test_a_request_with_no_anchor_sends_none(
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+    cloudinary_configured: None,
+) -> None:
+    # `STAGE-2`'s last acceptance criterion, at the seam it is about.
+    shoes, top, bottom = wardrobe[0], wardrobe[1], wardrobe[2]
+    fake = stylist(answer(shoes.short_id, top.short_id, bottom.short_id))
+
+    assert suggest(client, user, authorization).status_code == 200
+    assert fake.contexts[0].anchor_id is None

@@ -6,7 +6,7 @@ to OpenAI.
 into the two messages `03-AI-CONTRACTS.md` specifies, and returns the model's
 answer parsed and **unjudged**.
 
-`validate_look_response` is what judges it — `03`'s validation table, the five
+`validate_look_response` is what judges it — `03`'s validation table, the six
 of its eight rules that have a field to read at Stage 2, run in the documented
 order against the wardrobe that was actually sent. It calls nothing, raises
 nothing and owns no loop: it returns a verdict beside the normalised response,
@@ -140,6 +140,18 @@ STYLIST_SCHEMA: JSONSchema = {
 # the other's.
 _CORRECTION: Final = "Your previous response was invalid: {reason}. Correct it."
 
+# `03-AI-CONTRACTS.md`'s anchored block, transcribed with its own line breaks.
+# It is printed after `Build 1 look.` rather than inside the REQUEST block, for
+# the reason the outerwear line sits after the weather rule: it constrains
+# every instruction above it, and a reader — human or model — takes the later
+# of two conflicting instructions as the operative one.
+_ANCHOR_BLOCK: Final = (
+    "ANCHOR: {anchor_id}\n"
+    "This item MUST appear in the look. Build the rest of the outfit around it.\n"
+    "If it cannot work for this occasion or weather, still include it and\n"
+    "explain the tension in `reasoning`."
+)
+
 
 @dataclass(frozen=True, slots=True)
 class StylistContext:
@@ -156,6 +168,11 @@ class StylistContext:
     `04-API-SPEC.md`'s spelling. `01-ARCHITECTURE.md` called the same field
     `wants_outerwear`, corrected in this commit against the authoritative
     document.
+
+    `anchor_id` is a `short_id`, not the UUID `POST /looks/suggest` receives.
+    The wire carries the row's UUID (`04-API-SPEC.md` keeps `short_id` out of
+    the client's hands) and 2.7 resolves it against the wardrobe it is about to
+    send, so this module still sees only the identifiers it prints.
     """
 
     date: date
@@ -164,6 +181,7 @@ class StylistContext:
     weather_rule: str
     notes: str | None = None
     include_outerwear: bool | None = None
+    anchor_id: str | None = None
     height_cm: int | None = None
     style_notes: str | None = None
 
@@ -264,6 +282,8 @@ def _user_message(wardrobe: Sequence[ItemResponse], context: StylistContext) -> 
         f"{_outerwear_line(context.include_outerwear)}"
         f"Build 1 look."
     )
+    if context.anchor_id is not None:
+        request += "\n\n" + _ANCHOR_BLOCK.format(anchor_id=context.anchor_id)
     return (
         f"WARDROBE ({len(wardrobe)} items):\n"
         f"{serialize_wardrobe(wardrobe)}\n\n"
@@ -274,6 +294,26 @@ def _user_message(wardrobe: Sequence[ItemResponse], context: StylistContext) -> 
 
 def _first(wardrobe: Sequence[ItemResponse], category: Category) -> ItemResponse | None:
     return next((item for item in wardrobe if item.category == category), None)
+
+
+def _fake_items(wardrobe: Sequence[ItemResponse], anchor_id: str | None) -> list[ItemResponse]:
+    """The placeholder's picks: shoes, then a top and a bottom or a dress.
+
+    The anchor displaces the pick of its own category rather than joining it,
+    and leads the list. Without this the fake would answer a look the anchor is
+    absent from, rule 7 would reject it, the retry would produce the same answer
+    and every `USE_FAKE_AI` request carrying an anchor would be a `502` — which
+    is the opposite of what the flag exists for (`DECISIONS.md` 159).
+    """
+    top = _first(wardrobe, Category.TOP)
+    bottom = _first(wardrobe, Category.BOTTOM)
+    pair = [top, bottom] if top and bottom else [_first(wardrobe, Category.DRESS)]
+    chosen = [item for item in [_first(wardrobe, Category.SHOES), *pair] if item is not None]
+
+    anchor = next((item for item in wardrobe if item.short_id == anchor_id), None)
+    if anchor is None:
+        return chosen
+    return [anchor, *(item for item in chosen if item.category is not anchor.category)]
 
 
 def _fake_response(wardrobe: Sequence[ItemResponse], context: StylistContext) -> StylistResponse:
@@ -290,22 +330,18 @@ def _fake_response(wardrobe: Sequence[ItemResponse], context: StylistContext) ->
 
     Deterministic and deliberately not clever: the first shoes, then the first
     top and bottom, falling back to the first dress when the wardrobe has no
-    pair. No styling, no weather, no ordering by anything. The text says out
+    pair, with the anchor displacing whichever of them shares its category. No
+    styling, no weather, no ordering by anything. The text says out
     loud that it is a placeholder, which is `DECISIONS.md` 081's mitigation for
     the same rule broken the same way on the vision side — a demo accidentally
     run with the flag on is visible on screen rather than passing for a look.
     """
-    shoes = _first(wardrobe, Category.SHOES)
-    top = _first(wardrobe, Category.TOP)
-    bottom = _first(wardrobe, Category.BOTTOM)
-    chosen = [shoes, top, bottom] if top and bottom else [shoes, _first(wardrobe, Category.DRESS)]
-
     return StylistResponse(
         looks=(
             Look(
                 occasion=context.occasion,
                 title="Placeholder look",
-                item_ids=tuple(item.short_id for item in chosen if item is not None),
+                item_ids=tuple(item.short_id for item in _fake_items(wardrobe, context.anchor_id)),
                 reasoning=(
                     "Placeholder response: USE_FAKE_AI is on, so no model was called. "
                     "These items were picked by category, not styled."
@@ -518,6 +554,21 @@ def _missing_outerwear(
     return None
 
 
+def _missing_anchor(looks: tuple[Look, ...], context: StylistContext) -> str | None:
+    """Rule 7, and it needs no wardrobe to answer.
+
+    `anchor_id` is a `short_id` read off a row, so it is upper-case by
+    construction, and `_normalised` has already upper-cased the model's ids —
+    which is the one way the two spellings could otherwise have disagreed.
+    """
+    if context.anchor_id is None:
+        return None
+    for look in looks:
+        if context.anchor_id not in look.item_ids:
+            return f"the look does not contain the anchored item {context.anchor_id}, and it must"
+    return None
+
+
 def _violation(
     response: StylistResponse, wardrobe: Sequence[ItemResponse], context: StylistContext
 ) -> str | None:
@@ -531,8 +582,8 @@ def _violation(
 
     Rule 5 is absent: it reads `packing_list.item_ids`, and `STYLIST_SCHEMA`
     carries no `packing_list` until Stage 4 designs it beside the trip message
-    (`DECISIONS.md` 157). Rules 7 and 8 arrive with the anchor at 2.10 and the
-    swap at 2.11.
+    (`DECISIONS.md` 157). Rule 7 arrived with the anchor at 2.10; rule 8 waits
+    for the swap at 2.11.
     """
     known = {item.short_id: item for item in wardrobe}
     return (
@@ -541,6 +592,7 @@ def _violation(
         or _two_outer_layers(response.looks, known)
         or _wrong_count(response.looks)
         or _missing_outerwear(response.looks, known, context)
+        or _missing_anchor(response.looks, context)
     )
 
 

@@ -1,19 +1,24 @@
 import { Occasion } from './enums';
 import { Item } from './item.model';
 
-// The body of `POST /looks/suggest`. The four anchor and swap fields arrive at
-// 2.10 and 2.11, and until then the request schema *refuses* them rather than
-// ignoring them — so they are absent from this type rather than optional in
-// it. A field this client cannot send is a field it must not offer.
+// The body of `POST /looks/suggest`. `anchor_item_id` arrived at 2.10; the
+// three swap fields arrive at 2.11, and until then the request schema
+// *refuses* them rather than ignoring them — so they are absent from this type
+// rather than optional in it. A field this client cannot send is a field it
+// must not offer.
 //
-// Both optionals are genuinely omitted rather than sent as null: absent is
-// what the server already defaults them to, and an omitted key cannot trip the
-// extra-field rejection the schema applies. 04-API-SPEC.md.
+// All three optionals are genuinely omitted rather than sent as null: absent
+// is what the server already defaults them to, and an omitted key cannot trip
+// the extra-field rejection the schema applies. 04-API-SPEC.md.
+//
+// `anchor_item_id` is the row's UUID, the id this client already holds. The
+// `short_id` the prompt prints never leaves the server.
 export interface SuggestRequest {
   readonly occasion: Occasion;
   readonly date: string;
   readonly include_outerwear?: boolean;
   readonly notes?: string;
+  readonly anchor_item_id?: string;
 }
 
 // `category` is a plain string for the same reason item.model.ts leaves

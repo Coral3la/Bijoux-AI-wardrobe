@@ -7,9 +7,13 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 
+import { ItemsApi } from '../../core/api/items.api';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { StylistStore } from '../../core/state/stylist.store';
+import { WardrobeStore } from '../../core/state/wardrobe.store';
+import { Item } from '../../shared/models/item.model';
 import { SuggestRequest } from '../../shared/models/look.model';
 import { LookCard } from './look-card';
 import { LookDraft, LookRequestForm, todayInLocalTime } from './look-request-form';
@@ -31,18 +35,21 @@ export const STATUS_INTERVAL_MS = 2000;
 // progress. Task 2.9 fills this outline in.
 const SKELETON_TILES = [0, 1, 2, 3, 4] as const;
 
-// Both optionals are omitted rather than sent as null. Absent is already what
-// the endpoint defaults them to — `include_outerwear: null` is "let the
+// All three optionals are omitted rather than sent as null. Absent is already
+// what the endpoint defaults them to — `include_outerwear: null` is "let the
 // weather rule decide" — and an omitted key cannot collide with the schema's
 // extra-field rejection. Same spread-conditional idiom as the wardrobe store's
 // `normalise`, for the same reason: the object carries only what it means.
-function toRequest(draft: LookDraft): SuggestRequest {
+function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
   const notes = draft.notes.trim();
   return {
     occasion: draft.occasion,
     date: draft.date,
     ...(draft.include_outerwear !== null && { include_outerwear: draft.include_outerwear }),
     ...(notes !== '' && { notes }),
+    // The UUID, which is the only id this client ever holds. The anchor is the
+    // whole garment rather than the id because the pin has to name it.
+    ...(anchor !== null && { anchor_item_id: anchor.id }),
   };
 }
 
@@ -79,6 +86,26 @@ function toRequest(draft: LookDraft): SuggestRequest {
         @if (store.error(); as key) {
           <p class="text-sm font-medium text-danger">{{ i18n.t(key) }}</p>
         }
+
+        <!-- Pinned above the form, where 05-FRONTEND-SPEC.md puts it. It is not
+             one of the form's controls: the four in LookDraft are what the user
+             sets here, and the anchor is what she arrived carrying. -->
+        @if (anchor(); as item) {
+          <div class="flex items-center gap-3 rounded-lg bg-surface p-3">
+            <p class="text-sm">
+              {{ i18n.t('stylist.anchor.pinned', { item: name(item) }) }}
+            </p>
+            <button
+              type="button"
+              (click)="clearAnchor()"
+              [attr.aria-label]="i18n.t('stylist.anchor.clear')"
+              class="ms-auto min-h-11 min-w-11 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              ×
+            </button>
+          </div>
+        }
+
         <app-look-request-form
           [draft]="draft()"
           [weather]="store.weather()"
@@ -92,8 +119,18 @@ function toRequest(draft: LookDraft): SuggestRequest {
 export class StylistPage {
   protected readonly i18n = inject(I18nService);
   protected readonly store = inject(StylistStore);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly items = inject(ItemsApi);
+  private readonly wardrobe = inject(WardrobeStore);
 
   protected readonly tiles = SKELETON_TILES;
+
+  // The garment "Style around this" arrived with, or null. Held here rather
+  // than in the draft for the same reason the draft is held here rather than in
+  // the form: it outlives the control that renders it, and the skeleton
+  // unmounts that control on every submit.
+  protected readonly anchor = signal<Item | null>(null);
 
   // Casual and today, which is the request a user who touches nothing else
   // sends. `include_outerwear: null` is Auto — the weather rule decides, which
@@ -118,6 +155,7 @@ export class StylistPage {
     // visit arrives holding the first visit's look and forecast.
     this.store.reset();
     this.store.loadWeather(this.draft().date);
+    this.readAnchor();
 
     effect(() => {
       if (this.store.isSuggesting()) {
@@ -145,7 +183,47 @@ export class StylistPage {
   }
 
   protected suggest(): void {
-    this.store.suggest(toRequest(this.draft()));
+    this.store.suggest(toRequest(this.draft(), this.anchor()));
+  }
+
+  protected name(item: Item): string {
+    return item.display_name ?? this.i18n.t('item.untitled');
+  }
+
+  // The parameter goes with the pin. Left in the URL it would come back on a
+  // reload of a screen the user has just told to stop building around it.
+  // `replaceUrl` because clearing is not a step back arrives at — the anchored
+  // visit and the cleared one are the same visit.
+  protected clearAnchor(): void {
+    this.anchor.set(null);
+    void this.router.navigate(['/stylist'], { queryParams: {}, replaceUrl: true });
+  }
+
+  // Read from the snapshot, not a subscription, for item detail's reason: every
+  // route into this screen carrying an anchor is a fresh navigation from the
+  // item it names. The collection first and a fetch only when it misses — the
+  // same fallback that screen uses, because a deep link into /stylist has no
+  // wardrobe loaded behind it.
+  //
+  // A row that cannot be fetched clears the anchor rather than keeping it: the
+  // pin would have no name to show, and the request would carry an id the
+  // endpoint answers `anchor_unavailable` to.
+  private readAnchor(): void {
+    const id = this.route.snapshot.queryParamMap.get('anchor');
+    if (id === null) {
+      return;
+    }
+
+    const known = this.wardrobe.items().find((candidate) => candidate.id === id);
+    if (known !== undefined) {
+      this.anchor.set(known);
+      return;
+    }
+
+    this.items.get(id).subscribe({
+      next: (item) => this.anchor.set(item),
+      error: () => this.anchor.set(null),
+    });
   }
 
   // "Try again" goes back to the form rather than re-firing the last request:

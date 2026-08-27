@@ -25,13 +25,14 @@ from app.schemas.item import ItemResponse
 
 
 class LookSuggestRequest(BaseModel):
-    """`04-API-SPEC.md`'s body, minus the four fields that have no task yet.
+    """`04-API-SPEC.md`'s body, minus the three fields that have no task yet.
 
     `extra="forbid"` is `ItemUpdate`'s reasoning on a different body:
-    `anchor_item_id`, `locked_item_ids`, `exclude_item_ids` and `replace_role`
-    arrive at 2.10 and 2.11, and until then a request carrying one is refused
-    rather than quietly ignored. A dropped anchor is a look that failed to build
-    around the garment the user is holding, reported as a success.
+    `locked_item_ids`, `exclude_item_ids` and `replace_role` arrive at 2.11,
+    and until then a request carrying one is refused rather than quietly
+    ignored. A dropped field is an instruction the user gave and the look did
+    not obey, reported as a success — which is exactly what `anchor_item_id`
+    was until 2.10 put it on the wire.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -43,6 +44,10 @@ class LookSuggestRequest(BaseModel):
     # omits the line, and a blank one is not worth a 422 to a user who tabbed
     # through the field.
     notes: Annotated[str, StringConstraints(strip_whitespace=True)] | None = None
+    # The row's UUID, not its `short_id`. `04-API-SPEC.md` keeps `short_id` out
+    # of the client's hands entirely — "it exists only for the AI layer" — so
+    # the route is what turns this into the id the prompt prints.
+    anchor_item_id: uuid.UUID | None = None
 
 
 class MissingPieceResponse(BaseModel):

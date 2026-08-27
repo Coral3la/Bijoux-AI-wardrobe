@@ -306,6 +306,24 @@ def test_no_outerwear_preference_prints_no_line() -> None:
     assert "Outerwear:" not in stylist._user_message(WARDROBE, _context())
 
 
+def test_the_anchor_block_is_the_documented_one() -> None:
+    # Transcribed from `03-AI-CONTRACTS.md`'s anchored block, line breaks
+    # included, and asserted as the tail of the message: it comes after
+    # `Build 1 look.` because it constrains it.
+    assert stylist._user_message(WARDROBE, _context(anchor_id=JEANS_ID)).endswith(
+        "Build 1 look.\n"
+        "\n"
+        f"ANCHOR: {JEANS_ID}\n"
+        "This item MUST appear in the look. Build the rest of the outfit around it.\n"
+        "If it cannot work for this occasion or weather, still include it and\n"
+        "explain the tension in `reasoning`."
+    )
+
+
+def test_no_anchor_prints_no_block() -> None:
+    assert "ANCHOR:" not in stylist._user_message(WARDROBE, _context())
+
+
 # --- the request suggest_looks builds ---------------------------------------
 
 
@@ -482,6 +500,36 @@ async def test_the_fake_falls_back_to_a_dress_without_a_pair(fake: None) -> None
     answer = await stylist.suggest_looks([BOOTS, DRESS, BLAZER], _context())
 
     assert answer.looks[0].item_ids == (BOOTS_ID, DRESS_ID)
+
+
+@pytest.mark.asyncio
+async def test_the_fake_puts_the_anchor_in_the_look(fake: None) -> None:
+    # Rule 7 judges the fake as well as the model. A fake that ignored the
+    # anchor would answer a look rule 7 rejects, the retry would answer the
+    # same look, and every anchored request under `USE_FAKE_AI` would be a 502.
+    answer = await stylist.suggest_looks(WARDROBE, _context(anchor_id=BLAZER_ID))
+
+    assert answer.looks[0].item_ids == (BLAZER_ID, BOOTS_ID, TOP_ID, JEANS_ID)
+
+
+@pytest.mark.asyncio
+async def test_the_fake_lets_the_anchor_displace_its_own_category(fake: None) -> None:
+    # A second top beside the anchored one is a look with two base tops, which
+    # the system prompt forbids. The anchor replaces the pick it duplicates.
+    second_top = _item("HH7TP2", category="top", subcategory="t-shirt")
+    answer = await stylist.suggest_looks([*WARDROBE, second_top], _context(anchor_id="HH7TP2"))
+
+    assert answer.looks[0].item_ids == ("HH7TP2", BOOTS_ID, JEANS_ID)
+
+
+@pytest.mark.asyncio
+async def test_an_anchor_the_wardrobe_does_not_hold_leaves_the_fake_alone(fake: None) -> None:
+    # 2.7 resolves the anchor against this very list, so this is unreachable
+    # through the endpoint. The fake declines to invent an id for it rather than
+    # returning one rule 1 would call a hallucination.
+    answer = await stylist.suggest_looks(WARDROBE, _context(anchor_id="Q7WXYZ"))
+
+    assert answer.looks[0].item_ids == (BOOTS_ID, TOP_ID, JEANS_ID)
 
 
 @pytest.mark.asyncio
