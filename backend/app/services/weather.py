@@ -178,6 +178,29 @@ def requires_outerwear(rule: str) -> bool:
     return any(rule.startswith(band) for band in _OUTERWEAR_REQUIRED)
 
 
+def summarize_forecast(forecast: Forecast) -> str:
+    """The `Weather:` line of `03-AI-CONTRACTS.md`'s user message.
+
+    Transcribes the document's two examples — `18°C, no rain.` and
+    `12°C, rain 4mm` — and adds nothing to them. No condition word: the
+    single-day example has none, and `partly_cloudy` next to a rule the model is
+    told to obey exactly is decoration the prompt pays tokens for.
+
+    `temp_max_c` for `DECISIONS.md` 142's reason, which is `build_rule`'s own:
+    two temperatures reach this function and the document's worked example is
+    only self-consistent under the maximum. **The rain threshold is
+    `build_rule`'s `> 1` rather than `> 0`**, so this sentence cannot say "no
+    rain" above a rule that says rain is expected — 0.5 mm is a dry day in both
+    or in neither.
+
+    Built here rather than in the route because the units are this module's, the
+    way `requires_outerwear` is: 2.7 assembles a `StylistContext` and does not
+    decide what a millimetre reads like.
+    """
+    rain = f"rain {forecast.precip_mm:g}mm" if forecast.precip_mm > 1 else "no rain"
+    return f"{round(forecast.temp_max_c)}°C, {rain}."
+
+
 def condition_for(code: int) -> Condition:
     """A WMO 4677 code as the closed vocabulary names it.
 

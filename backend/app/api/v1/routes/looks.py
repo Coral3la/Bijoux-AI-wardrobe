@@ -1,0 +1,288 @@
+"""The one route that puts Stage 2 together.
+
+Wardrobe → forecast → rule → serialise → stylist → validate → persist →
+hydrate, in `STAGE-2` 2.7's order. Everything it calls was built to be called
+from here: `services/stylist.py` holds no `Session` and no clock, `build_rule`
+and `summarize_forecast` are pure, and `validate_look_response` judges without
+raising. What is left for this module is the three things only a request can
+decide — **which** wardrobe the model sees, whether to spend the one retry, and
+what a failure is worth on the wire.
+"""
+
+import logging
+from collections.abc import Mapping, Sequence
+
+from fastapi import APIRouter, Depends, status
+from openai import OpenAIError
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.core.deps import get_current_user, get_db
+from app.core.errors import ApiError
+from app.enums import ItemStatus
+from app.models.item import Item
+from app.models.look import Look, LookItem
+from app.models.user import User
+from app.schemas.item import ItemResponse
+from app.schemas.look import (
+    LookSuggestRequest,
+    LookSuggestResponse,
+    MissingPieceResponse,
+    SuggestedLook,
+)
+from app.services.stylist import Look as StylistLook
+from app.services.stylist import (
+    LookValidation,
+    StylistContext,
+    StylistResponse,
+    suggest_looks,
+    validate_look_response,
+)
+from app.services.weather import (
+    FORECAST_HORIZON_DAYS,
+    ForecastOutOfRangeError,
+    ForecastProviderError,
+    build_rule,
+    get_forecast,
+    summarize_forecast,
+)
+
+router = APIRouter(prefix="/looks", tags=["looks"])
+
+logger = logging.getLogger(__name__)
+
+# `04-API-SPEC.md`'s threshold, counted over the wardrobe that is actually sent
+# rather than over every `ready` row: six garments the stylist never sees cannot
+# make an outfit, so counting them would answer `502` where `400` is the truth.
+# `DECISIONS.md` 172.
+MIN_WARDROBE_ITEMS = 6
+
+
+def _stylist_failed() -> ApiError:
+    return ApiError(
+        status.HTTP_502_BAD_GATEWAY,
+        "stylist_failed",
+        "I couldn't put a look together just now — try again.",
+    )
+
+
+def _wardrobe(db: Session, user: User) -> list[ItemResponse]:
+    """Every item the stylist is allowed to see, in a stable order.
+
+    Three filters, and `AUDITS.md` O-21 is the whole of the third: `ready`
+    because a row still being tagged has no attributes to style with, not
+    archived because `DELETE /items/{id}` is an archive, and not swimwear or
+    sleepwear because `01-ARCHITECTURE.md` promises exactly that exclusion and
+    2.6a gave it two vocabulary members to match on. The list comes from
+    `settings`, so emptying it sends the whole wardrobe.
+
+    A row whose `category` is `NULL` is dropped by `NOT IN` rather than kept —
+    SQL's three-valued logic, left alone deliberately. `category` is in
+    `REQUIRED_TAG_FIELDS`, so a `ready` row has one, and an item with no
+    category is one the model could not place anyway.
+
+    Ordered oldest first so two identical requests build the same prompt, which
+    is what `STAGE-2`'s "two identical requests produce a valid look both times"
+    measures.
+    """
+    rows = db.scalars(
+        select(Item)
+        .where(
+            Item.user_id == user.id,
+            Item.status == ItemStatus.READY,
+            Item.is_archived.is_(False),
+            Item.category.not_in(tuple(settings.stylist_excluded_categories)),
+        )
+        .order_by(Item.created_at, Item.short_id)
+    ).all()
+    return [ItemResponse.model_validate(row) for row in rows]
+
+
+async def _context(request: LookSuggestRequest, user: User) -> StylistContext:
+    """The request, the profile and the sky, in the shape `suggest_looks` takes.
+
+    The forecast is for the user's **home** location: `04-API-SPEC.md`'s body
+    carries no coordinates, and `DECISIONS.md` 151 made the three home columns
+    one field, so either both numbers are there or neither is.
+    """
+    if user.home_lat is None or user.home_lon is None:
+        raise ApiError(
+            status.HTTP_400_BAD_REQUEST,
+            "home_location_missing",
+            "Set your home city before asking for a look — the weather decides half of it.",
+        )
+
+    try:
+        forecast = await get_forecast(user.home_lat, user.home_lon, request.date)
+    except ForecastOutOfRangeError as exc:
+        raise ApiError(
+            status.HTTP_400_BAD_REQUEST,
+            "forecast_unavailable",
+            f"A forecast is only available up to {FORECAST_HORIZON_DAYS} days ahead.",
+        ) from exc
+    except ForecastProviderError as exc:
+        raise ApiError(
+            status.HTTP_502_BAD_GATEWAY,
+            "forecast_unavailable",
+            "The forecast service is unavailable. Try again shortly.",
+        ) from exc
+
+    return StylistContext(
+        date=request.date,
+        occasion=request.occasion,
+        forecast_summary=summarize_forecast(forecast),
+        weather_rule=build_rule(forecast.temp_max_c, forecast.precip_mm, forecast.wind_kph),
+        notes=request.notes,
+        include_outerwear=request.include_outerwear,
+        height_cm=user.height_cm,
+        style_notes=user.style_notes,
+    )
+
+
+async def _judged(wardrobe: Sequence[ItemResponse], context: StylistContext) -> LookValidation:
+    """One call, and a second one only when the first broke a named rule.
+
+    The retry exists to carry a violation back to the model, so a failure with
+    no violation to name does not spend it: a `ValueError` means no usable
+    answer arrived and an `OpenAIError` means none arrived at all, and both are
+    `502` at the caller without a second trip through the whole wardrobe.
+    `03-AI-CONTRACTS.md` says the same thing about a timeout — "the request is
+    not retried automatically". `DECISIONS.md` 171.
+    """
+    validation = validate_look_response(await suggest_looks(wardrobe, context), wardrobe, context)
+    if validation.ok:
+        return validation
+
+    logger.info("Retrying the stylist with the violation named")
+    return validate_look_response(
+        await suggest_looks(wardrobe, context, correction=validation.violation),
+        wardrobe,
+        context,
+    )
+
+
+def _persist(
+    db: Session,
+    user: User,
+    context: StylistContext,
+    looks: Sequence[StylistLook],
+    known: Mapping[str, ItemResponse],
+) -> list[SuggestedLook]:
+    """The rows, and the same looks hydrated for the wire.
+
+    One pass, because the wire object carries the `id` the insert generated and
+    reading it twice would mean holding the answer in two shapes. `flush`
+    rather than `commit` inside the loop: `look_items.look_id` needs the id, and
+    a look and its items are one row or none.
+
+    `occasion` is stored from the **request**, not from the model's echo of it.
+    The column now holds a closed vocabulary (`DECISIONS.md` 168) and nothing
+    validates what the model answered there, so the one value that is certainly
+    legal is the one the user sent.
+
+    `position` is the model's own ordering, which is otherwise destroyed — the
+    composite primary key imposes none. `role` is left `NULL`: it has no
+    vocabulary, `04`'s six values do not cover `dress`, and 2.11 is the task
+    that first reads one. `AUDITS.md` O-25, `DECISIONS.md` 170.
+    """
+    suggested: list[SuggestedLook] = []
+
+    for answer in looks:
+        row = Look(
+            user_id=user.id,
+            title=answer.title,
+            occasion=context.occasion,
+            reasoning=answer.reasoning,
+            weather_note=answer.weather_note,
+            for_date=context.date,
+        )
+        db.add(row)
+        db.flush()
+
+        db.add_all(
+            [
+                LookItem(look_id=row.id, item_id=known[item_id].id, position=position)
+                for position, item_id in enumerate(answer.item_ids)
+            ]
+        )
+
+        suggested.append(
+            SuggestedLook(
+                id=row.id,
+                occasion=context.occasion,
+                title=answer.title,
+                items=[known[item_id] for item_id in answer.item_ids],
+                reasoning=answer.reasoning,
+                weather_note=answer.weather_note,
+            )
+        )
+
+    db.commit()
+    return suggested
+
+
+def _response(looks: list[SuggestedLook], answer: StylistResponse) -> LookSuggestResponse:
+    return LookSuggestResponse(
+        looks=looks,
+        missing_pieces=[
+            MissingPieceResponse(
+                category=piece.category, description=piece.description, reason=piece.reason
+            )
+            for piece in answer.missing_pieces
+        ],
+        message=answer.message,
+    )
+
+
+@router.post("/suggest")
+async def suggest_look(
+    request: LookSuggestRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> LookSuggestResponse:
+    """`async def`, unlike the routes that only touch the database.
+
+    Two of the three calls it makes leave the process — Open-Meteo and OpenAI,
+    the second of them for four to eight seconds — and both are awaited HTTP.
+    `CONVENTIONS.md` puts a blocking third-party call in a synchronous `def`
+    for the opposite reason; there is nothing blocking here but the two short
+    queries, which is the trade `GET /weather` already makes through
+    `get_current_user`.
+    """
+    wardrobe = _wardrobe(db, current_user)
+    # Before the forecast as well as before the model: `06-TESTING-STRATEGY.md`
+    # asks for a test proving no AI call is attempted, and a small wardrobe is
+    # knowable without spending anything at all.
+    if len(wardrobe) < MIN_WARDROBE_ITEMS:
+        raise ApiError(
+            status.HTTP_400_BAD_REQUEST,
+            "wardrobe_too_small",
+            f"Add at least {MIN_WARDROBE_ITEMS} items so I have something to work with.",
+        )
+
+    context = await _context(request, current_user)
+
+    try:
+        validation = await _judged(wardrobe, context)
+    except ValueError as exc:
+        # The four measured leniencies of `DECISIONS.md` 161 arrive here: the
+        # model answered, and what it answered is not usable.
+        logger.warning("The stylist gave no usable answer", extra={"error": str(exc)})
+        raise _stylist_failed() from exc
+    except OpenAIError as exc:
+        logger.warning("The stylist provider did not answer", extra={"error": str(exc)})
+        raise _stylist_failed() from exc
+
+    if not validation.ok:
+        logger.warning(
+            "The stylist failed validation twice", extra={"violation": validation.violation}
+        )
+        raise _stylist_failed()
+
+    # From `validation.response` and never from the raw answer: the ids were
+    # upper-cased there, and `DECISIONS.md` 164 put normalisation in one place
+    # so a row and a lookup cannot disagree about the case of an id.
+    answer = validation.response
+    known = {item.short_id: item for item in wardrobe}
+    return _response(_persist(db, current_user, context, answer.looks, known), answer)

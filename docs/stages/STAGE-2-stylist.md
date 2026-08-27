@@ -86,6 +86,41 @@ Nothing already committed is re-tagged — no seed row would match either value,
 
 Guard: fewer than 6 `ready` items returns `400` with `code: "wardrobe_too_small"` **before** any AI call.
 
+**Ran 2026-08-27.** The orchestration is the easy half; what this task actually
+decided is the three things only a request can decide, and each closes or opens
+something. **The wardrobe the model sees** — `ready`, not archived, and not in
+`STYLIST_EXCLUDED_CATEGORIES`, a validated `Settings` list defaulting to
+swimwear and sleepwear, which closes `AUDITS.md` **O-21** eight tasks after it
+was opened. **The retry** — one re-call carrying the violation, and *none* for a
+`ValueError` or a provider exception, because a retry with nothing to say is a
+coin flip that costs the whole wardrobe twice. **What a failure is worth** —
+`502 stylist_failed` for all three, one message to the user, three
+distinguishable log lines.
+
+Two guard details are narrower than the line above. The count is over the
+**filtered** wardrobe rather than every `ready` row — six garments the stylist
+never sees cannot make an outfit — and it runs before the *forecast* as well as
+before the model. `04-API-SPEC.md` says "usable" now, so the document and the
+code agree.
+
+The task list was three items longer than this section. `occasion` had no home:
+`04` carried the six values alone, so `02-DATA-MODEL.md` gains an `occasion`
+section, `enums.py` an `Occasion`, and `enums.ts` plus six i18n keys mirror it —
+**O-8** closes, and the i18n half is 2.6a's lesson applied rather than
+rediscovered. A missing home location needed a code that did not exist:
+`home_location_missing` (`400`), because `forecast_unavailable` means *no
+weather for that day* and this means *we do not know where you are*. And the
+`Weather:` line of the prompt had no builder: `summarize_forecast` lands beside
+`build_rule`, using the same `> 1` mm threshold so the sentence cannot
+contradict the rule printed under it.
+
+`look_items.role` stays `NULL` — **O-25**'s vocabulary is 2.11's, which is the
+task that reads one — while `position` is written from the model's ordering,
+because that is destroyed at persistence if nothing records it. A look that
+failed twice is not persisted at all. `DECISIONS.md` 168–173, and **O-26** and
+**O-27** open: the model's `occasion` echo now has no reader, and `USE_FAKE_AI`
+cannot build a valid look on a day cold enough to require a coat.
+
 ### 2.8 Stylist screen
 Occasion chips, date picker defaulting to today, coat override (Auto / Yes / No), a free-text notes field, and the current weather displayed above the button.
 

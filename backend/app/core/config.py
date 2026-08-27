@@ -1,7 +1,9 @@
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.enums import Category
 
 APP_VERSION = "0.1.0"
 
@@ -20,6 +22,10 @@ OPENAI_MODEL = "gpt-4o-mini-2024-07-18"
 # two independent decisions. Verified against a live call at 2.4.
 # `DECISIONS.md` 160.
 OPENAI_STYLIST_PIN = "gpt-4o-mini-2024-07-18"
+
+
+def _category_names(value: str) -> list[str]:
+    return [name.strip().lower() for name in value.split(",") if name.strip()]
 
 
 class Settings(BaseSettings):
@@ -47,10 +53,33 @@ class Settings(BaseSettings):
     OPENAI_TIMEOUT_SECONDS: int = 30
 
     USE_FAKE_AI: bool = False
+    # The categories the stylist is never shown. `01-ARCHITECTURE.md` and
+    # `STAGE-2` 2.4 both promise this list is configurable and 2.6a gave it two
+    # members to name; comma-separated because that is how `CORS_ORIGINS`
+    # already spells a list. Emptying it sends the whole wardrobe, which is
+    # what `DECISIONS.md` 002 argues for everywhere else.
+    STYLIST_EXCLUDED_CATEGORIES: str = "swimwear,sleepwear"
     CORS_ORIGINS: str = "http://localhost:4200"
     MAX_UPLOAD_MB: int = 10
     MAX_FILES_PER_REQUEST: int = 20
     ENV: Literal["development", "production"] = "development"
+
+    @field_validator("STYLIST_EXCLUDED_CATEGORIES")
+    @classmethod
+    def _known_categories(cls, value: str) -> str:
+        # At process start rather than per request: a typo here does not raise,
+        # it filters nothing, and a filter that silently stops filtering is the
+        # failure O-21 spent two tasks making impossible.
+        unknown = [name for name in _category_names(value) if name not in Category.values()]
+        if unknown:
+            raise ValueError(f"not categories in 02-DATA-MODEL.md: {', '.join(unknown)}")
+        return value
+
+    @property
+    def stylist_excluded_categories(self) -> frozenset[Category]:
+        return frozenset(
+            Category(name) for name in _category_names(self.STYLIST_EXCLUDED_CATEGORIES)
+        )
 
     @property
     def allowed_origins(self) -> list[str]:

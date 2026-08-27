@@ -116,6 +116,14 @@ export const CONDITIONS = [
 ] as const;
 export type Condition = (typeof CONDITIONS)[number];
 
+// Not an item column either — it names what the user is dressing for, and it
+// reached this mirror at task 2.7 from 04-API-SPEC.md by way of 02. Nothing in
+// the database refuses a value outside it: `looks.occasion` is TEXT, so the
+// request schema on POST /looks/suggest is the whole of the enforcement. The
+// chips that render these are 2.8's.
+export const OCCASIONS = ['casual', 'work', 'evening', 'sport', 'formal', 'travel'] as const;
+export type Occasion = (typeof OCCASIONS)[number];
+
 export const SUBCATEGORIES = {
   top: ['t_shirt', 'tank', 'shirt', 'blouse', 'sweater', 'sweatshirt', 'hoodie', 'bodysuit'],
   bottom: ['jeans', 'trousers', 'shorts', 'skirt', 'leggings', 'cargo'],

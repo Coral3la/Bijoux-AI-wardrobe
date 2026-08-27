@@ -24,12 +24,14 @@ from app.enums import Condition
 from app.services import weather
 from app.services.weather import (
     FORECAST_HORIZON_DAYS,
+    Forecast,
     ForecastOutOfRangeError,
     ForecastProviderError,
     build_rule,
     condition_for,
     get_forecast,
     requires_outerwear,
+    summarize_forecast,
 )
 
 # Captured verbatim on 2026-08-26 from
@@ -190,6 +192,50 @@ def test_both_modifiers_append_in_document_order() -> None:
     rule = build_rule(8, precip_mm=4, wind_kph=50)
     assert rule.index("Rain expected") < rule.index("Windy")
     assert rule.startswith("Outerwear is REQUIRED, warmth 4-5, plus a mid layer.")
+
+
+# --- the sentence the prompt carries --------------------------------------
+
+
+def forecast_at(temp_max_c: float, precip_mm: float) -> Forecast:
+    return Forecast(
+        date=date(2026, 3, 14),
+        temp_min_c=temp_max_c - 6,
+        temp_max_c=temp_max_c,
+        precip_mm=precip_mm,
+        wind_kph=14.0,
+        condition=Condition.RAIN if precip_mm > 1 else Condition.PARTLY_CLOUDY,
+    )
+
+
+def test_the_summary_is_the_sentence_03_prints() -> None:
+    # 03-AI-CONTRACTS.md's single-day user message, transcribed: `18°C, no rain.`
+    assert summarize_forecast(forecast_at(18.0, 0.0)) == "18°C, no rain."
+
+
+def test_rain_is_reported_in_millimetres_without_a_trailing_zero() -> None:
+    assert summarize_forecast(forecast_at(12.0, 4.0)) == "12°C, rain 4mm."
+
+
+def test_the_summary_and_the_rule_agree_about_what_rain_is() -> None:
+    # The one boundary worth pinning: 1.0 mm is dry to `build_rule`, so a
+    # summary that called it rain would put "rain 1mm" above a rule that says
+    # nothing about rain — and the model is told to obey the rule exactly.
+    forecast = forecast_at(14.0, 1.0)
+    assert "no rain" in summarize_forecast(forecast)
+    assert "Rain expected" not in build_rule(
+        forecast.temp_max_c, forecast.precip_mm, forecast.wind_kph
+    )
+
+
+def test_the_maximum_is_the_temperature_that_is_printed() -> None:
+    # DECISIONS.md 142: two temperatures arrive and the document's worked
+    # example is only self-consistent under the maximum.
+    assert summarize_forecast(forecast_at(19.0, 0.0)).startswith("19°C")
+
+
+def test_a_decimal_temperature_is_rounded_to_a_whole_degree() -> None:
+    assert summarize_forecast(forecast_at(18.4, 0.0)) == "18°C, no rain."
 
 
 # --- the WMO map ----------------------------------------------------------

@@ -98,7 +98,7 @@ contradiction** — a thing no document disagrees about and nobody has looked at
 It was extended at 1.6 rather than duplicated, and **O-15** was opened by the
 same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
-task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built.
+task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -303,7 +303,7 @@ with `{"error": true, "reason": "..."}`, not a 200 with empty arrays. Task 2.1
 maps that to `ForecastOutOfRangeError` and answers `400 forecast_unavailable`
 rather than treating it as the provider being down. `DECISIONS.md` 147.
 
-#### O-8 · The `occasion` vocabulary lives in the wrong document — Stage 2
+#### O-8 · ~~The `occasion` vocabulary lives in the wrong document~~ — **closed at task 2.7**
 
 `04` line 177 defines six exact values —
 `casual · work · evening · sport · formal · travel` — and is the only document
@@ -320,6 +320,20 @@ that made every other list closed — `"work"` and `"Work"` and `"office"` are t
 same request and break grouping — applies here unchanged. Leaving it in `04`
 means the six values are enforced by whichever request schema happens to
 remember them.
+
+**Taken as recommended at task 2.7, in the task this item named.** `02` has an
+`occasion` section, `enums.py` an `Occasion`, and `enums.ts` plus six
+`vocabulary.occasion.*` keys mirror it — the last of those from 2.6a's lesson
+that a vocabulary is not one file. `LookSuggestRequest.occasion` types the field
+as the enum, so an unknown occasion is a `422` before a row exists.
+`DECISIONS.md` 168.
+
+**One thing this item assumed and should not have.** It said the value would be
+"enforced by whichever request schema happens to remember them" — true — but not
+that **the database will still accept anything**. `looks.occasion` is `TEXT` and
+`trips.occasions` is `JSONB`; no migration creates a type, so a script or a psql
+session can write `"Work"` and nothing catches it. That is weaker than
+`category` and is now stated in `02` rather than implied.
 
 #### O-9 · ~~The stylist returns a `confidence` nothing can consume~~ — **closed at task 2.4**
 
@@ -872,7 +886,7 @@ would make the rain branch showable instead of only describable. If neither is
 taken, this item is the answer to *"why does it keep putting her in the same
 blazer?"*.
 
-#### O-21 · The swimwear/sleepwear exclusion has no vocabulary member to match on — vocabulary landed at 2.6a, open until 2.7's filter
+#### O-21 · ~~The swimwear/sleepwear exclusion has no vocabulary member to match on~~ — **closed at task 2.7**
 
 `01-ARCHITECTURE.md` line 93 and `STAGE-2` 2.4 both promise the same thing in
 almost the same words: *"the only server-side exclusions are unambiguous ones —
@@ -949,11 +963,21 @@ category-dependent validation" and stopped there. **It missed
 would have grown a chip reading `vocabulary.category.swimwear`. Nothing tests
 that seam and nothing can today; it was found by reading the two templates.
 
-**Still open, and what closes it is one filter.** `POST /looks/suggest` at 2.7
-excluding both categories beside `ready`-only and `is_archived`, from a list
-that is configurable. Until then `01-ARCHITECTURE.md:96` describes a filter that
-is merely unwritten rather than one that cannot be written, which is the
-sentence that changed.
+**Closed at task 2.7, and the filter is a setting rather than a constant.**
+`POST /looks/suggest` selects `ready`, not archived, and `category NOT IN
+STYLIST_EXCLUDED_CATEGORIES` — a comma-separated `Settings` field defaulting to
+`swimwear,sleepwear`, validated against `02-DATA-MODEL.md`'s categories at
+process start so a typo refuses to boot rather than silently filtering nothing.
+Emptying it sends the whole wardrobe, which is what `DECISIONS.md` 002 argues
+for everywhere except the sentence this item is about. One integration test
+plants a swimsuit, a pyjama set, an archived top, a `processing` top and another
+user's top, and asserts the wardrobe the stylist was handed is exactly the six
+ready garments. `DECISIONS.md` 169.
+
+**What the fix does not cover, said plainly.** The exclusion is by `category`,
+so a pair of swim shorts mis-tagged `bottom` still reaches the model. Any
+server-side exclusion is only as good as the tagging underneath it, and that is
+the ceiling on this promise rather than a defect in the filter.
 
 #### O-22 · ~~Two of `03`'s worked example ids could never have been generated~~ — **closed at task 2.4**
 
@@ -1072,7 +1096,7 @@ reads — in a table whose rules 7 and 8 already belong to 2.10 and 2.11. Stage 
 reintroduces a day number beside the trip message that gives it a meaning.
 `DECISIONS.md` 163.
 
-#### O-25 · `look_items.role` has no vocabulary, and two foreseeable indexes are deferred — opened at task 2.6
+#### O-25 · `look_items.role` has no vocabulary, and two foreseeable indexes are deferred — role answered at 2.7, open until 2.11 and Stage 3
 
 Two halves of one question — what `02-DATA-MODEL.md` prints for `look_items`
 that nothing can yet honour. Migration `0002` built the table exactly as
@@ -1110,6 +1134,81 @@ which is the direction 2.7 and 2.9 read.
 `02` before writing the migration — a schema this project has not printed is a
 schema it has not decided. Building them at 2.6 would have been an index on two
 empty tables, chosen against no measured query.
+
+**Answered at task 2.7 by the second of the two options, and the column stays
+`NULL`.** The first writer declined to adopt a vocabulary it does not read:
+`04`'s six values still do not cover `Category` — `dress` maps to none of them
+and `outerwear` is spelled `outer` — and after 2.6a there are nine categories.
+**2.11 is named as the owner**, because `replace_role` is its field and it can
+derive a role at read time from the category it already holds. `02` now carries
+one paragraph saying why there is no `role` section, so the absence is a
+decision with a date rather than an oversight. `DECISIONS.md` 170.
+
+**The neighbouring column went the other way, and the asymmetry is deliberate.**
+`position` **is** written, from the index of the model's `item_ids`. It needs no
+vocabulary, and the ordering is destroyed at the moment of persistence if
+nothing records it — where a role can be derived later from data the row keeps.
+It has no reader until 2.11 either; that is a column filled early, not a
+vocabulary invented early.
+
+**The index half is untouched and still Stage 3's.** Both remain unbuilt and
+both readers still arrive there. 2.7 reads `look_items` only by `look_id`, which
+the composite primary key already serves.
+
+#### O-26 · `Look.occasion` in `STYLIST_SCHEMA` now has no reader — opened at task 2.7
+
+`DECISIONS.md` 168 made `occasion` a closed vocabulary and 169–172 put the
+request's value, not the model's, into `looks.occasion` and onto the wire. The
+model still produces an `occasion` on every call — it is a property of
+`STYLIST_SCHEMA` and strict mode requires every property on every response — and
+**nothing reads it any more.**
+
+That is precisely the test `DECISIONS.md` 157 and 163 applied to `confidence`,
+`look_id` and `day`, which were struck from the schema for having no column, no
+renderer and no task. By that test this field should go the same way.
+
+It was **not** struck at 2.7, deliberately. The schema is task 2.4's and has
+already been reopened twice (157 at 2.4, 163 at 2.5); a third reopening from
+inside the endpoint that consumes it would be a ride-along edit of exactly the
+kind `DECISIONS.md` 082 refused, and unlike `day` there is no measurement here
+showing the field does harm — it costs one short string per response.
+
+**Recommendation.** Strike it at Stage 4, which reopens `STYLIST_SCHEMA` anyway
+for `packing_list` and the day number, and where a trip's per-day occasion may
+give the field a reader again — that is the one thing that could reverse this,
+and it is why the decision belongs there rather than here. If it is kept, keep
+it for a stated reason rather than by inheritance. Do not add a validation rule
+comparing the echo to the request: that would spend the project's one retry on a
+string nothing renders, which is 163's argument about `day` word for word.
+
+#### O-27 · `USE_FAKE_AI` cannot produce a valid look on a cold day — opened at task 2.7
+
+Measured by reading, not by running: `_fake_response` picks the first shoes,
+then the first top and bottom, falling back to the first dress. **It never picks
+outerwear**, and `DECISIONS.md` 159 accepted that when nothing enforced the
+weather. Task 2.7 is what enforces it — validation rule 6 fires whenever the
+weather rule requires outerwear, the retry hands the same fake the same request,
+and the endpoint answers `502 stylist_failed`.
+
+The threshold is `temp_max_c < 16`. Tel Aviv reaches that between roughly
+December and March, and `07-DEPLOYMENT.md` runs the whole E2E job with
+`USE_FAKE_AI=true`, so **journeys 6 and 7 would fail for four months of the year
+and pass for the other eight** — on a mechanism that has nothing to do with what
+they assert. The same is true of any manual demo run with the flag on in winter.
+
+Not fixed at 2.7, and the reason is 159's own: a fake that reads the weather
+rule and picks by `warmth` is a second, untested stylist, and the flag exists to
+be deterministic rather than good. Making it weather-aware is also an edit to
+2.4's module from a task that consumes it.
+
+**Recommendation.** Task **5.1** or **5.3**, whichever writes the E2E journeys,
+and the cheapest fix is not in `stylist.py` at all: pin the forecast in the E2E
+environment, or set `include_outerwear: false` in the journey — `DECISIONS.md`
+158 gives that explicit precedence over the weather rule and rule 6 does not run
+under it. Failing that, `_fake_response` gains one clause: include the first
+`outerwear` item when the rule demands one. Whichever is taken, it is a decision
+about the fake's contract and belongs in `06-TESTING-STRATEGY.md`'s fake-AI
+section beside 159.
 
 ### Noted in passing, not a documentation defect
 

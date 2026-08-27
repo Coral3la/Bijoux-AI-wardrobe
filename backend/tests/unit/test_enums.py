@@ -17,6 +17,7 @@ from app.enums import (
     Layer,
     LayerRule,
     Length,
+    Occasion,
     Vocabulary,
     is_valid_subcategory,
     validate_tag_dict,
@@ -115,6 +116,13 @@ def test_category_values_are_the_documented_nine_in_order() -> None:
         "swimwear",
         "sleepwear",
     ]
+
+
+def test_occasion_values_are_the_documented_six_in_order() -> None:
+    # Transcribed from 02-DATA-MODEL.md, which took them from 04-API-SPEC.md at
+    # task 2.7. Nothing in the database enforces this list — `looks.occasion` is
+    # TEXT — so this test and `LookSuggestRequest` are the whole of it.
+    assert Occasion.values() == ["casual", "work", "evening", "sport", "formal", "travel"]
 
 
 def test_values_returns_plain_strings_not_enum_members() -> None:

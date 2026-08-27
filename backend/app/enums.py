@@ -139,6 +139,22 @@ class Condition(Vocabulary):
     THUNDERSTORM = "thunderstorm"
 
 
+# The second vocabulary here that is not a column type. `looks.occasion` is
+# `TEXT` and `trips.occasions` is `JSONB`, so no migration creates an
+# `occasion` type and nothing in the database refuses `"Work"` or `"office"` —
+# what enforces this list is `LookSuggestRequest` typing its field as this enum.
+# Added at task 2.7, the first task that accepts the value, and moved out of
+# `04-API-SPEC.md`, which carried the six alone until then. `AUDITS.md` O-8,
+# `DECISIONS.md` 168.
+class Occasion(Vocabulary):
+    CASUAL = "casual"
+    WORK = "work"
+    EVENING = "evening"
+    SPORT = "sport"
+    FORMAL = "formal"
+    TRAVEL = "travel"
+
+
 SUBCATEGORIES: dict[Category, tuple[str, ...]] = {
     Category.TOP: (
         "t_shirt",

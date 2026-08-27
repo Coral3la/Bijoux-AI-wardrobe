@@ -243,11 +243,29 @@ Failure codes, both `forecast_unavailable`: `400` when the date is beyond the fo
     "include_outerwear": null, "notes": "meeting with a client",
     "anchor_item_id": null, "locked_item_ids": [], "exclude_item_ids": [],
     "replace_role": null }
-← 200 { …StylistResponse from 03-AI-CONTRACTS, item_ids hydrated to full objects… }
+← 200 { "looks": [ { "id": "uuid", "occasion": "work", "title": "Morning meetings",
+                     "items": [ { …item… } ], "reasoning": "…", "weather_note": "…" } ],
+        "missing_pieces": [ { "category": "shoes", "description": "…", "reason": "…" } ],
+        "message": "A work outfit for a mild day." }
 ```
 
+The response is `03-AI-CONTRACTS.md`'s object with `item_ids` **replaced** by
+`items`, hydrated to the same shape `GET /items` returns, and with the `id` of
+the row this call persisted — the look is a resource from the moment it is
+suggested, and `PATCH /looks/{id}` at Stage 3 is the heart button on this very
+card. `is_saved`, `feedback` and `worn_at` are not in the look object: two of
+them are columns that do not exist until migration `0004`. `DECISIONS.md` 172.
+
 `include_outerwear`: `true` forces a coat, `false` forbids one, `null` lets the weather rule decide.
-`occasion`: one of `casual · work · evening · sport · formal · travel`.
+`occasion`: one of `casual · work · evening · sport · formal · travel`. The six
+live in `02-DATA-MODEL.md`'s closed vocabulary since task 2.7 and are enforced by
+this request schema — `looks.occasion` is `TEXT` and the database refuses
+nothing. `422` on any other value. `AUDITS.md` **O-8**, `DECISIONS.md` 168.
+
+**The last four fields arrive with the anchor at 2.10 and the swap at 2.11, and
+until then the request schema *refuses* them rather than ignoring them.** A
+`anchor_item_id` silently dropped would be a `200` carrying a look that failed
+to build around the garment the user is holding, reported as a success.
 
 **`anchor_item_id`** — build the look around this item. It must appear in the result. This powers "Style around this" from the item detail screen, and it is the direct answer to the original problem: *I am holding this garment and do not know what goes with it.*
 
@@ -257,10 +275,40 @@ All four fields are optional and default to null or empty. A request with none o
 
 `422` if `anchor_item_id` or any locked ID does not belong to this user, or if `replace_role` is given without `locked_item_ids`.
 
-`400` with `code: "wardrobe_too_small"` when fewer than 6 items are `ready`.
-`502` with `code: "stylist_failed"` when validation fails twice.
+`400` with `code: "wardrobe_too_small"` when fewer than 6 items are **usable** —
+`ready`, not archived, and not in an excluded category. Counted over the
+wardrobe that would actually be sent rather than over every `ready` row, because
+six garments the stylist never sees cannot make an outfit: the alternative
+answers `502` where `400` is the truth. Checked before the forecast as well as
+before the model, so a small wardrobe costs nothing at all. `DECISIONS.md` 172.
 
-The look is persisted with `is_saved = false` before the response is returned.
+`400` with `code: "home_location_missing"` when the account has no
+`home_lat`/`home_lon`. The body carries no coordinates — the forecast is for the
+user's home location, and `DECISIONS.md` 151 made the three home columns one
+field, so either both numbers are there or neither is. It is a separate code
+from `forecast_unavailable` because the two say different things to a user:
+*we don't know where you are* is fixed on the profile screen, *we have no
+weather for that day* is not fixed by anything. `DECISIONS.md` 173.
+
+`502` with `code: "stylist_failed"` when validation fails twice — and also when
+the model answers nothing usable, or the provider does not answer at all. **The
+one retry is spent only on a validation violation**, which is the only failure
+with something to say back to the model; a timeout is not retried, as
+`03-AI-CONTRACTS.md`'s failure table already says. Two calls maximum, the whole
+wardrobe each time. `DECISIONS.md` 171.
+
+**The swimwear/sleepwear exclusion is a setting**, `STYLIST_EXCLUDED_CATEGORIES`,
+comma-separated and validated against `02-DATA-MODEL.md`'s categories at process
+start. Emptying it sends the whole wardrobe. `AUDITS.md` **O-21** closes here;
+`01-ARCHITECTURE.md` has promised this list since Stage 0. `DECISIONS.md` 169.
+
+The look is persisted with `is_saved = false` before the response is returned. A
+look that failed validation twice is **not** persisted: the table has no column
+that could mark a row as never-served, so a rejected row would be
+indistinguishable later from a suggestion the user actually saw, and the
+save-rate arithmetic `02-DATA-MODEL.md` describes would count answers nobody
+ever got. `look_items.position` records the model's own ordering; `role` is left
+`NULL` — see `AUDITS.md` **O-25**, which 2.11 owns. `DECISIONS.md` 170.
 
 ### `GET /looks`
 Query: `is_saved`, `trip_id`, `from_date`, `to_date`. Returns looks with hydrated items.

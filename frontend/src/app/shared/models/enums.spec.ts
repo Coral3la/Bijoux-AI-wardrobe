@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CATEGORIES, CONDITIONS, SUBCATEGORIES } from './enums';
+import { CATEGORIES, CONDITIONS, OCCASIONS, SUBCATEGORIES } from './enums';
 
 describe('the closed vocabulary mirror', () => {
   it('gives every category a subcategory list', () => {
@@ -36,6 +36,10 @@ describe('the closed vocabulary mirror', () => {
       'swimwear',
       'sleepwear',
     ]);
+  });
+
+  it('mirrors the six occasions', () => {
+    expect([...OCCASIONS]).toEqual(['casual', 'work', 'evening', 'sport', 'formal', 'travel']);
   });
 
   it('mirrors the eight weather conditions', () => {

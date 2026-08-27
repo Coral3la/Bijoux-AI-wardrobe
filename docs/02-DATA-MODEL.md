@@ -35,7 +35,10 @@ to a garment the app cannot name is not to pretend it is not a garment —
 `AUDITS.md` **O-21**, `DECISIONS.md` 167. Nothing already committed is
 re-tagged: no seed row matches either value. The server-side exclusion
 `01-ARCHITECTURE.md` describes is what these two exist to be matched on, and it
-belongs to task 2.7, beside `ready`-only and `is_archived`.
+landed at task 2.7 beside `ready`-only and `is_archived` — as
+`STYLIST_EXCLUDED_CATEGORIES`, a setting validated against this list at process
+start, which is what makes these two members configurable rather than compiled
+in. `DECISIONS.md` 169.
 
 ### `subcategory` — validated against the parent category
 
@@ -227,13 +230,41 @@ authoritative for closed vocabularies by its own first line, and because the
 argument that closed every list above applies to it unchanged — `partly_cloudy`
 and `Partly Cloudy` and `partlycloudy` are the same weather and would be three
 i18n keys. Added at task 2.1, which is where `GET /weather` first has to return
-a value; `AUDITS.md` **O-8** makes the same case for `occasion` and is still
-open. `DECISIONS.md` 144.
+a value; `AUDITS.md` **O-8** made the same case for `occasion`, which is the
+section below and landed at task 2.7. `DECISIONS.md` 144.
 
 Open-Meteo answers in **WMO 4677 integers**, not strings. The map from those
 twenty-eight codes onto these eight lives in `app/services/weather.py`, which is
 the only place the provider's numbering appears — an unmapped code falls back to
 `cloudy` and logs, rather than failing a request over a label. `DECISIONS.md` 146.
+
+### `occasion` — 6 values, and the second here that is not a column type
+
+```
+casual · work · evening · sport · formal · travel
+```
+
+What the user is dressing for. `looks.occasion` holds one of these six and
+`trips.occasions` holds one per day, but both columns are `TEXT` and `JSONB` —
+no migration creates an `occasion` type, so **nothing in the database refuses a
+value outside this list.** What enforces it is `LookSuggestRequest` typing its
+field as the enum, which makes an unknown occasion a `422` before any row or any
+prompt exists.
+
+Added at task 2.7, the first task that accepts the value, and moved here from
+`04-API-SPEC.md`, which carried the six alone from Stage 0 until then — the one
+closed vocabulary in the project with no validator and no home. `AUDITS.md`
+**O-8**, which this closes. The argument is every other list's: `work` and
+`Work` and `office` are the same request, an occasion that is free text cannot
+be grouped or given an i18n key, and Stage 3's preference block aggregates over
+saved looks. `DECISIONS.md` 168.
+
+**`look_items.role` is deliberately *not* a section here.** `04-API-SPEC.md`
+comments six role values on the column and they do not map onto `category`:
+`dress` corresponds to none of them and `outerwear` is spelled `outer`. Task 2.7
+writes the column `NULL` rather than adopt a vocabulary on behalf of the task
+that first reads one — `AUDITS.md` **O-25**, owned by 2.11, and a list this
+document has not printed is a list the project has not decided.
 
 ---
 
