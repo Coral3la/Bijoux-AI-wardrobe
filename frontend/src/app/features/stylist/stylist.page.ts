@@ -1,0 +1,185 @@
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
+
+import { I18nService } from '../../core/i18n/i18n.service';
+import { StylistStore } from '../../core/state/stylist.store';
+import { SuggestRequest } from '../../shared/models/look.model';
+import { LookCard } from './look-card';
+import { LookDraft, LookRequestForm, todayInLocalTime } from './look-request-form';
+
+// Three lines for a four-to-eight second wait, so the last one is reached at
+// six and rested on. 05-FRONTEND-SPEC.md names the first two; the third is the
+// step between them and the answer.
+const STATUS_KEYS = [
+  'stylist.waiting.forecast',
+  'stylist.waiting.wardrobe',
+  'stylist.waiting.assembling',
+] as const;
+
+export const STATUS_INTERVAL_MS = 2000;
+
+// The look card's own shape, five tiles in the 2 + 3 arrangement
+// 05-FRONTEND-SPEC.md draws — a skeleton of the thing being built rather than
+// a spinner, which is what §2.8 asks for and what makes the wait read as
+// progress. Task 2.9 fills this outline in.
+const SKELETON_TILES = [0, 1, 2, 3, 4] as const;
+
+// Both optionals are omitted rather than sent as null. Absent is already what
+// the endpoint defaults them to — `include_outerwear: null` is "let the
+// weather rule decide" — and an omitted key cannot collide with the schema's
+// extra-field rejection. Same spread-conditional idiom as the wardrobe store's
+// `normalise`, for the same reason: the object carries only what it means.
+function toRequest(draft: LookDraft): SuggestRequest {
+  const notes = draft.notes.trim();
+  return {
+    occasion: draft.occasion,
+    date: draft.date,
+    ...(draft.include_outerwear !== null && { include_outerwear: draft.include_outerwear }),
+    ...(notes !== '' && { notes }),
+  };
+}
+
+@Component({
+  selector: 'app-stylist-page',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [LookCard, LookRequestForm],
+  template: `
+    <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
+      <header>
+        <h1 class="font-display text-3xl">{{ i18n.t('stylist.title') }}</h1>
+      </header>
+
+      @if (store.isSuggesting()) {
+        <section class="flex flex-col gap-4">
+          <div class="grid grid-cols-3 gap-3" aria-hidden="true">
+            @for (tile of tiles; track tile) {
+              <div class="aspect-square animate-pulse rounded-lg bg-surface"></div>
+            }
+          </div>
+          <!-- The status line is the accessible name of the wait: the tiles
+               above it are decoration and say so. aria-live so the cycling is
+               announced rather than silently replaced under a screen reader. -->
+          <p class="text-sm" role="status" aria-live="polite">{{ i18n.t(statusKey()) }}</p>
+        </section>
+      } @else if (look(); as look) {
+        <app-look-card
+          [look]="look"
+          [missingPieces]="missingPieces()"
+          [message]="message()"
+          (tryAgain)="startOver()"
+        />
+      } @else {
+        @if (store.error(); as key) {
+          <p class="text-sm font-medium text-danger">{{ i18n.t(key) }}</p>
+        }
+        <app-look-request-form
+          [draft]="draft()"
+          [weather]="store.weather()"
+          (draftChanged)="onDraftChanged($event)"
+          (submitted)="suggest()"
+        />
+      }
+    </main>
+  `,
+})
+export class StylistPage {
+  protected readonly i18n = inject(I18nService);
+  protected readonly store = inject(StylistStore);
+
+  protected readonly tiles = SKELETON_TILES;
+
+  // Casual and today, which is the request a user who touches nothing else
+  // sends. `include_outerwear: null` is Auto — the weather rule decides, which
+  // is the whole point of having built one.
+  protected readonly draft = signal<LookDraft>({
+    occasion: 'casual',
+    date: todayInLocalTime(),
+    include_outerwear: null,
+    notes: '',
+  });
+
+  private readonly statusIndex = signal(0);
+  private timer: ReturnType<typeof setInterval> | null = null;
+
+  protected readonly statusKey = computed(() => STATUS_KEYS[this.statusIndex()]);
+  protected readonly look = computed(() => this.store.result()?.looks[0] ?? null);
+  protected readonly message = computed(() => this.store.result()?.message ?? '');
+  protected readonly missingPieces = computed(() => this.store.result()?.missing_pieces ?? []);
+
+  constructor() {
+    // Reset first, then load: this store is providedIn: 'root' and a second
+    // visit arrives holding the first visit's look and forecast.
+    this.store.reset();
+    this.store.loadWeather(this.draft().date);
+
+    effect(() => {
+      if (this.store.isSuggesting()) {
+        this.startStatusCycle();
+      } else {
+        this.stopStatusCycle();
+      }
+    });
+
+    // The interval has no owner otherwise. Leaving one running behind the next
+    // screen is DECISIONS.md 107's failure with a cheaper timer in it.
+    inject(DestroyRef).onDestroy(() => this.stopStatusCycle());
+  }
+
+  // One method sets the state and refreshes the forecast, in that order, so
+  // there is no effect on the date to guard against firing on arrival — the
+  // constructor already made that call. Same arrangement the wardrobe page uses
+  // for the filters and the URL. DECISIONS.md 110.
+  protected onDraftChanged(draft: LookDraft): void {
+    const previous = this.draft();
+    this.draft.set(draft);
+    if (draft.date !== previous.date) {
+      this.store.loadWeather(draft.date);
+    }
+  }
+
+  protected suggest(): void {
+    this.store.suggest(toRequest(this.draft()));
+  }
+
+  // "Try again" goes back to the form rather than re-firing the last request:
+  // the draft is still on screen behind the card, and the reroll a user wants
+  // is usually the one with the notes field changed. reset() clears the
+  // forecast along with the look, so the date is re-asked for in the same two
+  // calls and the same order the constructor makes them.
+  protected startOver(): void {
+    this.store.reset();
+    this.store.loadWeather(this.draft().date);
+  }
+
+  // Guarded rather than assumed idle: the effect above re-runs on every read
+  // of `isSuggesting`, and a second interval started over a live one would be
+  // an interval nothing holds a handle to. One place creates it, one destroys
+  // it — the discipline the wardrobe store's PollRun is built on.
+  private startStatusCycle(): void {
+    if (this.timer !== null) {
+      return;
+    }
+    this.statusIndex.set(0);
+    this.timer = setInterval(() => {
+      // Clamped, not wrapped. At six seconds "Reading the forecast…" is no
+      // longer true, and a line that comes back round claims work that is
+      // behind us — the wait is bounded, so the last line is where it rests.
+      this.statusIndex.update((index) => Math.min(index + 1, STATUS_KEYS.length - 1));
+    }, STATUS_INTERVAL_MS);
+  }
+
+  private stopStatusCycle(): void {
+    if (this.timer === null) {
+      return;
+    }
+    clearInterval(this.timer);
+    this.timer = null;
+  }
+}

@@ -28,6 +28,14 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/wardrobe/item-detail.page').then((m) => m.ItemDetailPage),
   },
+  // Above the wildcard for the reason wardrobe/:id is: everything below it
+  // redirects. No entry point links here yet — the weather strip at 2.12 is
+  // the one 05-FRONTEND-SPEC.md draws, and it is not this task's to build.
+  {
+    path: 'stylist',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/stylist/stylist.page').then((m) => m.StylistPage),
+  },
   { path: '', pathMatch: 'full', redirectTo: 'wardrobe' },
   { path: '**', redirectTo: 'wardrobe' },
 ];
