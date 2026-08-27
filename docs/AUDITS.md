@@ -92,13 +92,13 @@ Ordered by how soon the answer is needed.
 **O-1 to O-11 are audit 1's.** Items numbered from **O-12** onward were opened
 by a task rather than by an audit, and say so in their own text — the numbering
 is shared so that nothing has two names, and the next audit reads them exactly
-as it reads the rest. Eight are closed so far: O-1 at task 1.4, O-4 at 1.5, O-3 and O-10 at 1.9, O-12 at 1.10 (superseded rather than taken), O-6 at 2.2, and **O-9 and O-22 at 2.4**. This sentence read "Two are closed so far" until 2.2 and had not moved since 1.5, while four headings above it were struck through — a count that is maintained in one place and contradicted in six is worse than no count, so it is now derived by reading the headings rather than remembered.
+as it reads the rest. Nine are closed so far: O-1 at task 1.4, O-4 at 1.5, O-3 and O-10 at 1.9, O-12 at 1.10 (superseded rather than taken), O-6 at 2.2, **O-9 and O-22 at 2.4**, and **O-24 at 2.5** — that last one was closed without this sentence moving, which is the derived-by-reading rule below being honoured in the headings and forgotten in the count. This sentence read "Two are closed so far" until 2.2 and had not moved since 1.5, while four headings above it were struck through — a count that is maintained in one place and contradicted in six is worse than no count, so it is now derived by reading the headings rather than remembered.
 **O-14 is the first that records an unverified surface rather than a
 contradiction** — a thing no document disagrees about and nobody has looked at.
 It was extended at 1.6 rather than duplicated, and **O-15** was opened by the
 same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
-task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day.
+task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -1045,6 +1045,45 @@ the numbering rule would spend the project's one retry on an integer nothing
 reads — in a table whose rules 7 and 8 already belong to 2.10 and 2.11. Stage 4
 reintroduces a day number beside the trip message that gives it a meaning.
 `DECISIONS.md` 163.
+
+#### O-25 · `look_items.role` has no vocabulary, and two foreseeable indexes are deferred — opened at task 2.6
+
+Two halves of one question — what `02-DATA-MODEL.md` prints for `look_items`
+that nothing can yet honour. Migration `0002` built the table exactly as
+printed; neither half is a defect in the migration.
+
+**The role vocabulary.** `02`'s DDL comments six values on the column —
+`top · bottom · outer · shoes · bag · accessory` — and `04-API-SPEC.md` gives
+`replace_role` (task 2.11) the same six. `Category` has **seven** members, and
+the two lists do not map: **`dress` corresponds to no role at all**, and the
+category spelled `outerwear` is the role spelled `outer`. Neither `enums.py` nor
+`enums.ts` knows the word `role`, so this is a second closed vocabulary living
+outside the document that is authoritative for closed vocabularies — the same
+shape as **O-8**, one column along. Nothing produces a role either:
+`STYLIST_SCHEMA` returns `item_ids` and no roles, and `_fake_response` does the
+same, so whatever fills the column is derived server-side or not at all.
+
+**Recommendation.** 2.7 decides, as the first writer, and the choice is real:
+derive `role` from `Category` through an explicit map — which forces an answer
+about `dress`, and about whether `outerwear` is stored under its category name
+or its role name — or leave the column `NULL` until 2.11 has a reader for it and
+carry `position` alone. If a vocabulary is adopted it goes into `02` first as a
+closed list, beside O-8's `occasion`; the two are one edit and arguably one
+task. **Do not let the six values enter the codebase from `04`'s prose.**
+
+**The indexes.** `02` prints none for either table beyond the primary keys, and
+`0002` created none. Two are foreseeable and neither is needed yet:
+`looks (user_id)`, for Stage 3's `GET /looks` filtered by user, `is_saved` and a
+date range; and `look_items (item_id)`, because **PostgreSQL does not index the
+referencing side of a foreign key** — so `ON DELETE CASCADE` from `items` scans
+the table, and 3.5's aggregation of attribute frequency per item scans it once
+per query. The composite primary key already covers every lookup by `look_id`,
+which is the direction 2.7 and 2.9 read.
+
+**Recommendation.** Adopt at Stage 3, where both readers arrive, and put them in
+`02` before writing the migration — a schema this project has not printed is a
+schema it has not decided. Building them at 2.6 would have been an index on two
+empty tables, chosen against no measured query.
 
 ### Noted in passing, not a documentation defect
 

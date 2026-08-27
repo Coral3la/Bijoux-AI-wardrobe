@@ -84,7 +84,7 @@ def _row_counts() -> dict[str, int]:
     with engine.connect() as conn:
         return {
             table: conn.scalar(text(f"SELECT count(*) FROM {table}")) or 0
-            for table in ("users", "items")
+            for table in ("users", "items", "looks", "look_items")
         }
 
 

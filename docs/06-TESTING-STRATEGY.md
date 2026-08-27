@@ -192,6 +192,8 @@ Three of these are worth more than a row in a table.
 
 **A mutation that cannot execute is not a mutation that survived, and a table that conflates them reads as evidence for a claim nobody tested.** Before recording a survivor, establish that the mutated line runs at all — the cheapest check is a deliberately fatal mutation in the same file, which must fail loudly. Anything that is genuinely unreachable by the suite gets recorded as **inconclusive**, with the reason, and never as a row implying coverage was measured.
 
+**Task 2.6 paid that second failure off, because it is the first task since 1.1 to add a migration.** A mutation to `0002_looks` executes only if the schema is rebuilt from it: `alembic downgrade 0001` with `DATABASE_URL` set to `TEST_DATABASE_URL` for that one command — never the value in `backend/.env`, which is the developer's own database — and then the next `pytest` re-upgrades from the mutated file. **The trap has a second half, and it was walked into at 2.6 before it was written down here:** the test database stays on the mutated schema after the run, so a control executed without downgrading again is red for the *previous* cycle's reason and reads as a broken deliverable rather than as a dirty database. Downgrade before every cycle, including the final control.
+
 ### The vision-service mutation run, task 1.2b
 
 Sixteen mutations plus a fatal control, against `validate_tags`, the required-field check and the rendered rules. Run from a pristine copy, baseline green at both ends (353 passed before and after). **All seventeen caught, none survived** — with one caught in a way that is worth more than the row.

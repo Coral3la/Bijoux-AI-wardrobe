@@ -23,11 +23,14 @@ their route matches on stops being the name the database reports.
 from pathlib import Path
 
 from app.db.base import Base
-from app.models import item, user  # noqa: F401  — registers both tables on Base.metadata
+from app.models import item, look, user  # noqa: F401  — registers the tables on Base.metadata
 
 MIGRATION_0001 = Path(__file__).resolve().parents[2] / "alembic" / "versions" / "0001_initial.py"
 
-# Every constraint `0001` creates, under the name the convention expands to.
+# Every constraint the migrations create, under the name the convention expands
+# to. `0002`'s five are in the same set rather than a second one: the property
+# under test is that one list matches the metadata, and splitting it by
+# migration would let a table belong to neither.
 EXPECTED_NAMES = {
     "pk_users",
     "uq_users_email",
@@ -37,10 +40,17 @@ EXPECTED_NAMES = {
     "ck_items_formality_range",
     "ck_items_warmth_range",
     "fk_items_user_id_users",
+    "pk_looks",
+    "fk_looks_user_id_users",
+    "pk_look_items",
+    "fk_look_items_look_id_looks",
+    "fk_look_items_item_id_items",
 }
 
 # The two the write paths match on by name, in a narrow `if` so that a violation
-# nobody anticipated still becomes a 500 rather than a wrong answer (037).
+# nobody anticipated still becomes a 500 rather than a wrong answer (037). Both
+# are `0001`'s, which is why the literal check below reads that file alone: no
+# route matches on a name `0002` spells, and one that did would belong here.
 MATCHED_BY_A_ROUTE = ("uq_users_email", "uq_items_short_id")
 
 

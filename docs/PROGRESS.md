@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 2 — The Stylist
-**Status:** Stage 2 in progress — 2.1 to 2.5 complete. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below).
+**Status:** Stage 2 in progress — 2.1 to 2.6 complete; **2.6a** is next, and it takes migration `0003`. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below).
 
 This header said "Stage 1 in progress — 1.1 … 1.8 complete" until task 2.2, four tasks after 1.9 shipped and one after the log below recorded Stage 1 as closed. A tracker that contradicts its own log is worse than a stale one, because the log reads as the correction and the header is what anybody looks at first.
 
@@ -47,7 +47,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Wardrobe serialiser
 - [x] Stylist service
 - [x] Response validation
-- [ ] Looks schema
+- [x] Looks schema
 - [ ] Vocabulary — swimwear and sleepwear (2.6a, opened by O-21)
 - [ ] Suggest endpoint
 - [ ] Stylist screen
@@ -438,3 +438,13 @@ The task was decided by three things the documents did not agree on, and by one 
 - **Sixteen mutations, all caught, control green at both ends.** Including the four that would otherwise read as taste: the rule order reversed so rule 2 reports before rule 1, rule 3 read by category instead of by layer, `.upper()` deleted, and the `include_outerwear` guard deleted. The last two close the one hole the first run left open — the `logger.warning` deleted, and the same line stripped of its `extra=` — caught by a test that reads `record.violation` rather than `caplog.text`, which is `test_weather.py`'s lesson: the development formatter drops every extra silently, so a test written against the rendered text passes with the violation missing.
 
 **`stylist.py` now imports `weather.py`** — the first edge between the two Stage 2 services. Harmless today, since `weather.py` imports only `enums.py`, and worth knowing before anything in it reaches back the other way.
+
+**2026-08-27 — task 2.6, look persistence.** **764 backend tests pass (760 before, 4 added).** Frontend untouched and not run — this task ships no screen and changes no wire shape the browser reads. New: `backend/alembic/versions/0002_looks.py`, `backend/app/models/look.py`, `backend/tests/integration/test_looks_rows.py` (4 tests). Changed: `backend/app/models/__init__.py`, `backend/tests/unit/test_db_naming.py` (`EXPECTED_NAMES` gains `0002`'s five names), `backend/tests/conftest.py` (the leak guard counts both new tables), and four documents besides this one. Two entries, `DECISIONS.md` 165 and 166. Audit **O-25 opened**.
+
+**The migration has not been applied to the developer's database.** The suite migrates `TEST_DATABASE_URL` itself, so the tests above ran against the real schema; `DATABASE_URL` is one `alembic upgrade head` behind until it is run by hand.
+
+- **Three printed columns are not in `0002`, and one of them names a table that does not exist.** `feedback` and `worn_at` belong to `0003`, `trip_id` to `0004` — which is also what creates `trips`. `app/models/look.py` carries the same three omissions, for the reason `items.wear_count` established at 0.7: a model declaring a column the database lacks breaks every query against it. 165.
+- **`role` and `position` land unwritten, and the six roles `02` comments were not adopted.** `Category` has seven members; `dress` maps to no role and `outerwear` is the role spelled `outer`. Nothing produces a role — the stylist returns ids — so the value is derived server-side or it is null, and that is a vocabulary decision, which this project makes in `02` first. **O-25**, for 2.7 as the first writer, together with the two indexes `02` does not print: `looks (user_id)` and `look_items (item_id)`, the second because PostgreSQL does not index the referencing side of a foreign key. Both deferred to Stage 3, where the readers arrive. 166.
+- **Six mutations, all caught, control green at both ends** — and the first mutation run in this project that had to rebuild a schema to execute at all. `06-TESTING-STRATEGY.md` has recorded since before 1.1 that a mutated migration never runs, because `conftest.py` upgrades a database that already holds the revision; the answer is `alembic downgrade 0001` before each cycle, with `DATABASE_URL` overridden to `TEST_DATABASE_URL` for that one command. **The second half of that trap was walked into here before it was written down:** the first "final control" came back red with four failures, because the test database was still on the previous cycle's mutated schema. It is in `06` now.
+- **The two cascade tests defend different edges, and the pair only became clear under mutation.** Removing `ON DELETE CASCADE` from `look_items.look_id` kills the look-deletion test **and nothing else** — deleting a *user* still empties `look_items`, because `look_items.item_id → items` cascades first and takes the rows with it. So the user-deletion test does not defend the looks-side cascade; only the look-deletion test does. Two tests that read as near-duplicates measure two different constraints.
+- **`downgrade()` was run, not assumed.** `0002 -> 0001` drops both tables cleanly; it was exercised seven times over the mutation run.
