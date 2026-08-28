@@ -1,17 +1,14 @@
-import { Occasion } from './enums';
+import { Occasion, Role } from './enums';
 import { Item } from './item.model';
 
-// The body of `POST /looks/suggest`. `anchor_item_id` arrived at 2.10; the
-// three swap fields arrive at 2.11, and until then the request schema
-// *refuses* them rather than ignoring them — so they are absent from this type
-// rather than optional in it. A field this client cannot send is a field it
-// must not offer.
+// The body of `POST /looks/suggest`, whole since 2.11 put the three swap
+// fields on the wire beside 2.10's anchor.
 //
-// All three optionals are genuinely omitted rather than sent as null: absent
-// is what the server already defaults them to, and an omitted key cannot trip
-// the extra-field rejection the schema applies. 04-API-SPEC.md.
+// Every optional is genuinely omitted rather than sent as null or empty:
+// absent is what the server already defaults them to, and an omitted key
+// cannot trip the extra-field rejection the schema applies. 04-API-SPEC.md.
 //
-// `anchor_item_id` is the row's UUID, the id this client already holds. The
+// The ids are row UUIDs, which are the only ids this client ever holds. The
 // `short_id` the prompt prints never leaves the server.
 export interface SuggestRequest {
   readonly occasion: Occasion;
@@ -19,6 +16,12 @@ export interface SuggestRequest {
   readonly include_outerwear?: boolean;
   readonly notes?: string;
   readonly anchor_item_id?: string;
+  // Sent together by the ↻ badge and by nothing else: `replace_role` names
+  // which of the locked items may move, so the endpoint answers 422 to a role
+  // with no locks.
+  readonly locked_item_ids?: readonly string[];
+  readonly replace_role?: Role;
+  readonly exclude_item_ids?: readonly string[];
 }
 
 // `category` is a plain string for the same reason item.model.ts leaves

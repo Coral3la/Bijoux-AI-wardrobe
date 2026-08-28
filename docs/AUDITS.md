@@ -98,7 +98,7 @@ contradiction** — a thing no document disagrees about and nobody has looked at
 It was extended at 1.6 rather than duplicated, and **O-15** was opened by the
 same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
-task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break.
+task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, which is Stage 3's. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -1101,7 +1101,7 @@ reads — in a table whose rules 7 and 8 already belong to 2.10 and 2.11. Stage 
 reintroduces a day number beside the trip message that gives it a meaning.
 `DECISIONS.md` 163.
 
-#### O-25 · `look_items.role` has no vocabulary, and two foreseeable indexes are deferred — role answered at 2.7, open until 2.11 and Stage 3
+#### O-25 · ~~`look_items.role` has no vocabulary~~, and two foreseeable indexes are deferred — **vocabulary closed at task 2.11**, indexes open until Stage 3
 
 Two halves of one question — what `02-DATA-MODEL.md` prints for `look_items`
 that nothing can yet honour. Migration `0002` built the table exactly as
@@ -1155,6 +1155,29 @@ vocabulary, and the ordering is destroyed at the moment of persistence if
 nothing records it — where a role can be derived later from data the row keeps.
 It has no reader until 2.11 either; that is a column filled early, not a
 vocabulary invented early.
+
+**The vocabulary half closed at task 2.11, and the list is `04`'s six
+unchanged.** `top · bottom · outer · shoes · bag · accessory` now has a section
+in `02-DATA-MODEL.md`, a `Role` in `enums.py`, a `ROLES` in `enums.ts` and a
+test on each side transcribing it — the shape `occasion` took at 2.7. What
+enforces it is `LookSuggestRequest.replace_role`, exactly as with `occasion`:
+no migration creates a type and `look_items.role` is still `TEXT`.
+
+**The two mismatches this item was opened over were answered rather than
+papered over.** `outerwear` the category is `outer` the role, and the role's
+spelling wins because it is the one on the wire. `dress` is **not** given a
+role: replacing a dress can legally return a top and a bottom under rule 2,
+which is a different look and not the single-item swap `replace_role` names, so
+the ↻ badge is not drawn on a dress tile and `05-FRONTEND-SPEC.md` is annotated
+to say so. The category→role map lives in `enums.ts` alone, because the badge
+is the only thing that derives one.
+
+**The column is still `NULL`, and that is the second option again rather than
+an omission.** 2.11 turned out to read a role off the item's `category` in the
+browser, never out of `look_items`, so the reader O-25 was waiting for did not
+arrive with the vocabulary. Writing it now would fill a column for Stage 3's
+aggregation in advance, which is the thing 2.7 declined to do. `DECISIONS.md`
+175, 176.
 
 **The index half is untouched and still Stage 3's.** Both remain unbuilt and
 both readers still arrive there. 2.7 reads `look_items` only by `look_id`, which
@@ -1214,6 +1237,62 @@ under it. Failing that, `_fake_response` gains one clause: include the first
 `outerwear` item when the rule demands one. Whichever is taken, it is a decision
 about the fake's contract and belongs in `06-TESTING-STRATEGY.md`'s fake-AI
 section beside 159.
+
+#### O-28 · ~~The validation table counts no slot: two base tops, then two bottoms~~ — **opened and closed at task 2.11a, widened and closed again at 2.11b**
+
+`prompts/stylist_system.md` has carried the line since Stage 0 — *"Never place
+two `base` tops in the same look unless one is explicitly a layering piece"* —
+and `03-AI-CONTRACTS.md`'s validation table had eight rules, none of them about
+it. Every other OUTPUT line in that prompt has a rule behind it: the id
+alphabet is rule 1, the completeness pair is rule 2, the outer layers are rule
+3, the anchor and the locks are rules 7 and 8. This one had nothing, so a look
+with a shirt and a tee in it was a `200`.
+
+**Observed rather than reasoned about:** the model does this often, which is
+what makes it worth a rule rather than a note. The escape clause is why. *"Unless
+one is explicitly a layering piece"* asks the model for a judgement it can make
+in prose while returning two rows both tagged `layer: base`, and the data is
+what the renderer draws — the card lays a look out by `layer`, so two base tops
+arrive in one group, one on top of the other.
+
+**Closed in the same task, in two halves.** Rule 9 is the enforcement: no look
+holds two items that are `category: top` **and** `layer: base`, read from the
+wardrobe that was sent, exactly as rule 3 reads `outer`. And the prompt line was
+rewritten to name the tag the validator reads rather than a judgement the model
+makes — *"Never place two tops tagged layer `base`… allowed only when it is
+tagged `mid`"* — in `03` and in `stylist_system.md`, which are transcriptions of
+each other (`DECISIONS.md` 158).
+
+**Why both, when either would have closed it.** The rule alone would have been
+correct and expensive: the retry is spent on a violation the prompt had already
+half-asked for, and a second offence is `502 stylist_failed` on a look the user
+was waiting four to eight seconds for. The prompt alone would have been cheap
+and unenforced, which is the state this item is about. `DECISIONS.md` 178.
+
+**Reopened four hours later by the same bug in a different column, and the
+widening is the real answer.** A shoe-swap came back with long jeans *and*
+shorts in one look. Rule 9 as written at 2.11a could not see it — it counted
+tops — and neither could anything else in the table: **rule 2 asks whether a
+bottom is present and never how many.** That is the shape of the item as it
+should have been read the first time. The table counted no slot at all, and
+tops were simply the first slot anyone noticed.
+
+**Closed again at 2.11b as one composition rule** covering every slot a person
+has one of — `outer` (rule 3, absorbed), the `base` top, the bottom, the dress,
+the shoes, the bag, and accessories at the prompt's own limit of two — plus the
+exclusion rule 2 could never state: a dress is worn *instead of* a top and a
+bottom, not beside one. Rule 3 keeps its number as a struck pointer, because
+eight documents and three code comments name it.
+
+**One consequence outside the validator, found by running the fake rather than
+by reading it.** `_fake_items` joined a dress with a top and a bottom whenever
+the dress was anchored or locked, so under `USE_FAKE_AI` — the flag
+`07-DEPLOYMENT.md` runs the whole E2E job with — every anchored dress and every
+swap on a dress look became a `502` the moment rule 9 widened. Fixed in the
+same commit, which is the third time a validation rule has had to teach the
+fake something (rules 7, 8, and now 9). **This is O-27's shape exactly**, and
+O-27 is still open: a fake that must satisfy every rule it is judged by is a
+second stylist, and nothing about that has been decided. `DECISIONS.md` 179.
 
 ### Noted in passing, not a documentation defect
 

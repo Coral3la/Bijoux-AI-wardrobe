@@ -152,6 +152,60 @@ Frontend: a small ↻ badge on each item in the look card. Tapping it locks the 
 
 Most looks are fine except one piece, usually the shoes. "Try again" rerolls everything and throws away the good parts. Roughly half a day, same endpoint, no new infrastructure.
 
+**The three fields are one feature and landed together.** `replace_role` without `locked_item_ids` is a `422` by `04-API-SPEC.md`'s own rule, so the swap cannot be built one field at a time: locking the rest of the look is what gives the role something to mean.
+
+**`AUDITS.md` O-25's vocabulary half closed here, and a dress has no role.** `top · bottom · outer · shoes · bag · accessory` is now a section in `02-DATA-MODEL.md` with a `Role` in `enums.py` and a `ROLES` in `enums.ts`, enforced by `replace_role` alone — `look_items.role` is **still `NULL`**, because the badge derives a role from the item's own `category` in the browser and nothing reads the column before Stage 3. The two mismatches the audit opened over are answered: `outerwear` the category is `outer` the role, and `dress` is not a role at all, since replacing a dress can legally return a top and a bottom under rule 2. So the badge is drawn on every tile **except a dress**, which is an amendment to `05-FRONTEND-SPEC.md` rather than an implementation detail. `DECISIONS.md` 175, 176.
+
+**One new error code, and one `422` deliberately left generic.** `locked_unavailable` for a locked id the wardrobe would not send — `anchor_unavailable`'s check and its widening, and the second `422` here a correct client can provoke, since a locked garment can be archived between the look and the tap. A role with no locks stays `validation_error`: the badge always sends both, so no correct client can build that body. An unknown `exclude_item_ids` entry is dropped rather than refused. `DECISIONS.md` 177.
+
+**The fake had to learn the locks, for the reason the anchor taught at 2.10.** `_fake_items` keeps every locked item and never picks an excluded one; without it rule 8 would reject the placeholder twice and every `USE_FAKE_AI` swap — E2E journeys included — would be a `502`. Swap requests send **no** `anchor_item_id`: every garment the anchor protected is locked anyway, and on the anchored tile itself rule 7 would demand the item rule 8 forbids.
+
+### 2.11a Rule 9 — two base-layer tops
+
+Add validation rule 9 to `03-AI-CONTRACTS.md`'s table and to
+`validate_look_response`: no look contains two items that are `category: top`
+and `layer: base`. Rewrite the system prompt's OUTPUT line so it names the tag
+the rule reads. One unit test, no new error code, no endpoint change.
+
+**It is a bug rather than a feature, which is why it is lettered and not
+numbered.** The prompt has forbidden two base tops since Stage 0 and nothing
+enforced it — `AUDITS.md` **O-28**, opened and closed here — while every other
+OUTPUT line in that block has a rule behind it. The model does this often
+enough to be worth the rule.
+
+**The prompt is edited in the same commit, and that is half the task.** *"Unless
+one is explicitly a layering piece"* is a judgement the model can make in prose
+while returning two rows both tagged `base`; the new line names the tag, so the
+retry becomes the exception rather than the ordinary route to a `502`. The rule
+without the rewrite would be correct and expensive. `DECISIONS.md` 178.
+
+Half an hour. Rule 9 reads both columns because `LAYERS_BY_CATEGORY` gives
+`top` no answer — a top is legitimately `base` or `mid`, so neither column
+identifies a second shirt alone.
+
+### 2.11b Rule 9 widened — one item per slot
+
+Generalise 2.11a's rule from base tops to every slot a person has one of:
+one `outer`, one `base` top, one `bottom`, one `dress`, one pair of `shoes`,
+one `bag`, accessories at the prompt's own limit of two — and no separate
+`top` or `bottom` beside a `dress`. Rule 3 is absorbed into it and keeps its
+number. Four unit tests, no new error code, no endpoint change.
+
+**Opened by a look that reached a user**: a shoe-swap answered with long jeans
+*and* shorts. 2.11a fixed the instance it was shown and this fixes the class —
+**rule 2 asks whether a bottom is present and never how many**, so nothing in
+the table could see it. `AUDITS.md` **O-28** widened; the item is the first
+this project has closed twice.
+
+**The fake had to be taught the rule, which is the third time.** `_fake_items`
+joined a dress with a top and a bottom whenever the dress was anchored or
+locked, so under `USE_FAKE_AI` every anchored dress became a `502` the moment
+the rule widened — measured by running it. Rules 7, 8 and now 9 have each
+needed this, which is `AUDITS.md` **O-27**'s open question rather than
+something this task settles. `DECISIONS.md` 179.
+
+Half an hour.
+
 ### 2.12 Weather strip — and the only way into the stylist
 A persistent strip on the wardrobe screen showing the current temperature and condition for the user's home location, tappable through to the stylist. Small piece of work, disproportionate effect on how alive the app feels.
 
@@ -173,11 +227,13 @@ A persistent strip on the wardrobe screen showing the current temperature and co
 - [ ] Two identical requests produce a valid look both times
 - [ ] "Style around this" on a specific item returns a look containing that item, 5 times out of 5
 - [ ] Swapping the shoes keeps every other item identical and never returns the rejected shoe
+- [ ] A look never contains two tops tagged `base`; a base top under a `mid` overshirt still passes
+- [ ] A look never contains two bottoms, two pairs of shoes, or a dress beside a top or a bottom
 - [ ] A request with no anchor and no locks behaves exactly as before
 
 ## Commit checkpoints
 
-`feat(weather): open-meteo client and rules` · `test: weather rule boundaries` · `feat(api): profile and location search` · `feat(ai): wardrobe serializer` · `feat(ai): stylist service` · `feat(ai): response validation` · `feat(db): looks schema` · `feat(core): swimwear and sleepwear categories` · `feat(api): suggest endpoint` · `feat(web): stylist screen` · `feat(web): look card` · `feat(ai): anchor item support` · `feat(web): style around this` · `feat(web): profile and home city` · `feat(ai): single item swap` · `feat(web): swap button` · `feat(web): weather strip`
+`feat(weather): open-meteo client and rules` · `test: weather rule boundaries` · `feat(api): profile and location search` · `feat(ai): wardrobe serializer` · `feat(ai): stylist service` · `feat(ai): response validation` · `feat(db): looks schema` · `feat(core): swimwear and sleepwear categories` · `feat(api): suggest endpoint` · `feat(web): stylist screen` · `feat(web): look card` · `feat(ai): anchor item support` · `feat(web): style around this` · `feat(web): profile and home city` · `feat(ai): single item swap` · `feat(web): swap button` · `fix(ai): reject two base-layer tops in a look` · `fix(ai): one item per slot in a look` · `feat(web): weather strip`
 
 ## If you fall behind
 

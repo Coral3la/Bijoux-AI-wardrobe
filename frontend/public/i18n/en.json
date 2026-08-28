@@ -295,10 +295,13 @@
   "stylist.look.layerOther": "Also",
   "stylist.look.missing": "What would finish this",
   "stylist.look.tryAgain": "Try again",
+  "stylist.look.swap": "Swap {{item}} for something else",
+  "stylist.look.swapping": "Finding another piece…",
   "stylist.error.wardrobeTooSmall": "Bijoux needs at least six tagged items to build an outfit. Add a few more and try again.",
   "stylist.error.homeLocationMissing": "Bijoux doesn't know where you are, so it can't check the weather. Set your home city in your profile.",
   "stylist.error.forecastUnavailable": "We have no forecast for that day. Try a date closer to today.",
   "stylist.error.anchorUnavailable": "Bijoux can't build a look around that item. It may still be getting tagged, or it may be one Bijoux keeps out of outfits.",
+  "stylist.error.lockedUnavailable": "Bijoux can't rebuild that look — one of the other items is no longer in your wardrobe. Ask for a new look instead.",
   "stylist.error.stylistFailed": "We couldn't put a look together just now. Please try again.",
   "stylist.error.validation": "We couldn't ask for that look. Check the occasion and the date, then try again.",
   "stylist.error.general": "We couldn't put a look together. Please try again."

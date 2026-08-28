@@ -272,8 +272,8 @@ OUTPUT
 - Every look must include shoes.
 - Add a bag and up to two accessories when they improve the look.
 - Never place two "outer" layer items in the same look.
-- Never place two "base" tops in the same look unless one is explicitly a
-  layering piece.
+- Never place two tops tagged layer "base" in the same look. A second top is
+  allowed only when it is tagged "mid", the layering piece.
 
 STYLING PRINCIPLES
 - Proportion: pair oversized or wide items with fitted or tucked items.
@@ -454,16 +454,23 @@ retry, the give-up and `502 stylist_failed` belong to `POST /looks/suggest` at
 
 1. **Every `item_id` exists in this user's wardrobe.** This is the hallucination guard and it is non-negotiable. An unknown ID is never rendered.
 2. Every look contains shoes, and either (a top and a bottom) or a dress.
-3. No look contains two `outer` items.
+3. ~~No look contains two `outer` items.~~ **Absorbed into rule 9 at task 2.11b**, where it is one slot of a table. The number stays in this list rather than being reclaimed: eight documents, a test and three code comments name rule 3, and a renumbering that buys nothing is how a reference becomes wrong.
 4. `len(looks) == expected_days`.
 5. Every item in `packing_list.item_ids` appears in at least one look. **Stage 4, with the field it reads.** `STYLIST_SCHEMA` carries no `packing_list` until the trip message is designed beside it (`DECISIONS.md` 157), so this rule has nothing to look at before then and 2.5 does not implement it.
 6. When the weather rule required outerwear, each look for that day contains an `outerwear` item — **unless the user asked for no outerwear.** `DECISIONS.md` 158 gave an explicit `include_outerwear: false` precedence over the weather rule and the system prompt says so in words, so a look that obeyed the user at 12°C is correct; enforcing this rule over it would spend the retry and then answer `502` to the one answer that did as it was told. Narrowed at 2.5. Rule 6 reads the rule *sentence* through `weather.requires_outerwear`, never a temperature — the stylist is never sent a number.
 7. When `anchor_item_id` was supplied, it appears in the returned look.
 8. When `locked_item_ids` were supplied, every one of them appears, and the rejected item does not.
+9. **At most one item per slot, and a dress instead of separates.** One `outer` layer item, one `top` tagged `layer: base`, one `bottom`, one `dress`, one pair of `shoes`, one `bag`, and at most two accessories — and where a `dress` is present, no separate `top` or `bottom` at all. Read from the wardrobe that was sent, the way rule 3 read `outer`. Added at task 2.11a for base tops alone and widened at **2.11b**, after a shoe-swap answered with long jeans and shorts in one look.
 
 Rules 7 and 8 are fully deterministic and make excellent E2E assertions — the requested item is either there or it is not. They arrive with the anchor at 2.10 and the swap at 2.11, which are the tasks that put the fields on the wire.
 
-Rule 3 is read by `layer`, not by category: the system prompt says *"Never place two `outer` layer items"*, and `LAYERS_BY_CATEGORY` admits `mid` for outerwear, so a cardigan under a coat is a legal look and two coats are not. Rule 1 is checked against **the wardrobe that was sent**, which after 2.6a is narrower than everything the user owns — an id the model was never shown is a hallucination whether or not the garment is in the drawer.
+**Rule 2 says a look is not missing anything; rule 9 says it does not wear anything twice.** They are the two halves of one question — *can a person put this on?* — and neither implies the other: rule 2 asks whether a bottom is present and never how many, which is exactly how two pairs of jeans reached a user.
+
+The slots are read from the column that names them, and the mixture is the vocabulary's rather than an inconsistency. **`outer` is read by `layer`** — this is rule 3's own reading, absorbed unchanged: `LAYERS_BY_CATEGORY` admits `mid` for outerwear, so a cardigan under a coat is a legal look and two coats are not. **The base top needs both columns**, because `top` is the one category `LAYERS_BY_CATEGORY` gives no answer for — a top is legitimately `base` or `mid`, so `category` alone would refuse the overshirt the prompt allows and `layer` alone would refuse the jeans. A tank under an overshirt is a legal look; two base tops are two shirts worn at once. **The rest are read by `category`**, which is all a bag or a pair of shoes needs.
+
+**The dress clause excludes `top` and `bottom` and nothing else.** A coat over a dress is a different slot and one of the commonest looks there is; a shirt worn open over a dress is refused, which is the cost of a rule that reads categories rather than intent.
+
+**The system prompt line was rewritten in the same task that added rule 9.** It read *"unless one is explicitly a layering piece"*, which is a judgement the model made in prose while returning two rows both tagged `base` — the escape clause and the data disagreed, and the model took the clause. It now names the tag the validator reads, so the retry is the exception rather than the route to a `502`. `DECISIONS.md` 178, `AUDITS.md` **O-28**. Rule 1 is checked against **the wardrobe that was sent**, which after 2.6a is narrower than everything the user owns — an id the model was never shown is a hallucination whether or not the garment is in the drawer.
 
 Rule 6 is the one that catches real drift. Assert it against hand-built `StylistResponse` objects, which is what `tests/unit/test_look_validation.py` does. **There is no recorded response fixture and there cannot be one:** `short_id`s are generated per row, so a fixture naming literal ids describes items no database holds and fails rule 1 — the hallucination guard — on every call (`DECISIONS.md` 159).
 

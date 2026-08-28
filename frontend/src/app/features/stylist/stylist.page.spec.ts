@@ -184,6 +184,34 @@ async function type(value: string): Promise<void> {
   await fixture.whenStable();
 }
 
+// The three garments a swap is measured on, and enough of a look to lay out:
+// shoes are the piece users reject most, which is the example 05 and §2.11
+// both use.
+const SHOES = item({
+  id: 'item-shoes',
+  category: 'shoes',
+  layer: 'standalone',
+  display_name: 'loafers',
+});
+const SHIRT = item({ id: 'item-top', category: 'top', layer: 'base', display_name: 'shirt' });
+const JEANS = item({ id: 'item-jeans', category: 'bottom', layer: 'base', display_name: 'jeans' });
+
+function lookOf(items: readonly Item[]): SuggestResponse {
+  const base = response();
+  return { ...base, looks: [{ ...base.looks[0], items }] };
+}
+
+function swapBadge(name: string): HTMLButtonElement {
+  return element().querySelector<HTMLButtonElement>(
+    `button[aria-label="Swap ${name} for something else"]`,
+  )!;
+}
+
+async function tapSwap(name: string): Promise<void> {
+  swapBadge(name).click();
+  await fixture.whenStable();
+}
+
 describe('StylistPage', () => {
   beforeEach(async () => {
     currentUser = user();
@@ -502,5 +530,106 @@ describe('StylistPage', () => {
     await fixture.whenStable();
 
     expect(text()).toContain(en['stylist.error.anchorUnavailable']);
+  });
+
+  // --- the swap, task 2.11 --------------------------------------------------
+
+  it('locks the other items, names the role and rejects the one that was tapped', async () => {
+    await render();
+    await submit();
+    suggestRequest().flush(lookOf([SHOES, SHIRT, JEANS]));
+    await fixture.whenStable();
+
+    await tapSwap('loafers');
+
+    expect(suggestRequest().request.body).toEqual({
+      occasion: 'casual',
+      date: todayInLocalTime(),
+      locked_item_ids: ['item-top', 'item-jeans'],
+      replace_role: 'shoes',
+      exclude_item_ids: ['item-shoes'],
+    });
+  });
+
+  // The anchor is dropped on purpose: every garment it was protecting is
+  // locked here anyway, and on the anchored tile itself rule 7 would require
+  // the item that rule 8 forbids — a 502 by construction.
+  it('sends no anchor on a swap, even when the look was anchored', async () => {
+    anchorParam = 'item-top';
+    collection = [SHIRT];
+    await render();
+    await submit();
+
+    const anchored = suggestRequest();
+    expect(anchored.request.body).toHaveProperty('anchor_item_id', 'item-top');
+    anchored.flush(lookOf([SHOES, SHIRT, JEANS]));
+    await fixture.whenStable();
+
+    await tapSwap('loafers');
+
+    expect(suggestRequest().request.body).not.toHaveProperty('anchor_item_id');
+  });
+
+  it('accumulates the rejected items across repeated swaps', async () => {
+    await render();
+    await submit();
+    suggestRequest().flush(lookOf([SHOES, SHIRT, JEANS]));
+    await fixture.whenStable();
+
+    await tapSwap('loafers');
+    const heels = item({
+      id: 'item-heels',
+      category: 'shoes',
+      layer: 'standalone',
+      display_name: 'heels',
+    });
+    suggestRequest().flush(lookOf([heels, SHIRT, JEANS]));
+    await fixture.whenStable();
+
+    await tapSwap('heels');
+
+    // 05-FRONTEND-SPEC.md says the rejected item is *added* to the list, so a
+    // second tap cannot be answered with the shoe the first one turned down.
+    expect(suggestRequest().request.body).toHaveProperty('exclude_item_ids', [
+      'item-shoes',
+      'item-heels',
+    ]);
+  });
+
+  it('keeps the look on screen and says so when a swap fails', async () => {
+    await render();
+    await submit();
+    suggestRequest().flush(lookOf([SHOES, SHIRT, JEANS]));
+    await fixture.whenStable();
+
+    await tapSwap('loafers');
+    suggestRequest().flush(
+      { code: 'locked_unavailable' },
+      { status: 422, statusText: 'Unprocessable Content' },
+    );
+    await fixture.whenStable();
+
+    expect(text()).toContain(en['stylist.error.lockedUnavailable']);
+    // The card is still there, badge and all: nothing changed, so nothing on
+    // screen should have.
+    expect(swapBadge('loafers')).not.toBeNull();
+    expect(form()).toBeNull();
+  });
+
+  it('forgets the exclusions when the user starts over', async () => {
+    await render();
+    await submit();
+    suggestRequest().flush(lookOf([SHOES, SHIRT, JEANS]));
+    await fixture.whenStable();
+
+    await tapSwap('loafers');
+    suggestRequest().flush(lookOf([SHOES, SHIRT, JEANS]));
+    await fixture.whenStable();
+
+    await press(en['stylist.look.tryAgain']);
+    weatherRequest().flush(weather());
+    await submit();
+
+    expect(suggestRequest().request.body).not.toHaveProperty('exclude_item_ids');
   });
 });

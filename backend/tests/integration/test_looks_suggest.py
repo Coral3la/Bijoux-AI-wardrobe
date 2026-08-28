@@ -550,6 +550,213 @@ def test_an_anchor_that_is_not_a_uuid_is_the_schema_s_own_rejection(
     assert fake.calls == 0
 
 
+# --- the swap, task 2.11 -----------------------------------------------------
+
+
+def test_the_locks_the_role_and_the_exclusion_reach_the_stylist(
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    make_item: Callable[..., Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+    cloudinary_configured: None,
+) -> None:
+    # What the ↻ badge sends: every other item locked, the tapped item's role
+    # named, the tapped item rejected. The locks and the exclusion cross the
+    # wire as UUIDs and reach the prompt as `short_id`s, which is `_anchor`'s
+    # substitution on three more fields.
+    shoes, top, bottom = wardrobe[0], wardrobe[1], wardrobe[2]
+    loafers = make_item(user_id=user.id, status=ItemStatus.READY, category=Category.SHOES)
+    fake = stylist(answer(top.short_id, bottom.short_id, loafers.short_id))
+
+    response = suggest(
+        client,
+        user,
+        authorization,
+        locked_item_ids=[str(top.id), str(bottom.id)],
+        replace_role="shoes",
+        exclude_item_ids=[str(shoes.id)],
+    )
+
+    assert response.status_code == 200
+    context = fake.contexts[0]
+    assert context.locked_ids == (top.short_id, bottom.short_id)
+    assert context.excluded_ids == (shoes.short_id,)
+    assert context.replace_role == "shoes"
+    # `STAGE-2`'s acceptance criterion, at the seam it is about: the locked
+    # garments came back and the rejected one did not.
+    returned = [item["short_id"] for item in response.json()["looks"][0]["items"]]
+    assert top.short_id in returned and bottom.short_id in returned
+    assert shoes.short_id not in returned
+
+
+def test_a_look_that_dropped_a_locked_item_is_retried_and_then_refused(
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # Rule 8 through the endpoint that owns the retry: the violation is carried
+    # back to the model in `correction=`, and a second answer that breaks it
+    # again is a 502 rather than a look with the user's locked shirt missing.
+    shoes, top, bottom = wardrobe[0], wardrobe[1], wardrobe[2]
+    fake = stylist(answer(shoes.short_id, bottom.short_id, wardrobe[3].short_id))
+
+    response = suggest(
+        client,
+        user,
+        authorization,
+        locked_item_ids=[str(top.id), str(bottom.id)],
+        replace_role="shoes",
+    )
+
+    assert response.status_code == 502
+    assert fake.calls == 2
+    assert f"locked item {top.short_id}" in str(fake.corrections[1])
+
+
+def test_a_locked_item_belonging_to_another_account_is_refused(
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    make_item: Callable[..., Item],
+    make_user: Callable[..., User],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    hers = make_item(user_id=make_user().id, status=ItemStatus.READY, category=Category.TOP)
+    fake = stylist(answer("NEVER1"))
+
+    response = suggest(
+        client, user, authorization, locked_item_ids=[str(wardrobe[1].id), str(hers.id)]
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "locked_unavailable"
+    # `_anchor`'s guarantee on the second field: neither Open-Meteo nor OpenAI
+    # is asked about a request that cannot be served.
+    assert fake.calls == 0
+    assert forecasts == []
+
+
+def test_a_locked_item_the_stylist_never_sees_is_refused(
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    make_item: Callable[..., Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # The archived case is the reachable one: the look was on screen, and the
+    # garment was archived from another tab before the ↻ badge was tapped.
+    archived = make_item(
+        user_id=user.id, status=ItemStatus.READY, category=Category.TOP, is_archived=True
+    )
+    fake = stylist(answer("NEVER1"))
+
+    response = suggest(client, user, authorization, locked_item_ids=[str(archived.id)])
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "locked_unavailable"
+    assert fake.calls == 0
+
+
+def test_a_role_with_nothing_locked_is_the_schema_s_own_rejection(
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # A body no correct client can build — the badge always sends both — so it
+    # is `validation_error` and not a code of its own, and it never reaches the
+    # route at all.
+    fake = stylist(answer("NEVER1"))
+
+    response = suggest(client, user, authorization, replace_role="shoes")
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+    assert fake.calls == 0
+
+
+def test_a_role_outside_the_six_is_refused(
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # `dress` is a category and not a role: replacing a dress can legally
+    # return a top and a bottom, which is not a single-item swap. The
+    # vocabulary is what refuses it. `AUDITS.md` O-25.
+    fake = stylist(answer("NEVER1"))
+
+    response = suggest(
+        client,
+        user,
+        authorization,
+        locked_item_ids=[str(wardrobe[1].id)],
+        replace_role="dress",
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+    assert fake.calls == 0
+
+
+def test_an_excluded_id_the_wardrobe_does_not_hold_is_dropped(
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    make_item: Callable[..., Item],
+    make_user: Callable[..., User],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+    cloudinary_configured: None,
+) -> None:
+    # The asymmetry with the locks, exercised: a lock is a promise about what
+    # the look will contain and an exclusion about what it will not, so an id
+    # naming no wardrobe row is already kept and there is nothing to refuse.
+    hers = make_item(user_id=make_user().id, status=ItemStatus.READY, category=Category.TOP)
+    shoes, top, bottom = wardrobe[0], wardrobe[1], wardrobe[2]
+    fake = stylist(answer(shoes.short_id, top.short_id, bottom.short_id))
+
+    response = suggest(client, user, authorization, exclude_item_ids=[str(hers.id)])
+
+    assert response.status_code == 200
+    assert fake.contexts[0].excluded_ids == ()
+
+
+def test_a_request_with_no_locks_sends_none(
+    client: TestClient,
+    user: User,
+    wardrobe: list[Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+    cloudinary_configured: None,
+) -> None:
+    # `STAGE-2`'s last acceptance criterion, on the second half of its wording:
+    # no anchor and no locks behaves exactly as before.
+    shoes, top, bottom = wardrobe[0], wardrobe[1], wardrobe[2]
+    fake = stylist(answer(shoes.short_id, top.short_id, bottom.short_id))
+
+    assert suggest(client, user, authorization).status_code == 200
+    assert fake.contexts[0].locked_ids == ()
+    assert fake.contexts[0].excluded_ids == ()
+    assert fake.contexts[0].replace_role is None
+
+
 def test_a_request_with_no_anchor_sends_none(
     client: TestClient,
     user: User,

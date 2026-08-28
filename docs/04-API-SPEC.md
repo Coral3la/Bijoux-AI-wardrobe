@@ -262,18 +262,28 @@ live in `02-DATA-MODEL.md`'s closed vocabulary since task 2.7 and are enforced b
 this request schema — `looks.occasion` is `TEXT` and the database refuses
 nothing. `422` on any other value. `AUDITS.md` **O-8**, `DECISIONS.md` 168.
 
-**The last four fields arrive with the anchor at 2.10 and the swap at 2.11, and
-until then the request schema *refuses* them rather than ignoring them.** A
+**The last four fields arrived with the anchor at 2.10 and the swap at 2.11,
+and a field the schema does not know is still *refused* rather than ignored.** A
 `anchor_item_id` silently dropped would be a `200` carrying a look that failed
 to build around the garment the user is holding, reported as a success.
 
 **`anchor_item_id`** — build the look around this item. It must appear in the result. This powers "Style around this" from the item detail screen, and it is the direct answer to the original problem: *I am holding this garment and do not know what goes with it.*
 
-**`locked_item_ids` + `replace_role` + `exclude_item_ids`** — swap a single item while keeping the rest of the look. `replace_role` is one of `top · bottom · outer · shoes · bag · accessory`. This powers the ↻ button on each item in a look card.
+**`locked_item_ids` + `replace_role` + `exclude_item_ids`** — swap a single item while keeping the rest of the look. `replace_role` is one of `top · bottom · outer · shoes · bag · accessory`. This powers the ↻ button on each item in a look card. The six live in `02-DATA-MODEL.md`'s closed vocabulary since task 2.11 and are enforced by this request schema; `dress` is not among them, so a look built on a dress has no ↻ on that tile (`AUDITS.md` **O-25**, `DECISIONS.md` 175).
 
 All four fields are optional and default to null or empty. A request with none of them behaves exactly as before.
 
 `422` if `anchor_item_id` or any locked ID does not belong to this user, or if `replace_role` is given without `locked_item_ids`.
+
+Since task 2.11 those are two different answers, and the distinction is which
+one a correct client can send. An unusable locked id carries
+`code: "locked_unavailable"` — checked, like the anchor, against the wardrobe
+that would actually be **sent**, so a garment that is still `processing`,
+archived or in an excluded category is refused here rather than costing two
+model calls and a `502`. `replace_role` with nothing locked is the request
+schema's own `code: "validation_error"`: the ↻ badge always sends both, so no
+correct client can build that body. Ids in `exclude_item_ids` that name no
+wardrobe row are dropped rather than refused. `DECISIONS.md` 177.
 
 `400` with `code: "wardrobe_too_small"` when fewer than 6 items are **usable** —
 `ready`, not archived, and not in an excluded category. Counted over the

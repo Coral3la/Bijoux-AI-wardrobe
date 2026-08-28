@@ -18,6 +18,7 @@ from app.enums import (
     LayerRule,
     Length,
     Occasion,
+    Role,
     Vocabulary,
     is_valid_subcategory,
     validate_tag_dict,
@@ -123,6 +124,15 @@ def test_occasion_values_are_the_documented_six_in_order() -> None:
     # task 2.7. Nothing in the database enforces this list — `looks.occasion` is
     # TEXT — so this test and `LookSuggestRequest` are the whole of it.
     assert Occasion.values() == ["casual", "work", "evening", "sport", "formal", "travel"]
+
+
+def test_role_values_are_the_documented_six_in_order() -> None:
+    # Transcribed from 02-DATA-MODEL.md, which took them from 04-API-SPEC.md at
+    # task 2.11. It is not `Category` and is one shorter: `outerwear` is spelled
+    # `outer` here, and `dress`, `swimwear` and `sleepwear` are not roles.
+    # `look_items.role` is TEXT and stays NULL, so this test and
+    # `LookSuggestRequest.replace_role` are the whole of it. AUDITS.md O-25.
+    assert Role.values() == ["top", "bottom", "outer", "shoes", "bag", "accessory"]
 
 
 def test_values_returns_plain_strings_not_enum_members() -> None:

@@ -5,9 +5,9 @@ context, and returns a verdict. That is the whole point of the split — the
 retry, the give-up and `502 stylist_failed` are 2.7's, so every rule here is
 testable against a hand-built `StylistResponse`.
 
-Six rules run, not `03`'s eight. Rule 5 reads `packing_list.item_ids` and
+Eight rules run, not `03`'s nine. Rule 5 reads `packing_list.item_ids` and
 `STYLIST_SCHEMA` carries no `packing_list` until Stage 4 (`DECISIONS.md` 157);
-rule 8 waits for the swap at 2.11.
+rule 8 arrived with the swap at 2.11 and rule 9 at 2.11a.
 
 Violation text is asserted by the fragment a reader would recognise rather than
 by whole sentence, because the sentence is prompt text sent to the model and
@@ -31,6 +31,13 @@ BLAZER_ID = "EH8VVQ"
 DRESS_ID = "ZR44QW"
 COAT_ID = "MW23PD"
 CARDIGAN_ID = "K9HTB4"
+# Rule 9's two, and they are a pair on purpose: a second top is legal as the
+# `mid` layering piece and illegal as a second `base`.
+TANK_ID = "TANK55"
+OVERSHIRT_ID = "SHRT26"
+# The pair rule 9 was widened for: a shoe-swap came back with long jeans and
+# shorts in one look.
+SHORTS_ID = "SHTS47"
 
 # Transcribed from `03-AI-CONTRACTS.md`'s rule table, both bands.
 MILD_RULE = "Use warmth 2-3 for the base. A mid layer or light outerwear (warmth 2-3) is optional."
@@ -79,8 +86,11 @@ BLAZER = _item(BLAZER_ID, category="outerwear", subcategory="blazer", layer="out
 DRESS = _item(DRESS_ID, category="dress", subcategory="dress", layer="standalone")
 COAT = _item(COAT_ID, category="outerwear", subcategory="coat", layer="outer")
 CARDIGAN = _item(CARDIGAN_ID, category="outerwear", subcategory="cardigan", layer="mid")
+TANK = _item(TANK_ID, category="top", subcategory="tank", layer="base")
+OVERSHIRT = _item(OVERSHIRT_ID, category="top", subcategory="shirt", layer="mid")
+SHORTS = _item(SHORTS_ID, category="bottom", subcategory="shorts", layer="base")
 
-WARDROBE = [TOP, JEANS, BOOTS, BLAZER, DRESS, COAT, CARDIGAN]
+WARDROBE = [TOP, JEANS, BOOTS, BLAZER, DRESS, COAT, CARDIGAN, TANK, OVERSHIRT, SHORTS]
 
 
 def _context(**overrides: Any) -> stylist.StylistContext:
@@ -164,13 +174,13 @@ def test_a_dress_satisfies_the_pair() -> None:
     assert result.ok
 
 
-# --- rule 3, one outer layer ------------------------------------------------
+# --- rule 3, one outer layer — absorbed into rule 9's table at 2.11b --------
 
 
 def test_two_outer_layer_items_are_rejected() -> None:
     result = _validate(_response(_look(TOP_ID, JEANS_ID, BOOTS_ID, BLAZER_ID, COAT_ID)))
 
-    assert "two outer layer items" in str(result.violation)
+    assert "2 outer layer items and may contain at most 1" in str(result.violation)
 
 
 def test_a_mid_layer_under_an_outer_is_allowed() -> None:
@@ -255,6 +265,124 @@ def test_no_anchor_means_rule_seven_does_not_run() -> None:
     result = _validate(_response(_look(TOP_ID, JEANS_ID, BOOTS_ID)))
 
     assert result.ok
+
+
+# --- rule 8, the locked items and the rejected one ---------------------------
+
+
+def test_a_locked_item_that_is_absent_from_the_look_is_rejected() -> None:
+    result = _validate(_response(_look(TOP_ID, JEANS_ID, BOOTS_ID)), locked_ids=(TOP_ID, BLAZER_ID))
+
+    assert not result.ok
+    assert f"does not contain the locked item {BLAZER_ID}" in str(result.violation)
+
+
+def test_the_rejected_item_coming_back_is_rejected() -> None:
+    result = _validate(
+        _response(_look(TOP_ID, JEANS_ID, BOOTS_ID)),
+        locked_ids=(TOP_ID, JEANS_ID),
+        excluded_ids=(BOOTS_ID,),
+    )
+
+    assert not result.ok
+    assert f"contains the rejected item {BOOTS_ID}" in str(result.violation)
+
+
+def test_a_swap_that_kept_the_locks_and_dropped_the_rejected_item_passes() -> None:
+    # The swap this endpoint exists for: the rejected blazer is gone, the three
+    # locked garments are untouched, and the coat that replaced it is a row the
+    # wardrobe holds. Rule 3 still runs over the answer — one outer, not two.
+    result = _validate(
+        _response(_look(TOP_ID, JEANS_ID, BOOTS_ID, COAT_ID)),
+        locked_ids=(TOP_ID, JEANS_ID, BOOTS_ID),
+        excluded_ids=(BLAZER_ID,),
+        replace_role="outer",
+    )
+
+    assert result.ok
+
+
+def test_the_locks_are_matched_after_the_ids_are_upper_cased() -> None:
+    # Rule 7's reasoning on rule 8's field: locked ids are `short_id`s off rows
+    # and upper-case by construction, the model's spelling is not, and rule 8
+    # runs on the normalised look. `DECISIONS.md` 156.
+    result = _validate(
+        _response(_look(TOP_ID.lower(), JEANS_ID.lower(), BOOTS_ID.lower())),
+        locked_ids=(TOP_ID, JEANS_ID),
+        excluded_ids=(BLAZER_ID,),
+    )
+
+    assert result.ok
+
+
+def test_an_exclusion_with_no_locks_does_not_run(caplog: pytest.LogCaptureFixture) -> None:
+    # `03-AI-CONTRACTS.md` gates the whole of rule 8 on `locked_item_ids`: with
+    # nothing locked the request asked for a reroll rather than a swap, and the
+    # exclusion is a preference printed to the model rather than a promise
+    # worth a retry and then a 502.
+    with caplog.at_level("WARNING"):
+        result = _validate(_response(_look(TOP_ID, JEANS_ID, BOOTS_ID)), excluded_ids=(BOOTS_ID,))
+
+    assert result.ok
+    assert caplog.records == []
+
+
+# --- rule 9, one item per slot ----------------------------------------------
+
+
+def test_a_second_base_top_is_rejected_and_a_mid_layer_one_is_not() -> None:
+    # Both columns, because neither says it alone: `top` would refuse the
+    # overshirt the system prompt allows, and `base` would refuse the jeans in
+    # every look here. One test rather than three, because the three readings
+    # are one rule and the middle case is the whole of what it permits.
+    two_base = _validate(_response(_look(TOP_ID, TANK_ID, JEANS_ID, BOOTS_ID)))
+
+    assert not two_base.ok
+    assert f"2 base-layer tops and may contain at most 1: {TOP_ID}, {TANK_ID}" in str(
+        two_base.violation
+    )
+
+    layered = _validate(_response(_look(TOP_ID, OVERSHIRT_ID, JEANS_ID, BOOTS_ID)))
+    assert layered.ok
+
+    alone = _validate(_response(_look(TOP_ID, JEANS_ID, BOOTS_ID)))
+    assert alone.ok
+
+
+def test_two_bottoms_are_rejected() -> None:
+    # The look that widened this rule at 2.11b: a shoe-swap answered with long
+    # jeans and shorts, and every rule in the table passed it — rule 2 asks
+    # whether a bottom is present, never how many.
+    result = _validate(_response(_look(TOP_ID, JEANS_ID, SHORTS_ID, BOOTS_ID)))
+
+    assert not result.ok
+    assert f"2 bottoms and may contain at most 1: {JEANS_ID}, {SHORTS_ID}" in str(result.violation)
+
+
+def test_a_dress_beside_a_separate_is_rejected() -> None:
+    # Rule 2 passes this look twice over — it has a dress, and it has a top and
+    # a bottom. What it cannot say is that the dress replaces them.
+    result = _validate(_response(_look(DRESS_ID, JEANS_ID, BOOTS_ID)))
+
+    assert not result.ok
+    assert f"a dress and the separate item {JEANS_ID}" in str(result.violation)
+
+
+def test_a_dress_under_an_outer_layer_is_still_allowed() -> None:
+    # The exclusion is `top` and `bottom` alone. A coat over a dress is a
+    # different slot and one of the commonest looks there is.
+    result = _validate(_response(_look(DRESS_ID, BOOTS_ID, COAT_ID)))
+
+    assert result.ok
+
+
+def test_one_item_per_slot_passes() -> None:
+    # Every slot this wardrobe can fill, filled once, plus the `mid` top the
+    # base-top slot deliberately does not count — the widest legal look here.
+    result = _validate(_response(_look(TOP_ID, OVERSHIRT_ID, JEANS_ID, BOOTS_ID, COAT_ID)))
+
+    assert result.ok
+    assert result.violation is None
 
 
 # --- the order the table prints ---------------------------------------------

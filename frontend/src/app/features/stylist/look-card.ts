@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 
 import { I18nService } from '../../core/i18n/i18n.service';
-import { CATEGORIES, Category, LAYERS, Layer } from '../../shared/models/enums';
+import { CATEGORIES, Category, LAYERS, Layer, roleOf } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
 import { Look, MissingPiece } from '../../shared/models/look.model';
 import { ItemCard } from '../wardrobe/item-card';
@@ -48,7 +48,43 @@ function isCategory(value: string): value is Category {
           <h3 class="text-sm font-medium">{{ i18n.t(group.headingKey) }}</h3>
           <ul class="grid grid-cols-3 gap-3">
             @for (item of group.items; track item.id) {
-              <li><app-item-card [item]="item" /></li>
+              <li class="relative">
+                <app-item-card [item]="item" />
+
+                <!-- Beside the tile rather than inside ItemCard, which the
+                     wardrobe grid renders too: a badge that only ever appears
+                     in a look does not belong to the component both screens
+                     share. It is a sibling of the tile's link and never inside
+                     it, for item-card.ts's reason — an anchor containing a
+                     button is nested interactive content. -->
+                @if (isSwappable(item)) {
+                  <button
+                    type="button"
+                    (click)="swap.emit(item)"
+                    [disabled]="swappingItemId() !== null"
+                    [attr.aria-label]="i18n.t('stylist.look.swap', { item: name(item) })"
+                    class="absolute end-0 top-0 min-h-11 min-w-11 rounded-full bg-surface/90 text-lg disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  >
+                    ↻
+                  </button>
+                }
+
+                <!-- Over this tile and nothing else. The card keeps its
+                     layout, its headings and every other garment while one
+                     piece is being replaced. -->
+                @if (swappingItemId() === item.id) {
+                  <div
+                    class="absolute inset-0 flex items-center justify-center rounded-lg bg-surface/80"
+                    role="status"
+                  >
+                    <span class="sr-only">{{ i18n.t('stylist.look.swapping') }}</span>
+                    <span
+                      class="h-6 w-6 animate-spin rounded-full border-2 border-current/30 border-t-current"
+                      aria-hidden="true"
+                    ></span>
+                  </div>
+                }
+              </li>
             }
           </ul>
         </section>
@@ -86,8 +122,10 @@ export class LookCard {
   readonly look = input.required<Look>();
   readonly missingPieces = input<readonly MissingPiece[]>([]);
   readonly message = input('');
+  readonly swappingItemId = input<string | null>(null);
 
   readonly tryAgain = output<void>();
+  readonly swap = output<Item>();
 
   // Sorted by layer then category, then cut into runs — which is the whole of
   // the grouping, because a run can only break where the layer changes once
@@ -113,6 +151,20 @@ export class LookCard {
     }
     return groups;
   });
+
+  // No badge on a dress, and that is the vocabulary rather than the layout:
+  // replacing a dress can legally return a top and a bottom, which `04`'s
+  // `replace_role` has no word for and a *single*-item swap is not. Every
+  // other garment in a look has a role. AUDITS.md O-25, DECISIONS.md 175.
+  protected isSwappable(item: Item): boolean {
+    return roleOf(item.category) !== undefined;
+  }
+
+  // The badge's accessible name has to say which garment it replaces: six ↻
+  // buttons on one card are otherwise six identical announcements.
+  protected name(item: Item): string {
+    return item.display_name ?? this.i18n.t('item.untitled');
+  }
 
   // `category` on a missing piece is a plain string — nothing on the wire
   // narrows it (look.model.ts) — and t() falls back to the key, so an

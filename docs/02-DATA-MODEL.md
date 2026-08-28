@@ -259,12 +259,37 @@ closed vocabulary in the project with no validator and no home. `AUDITS.md`
 be grouped or given an i18n key, and Stage 3's preference block aggregates over
 saved looks. `DECISIONS.md` 168.
 
-**`look_items.role` is deliberately *not* a section here.** `04-API-SPEC.md`
-comments six role values on the column and they do not map onto `category`:
-`dress` corresponds to none of them and `outerwear` is spelled `outer`. Task 2.7
-writes the column `NULL` rather than adopt a vocabulary on behalf of the task
-that first reads one — `AUDITS.md` **O-25**, owned by 2.11, and a list this
-document has not printed is a list the project has not decided.
+### `role` — 6 values, and the third here that is not a column type
+
+```
+top · bottom · outer · shoes · bag · accessory
+```
+
+Which slot in a look a garment fills. `look_items.role` is `TEXT` and **stays
+`NULL`** — nothing writes it, at 2.11 as at 2.7 — so what these six values
+enforce is `replace_role` on `POST /looks/suggest`: the ↻ badge on a look card
+names the role of the tile the user tapped, and `LookSuggestRequest` typing the
+field as the enum makes anything else a `422` before a prompt is built.
+
+Adopted at task 2.11, the first task that sends one, and moved here from
+`04-API-SPEC.md`, which carried the six in prose from Stage 0. `AUDITS.md`
+**O-25**, whose vocabulary half this closes; the two deferred indexes are still
+Stage 3's.
+
+**It is not `Category`, and the two places they differ are the whole reason
+this list waited for a reader.** The category spelled `outerwear` is the role
+spelled `outer` — one garment class, two words, and the role's is the one
+`04` prints. And **`dress` is not a role at all**: replacing a dress can
+legally return a top *and* a bottom under the completeness rule, which is a
+different look rather than a single-item swap, so the field has no word for it
+and the badge is not drawn on a dress tile. `swimwear` and `sleepwear` are
+absent for the plainer reason that the stylist is never shown one.
+
+**Nothing derives a role on the backend, deliberately.** The map from
+`category` to role lives in `frontend/src/app/shared/models/enums.ts` beside
+the badge that reads it, because the server validates the six and never
+computes one: `STYLIST_SCHEMA` returns ids, and the column a derivation would
+fill has no reader before Stage 3. `DECISIONS.md` 175, 176.
 
 ---
 
@@ -389,11 +414,20 @@ CREATE TABLE looks (
 CREATE TABLE look_items (
   look_id   UUID NOT NULL REFERENCES looks(id) ON DELETE CASCADE,
   item_id   UUID NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-  role      TEXT,                         -- 'top' | 'bottom' | 'outer' | 'shoes' | 'bag' | 'accessory'
+  role      TEXT,                         -- the `role` vocabulary above; unwritten, see below
   position  SMALLINT NOT NULL DEFAULT 0,
   PRIMARY KEY (look_id, item_id)
 );
 ```
+
+**`look_items.role` is still `NULL` on every row.** The vocabulary above is
+adopted and enforced on the wire, but nothing writes the column: 2.7 declined
+to fill it without a reader and 2.11 — the task that named the list — reads a
+role off the item's own `category` in the browser rather than out of this
+table, so writing it would be a column filled for Stage 3 in advance.
+`position` is the opposite case and is written, because the model's ordering is
+destroyed at persistence if nothing records it. `AUDITS.md` **O-25**,
+`DECISIONS.md` 170 and 176.
 
 Every suggested look is persisted immediately, whether or not the user saves it. This costs nothing and buys the entire evaluation story: how many suggestions were made, how many were saved, how many were thumbed up, how many were actually worn.
 

@@ -87,6 +87,7 @@ const DOCUMENTED_FAILURES: readonly [number, string, string][] = [
   [502, 'stylist_failed', 'stylist.error.stylistFailed'],
   [422, 'validation_error', 'stylist.error.validation'],
   [422, 'anchor_unavailable', 'stylist.error.anchorUnavailable'],
+  [422, 'locked_unavailable', 'stylist.error.lockedUnavailable'],
 ];
 
 describe('StylistStore', () => {
@@ -222,6 +223,78 @@ describe('StylistStore', () => {
     });
   });
 
+  describe('swap', () => {
+    function swap(itemId = 'item-1'): void {
+      store.swap(
+        {
+          occasion: 'work',
+          date: '2026-08-27',
+          locked_item_ids: ['item-2', 'item-3'],
+          replace_role: 'shoes',
+          exclude_item_ids: [itemId],
+        },
+        itemId,
+      );
+    }
+
+    // The whole difference from `suggest`, and the reason there are two
+    // methods: 05-FRONTEND-SPEC.md wants the spinner on one tile and the rest
+    // of the card left standing, and the page renders the skeleton over
+    // `isSuggesting` and the card over `result`.
+    it('keeps the look on screen and names the tile being replaced', () => {
+      suggest();
+      suggestRequest().flush(response());
+
+      swap();
+
+      expect(store.result()).not.toBeNull();
+      expect(store.isSuggesting()).toBe(false);
+      expect(store.swappingItemId()).toBe('item-1');
+
+      suggestRequest().flush(response({ message: 'Different shoes.' }));
+
+      expect(store.swappingItemId()).toBeNull();
+      expect(store.result()?.message).toBe('Different shoes.');
+    });
+
+    it('sends the locks, the role and the exclusion', () => {
+      swap();
+
+      expect(suggestRequest().request.body).toEqual({
+        occasion: 'work',
+        date: '2026-08-27',
+        locked_item_ids: ['item-2', 'item-3'],
+        replace_role: 'shoes',
+        exclude_item_ids: ['item-1'],
+      });
+    });
+
+    // A failed swap changed nothing, so the look the user still wants is the
+    // one already on screen — the opposite of `suggest`, which clears it.
+    it('leaves the previous look standing when the swap fails', () => {
+      suggest();
+      suggestRequest().flush(response());
+
+      swap();
+      suggestRequest().flush(
+        { code: 'locked_unavailable' },
+        { status: 422, statusText: 'Unprocessable Content' },
+      );
+
+      expect(store.result()).not.toBeNull();
+      expect(store.swappingItemId()).toBeNull();
+      expect(store.error()).toBe('stylist.error.lockedUnavailable');
+    });
+
+    it('drops a second swap while one is in flight', () => {
+      swap('item-1');
+      swap('item-4');
+
+      expect(store.swappingItemId()).toBe('item-1');
+      suggestRequest().flush(response());
+    });
+  });
+
   // This store is providedIn: 'root' and outlives the screen. Without the
   // reset the second visit opens on the first visit's look.
   it('forgets everything on reset', () => {
@@ -236,5 +309,6 @@ describe('StylistStore', () => {
     expect(store.weather()).toBeNull();
     expect(store.error()).toBeNull();
     expect(store.isSuggesting()).toBe(false);
+    expect(store.swappingItemId()).toBeNull();
   });
 });

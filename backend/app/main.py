@@ -13,6 +13,7 @@ from app.core.config import APP_VERSION, settings
 from app.core.deps import get_db
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
+from app.core.request_id import HEADER_NAME, RequestIdMiddleware
 from app.schemas.health import HealthResponse
 from app.services.tagging import run_startup_sweep
 
@@ -39,7 +40,18 @@ app.add_middleware(
     allow_origins=settings.allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
+    # `allow_headers` governs what a browser may *send*. Reading a response
+    # header back is a separate permission, and without this one the frontend
+    # is served the id and cannot see it — the failure would be silent, because
+    # the header is on the wire either way and only the browser withholds it.
+    expose_headers=[HEADER_NAME],
 )
+
+# After CORS, therefore outside it: `add_middleware` makes the last one added
+# the outermost, and the id is stamped on the way out regardless of what CORS
+# put on the response. `Access-Control-Expose-Headers` is a fixed string, so it
+# does not care that `X-Request-ID` is set after it.
+app.add_middleware(RequestIdMiddleware)
 
 
 @app.get("/health", response_model=HealthResponse)

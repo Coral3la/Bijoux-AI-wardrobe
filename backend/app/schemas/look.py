@@ -16,23 +16,21 @@ are Stage 3's columns and two of them do not exist yet. `DECISIONS.md` 172.
 
 import uuid
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-from app.enums import Occasion
+from app.enums import Occasion, Role
 from app.schemas.item import ItemResponse
 
 
 class LookSuggestRequest(BaseModel):
-    """`04-API-SPEC.md`'s body, minus the three fields that have no task yet.
+    """`04-API-SPEC.md`'s body, whole for the first time since Stage 0.
 
-    `extra="forbid"` is `ItemUpdate`'s reasoning on a different body:
-    `locked_item_ids`, `exclude_item_ids` and `replace_role` arrive at 2.11,
-    and until then a request carrying one is refused rather than quietly
-    ignored. A dropped field is an instruction the user gave and the look did
-    not obey, reported as a success — which is exactly what `anchor_item_id`
-    was until 2.10 put it on the wire.
+    `extra="forbid"` is `ItemUpdate`'s reasoning on a different body, and what
+    it now refuses is a misspelling rather than a field with no task: a dropped
+    key is an instruction the user gave and the look did not obey, reported as
+    a success.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -48,6 +46,27 @@ class LookSuggestRequest(BaseModel):
     # of the client's hands entirely — "it exists only for the AI layer" — so
     # the route is what turns this into the id the prompt prints.
     anchor_item_id: uuid.UUID | None = None
+    # The three swap fields. Row UUIDs again, for `anchor_item_id`'s reason —
+    # `short_id` exists only for the AI layer, and the route is what turns
+    # these into the ids the prompt prints.
+    locked_item_ids: list[uuid.UUID] = Field(default_factory=list)
+    exclude_item_ids: list[uuid.UUID] = Field(default_factory=list)
+    replace_role: Role | None = None
+
+    @model_validator(mode="after")
+    def _replace_role_needs_locks(self) -> Self:
+        """`04-API-SPEC.md`'s second `422`, and it stays `validation_error`.
+
+        A role names which of the locked items may move, so it says nothing at
+        all without them: the model would be told to replace the shoes and left
+        free to replace everything else too. The ↻ badge always sends both, so
+        this is a body no correct client can build — which is the line between
+        this and `locked_unavailable`, the `422` a correct client provokes by
+        tapping a garment that has since been archived.
+        """
+        if self.replace_role is not None and not self.locked_item_ids:
+            raise ValueError("replace_role names which locked item to replace, so it needs locks")
+        return self
 
 
 class MissingPieceResponse(BaseModel):

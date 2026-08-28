@@ -155,6 +155,27 @@ class Occasion(Vocabulary):
     TRAVEL = "travel"
 
 
+# The third that is not a column type, and the only one that is a wire value
+# before it is anything else. `look_items.role` is `TEXT` and stays `NULL`
+# (`DECISIONS.md` 175), so what these six validate is
+# `LookSuggestRequest.replace_role` — the same shape as `Occasion` one task
+# back: a closed list `04-API-SPEC.md` carried in prose alone until the task
+# that first accepts one.
+#
+# It is not `Category` and does not try to be. `outerwear` the category is
+# `outer` the role, and `dress` is deliberately absent: replacing a dress can
+# legally return a top *and* a bottom, which is not the single-item swap this
+# field names. `swimwear` and `sleepwear` are absent because no look contains
+# one. `AUDITS.md` O-25, whose vocabulary half this closes.
+class Role(Vocabulary):
+    TOP = "top"
+    BOTTOM = "bottom"
+    OUTER = "outer"
+    SHOES = "shoes"
+    BAG = "bag"
+    ACCESSORY = "accessory"
+
+
 SUBCATEGORIES: dict[Category, tuple[str, ...]] = {
     Category.TOP: (
         "t_shirt",

@@ -11,8 +11,8 @@ OUTPUT
 - Every look must include shoes.
 - Add a bag and up to two accessories when they improve the look.
 - Never place two "outer" layer items in the same look.
-- Never place two "base" tops in the same look unless one is explicitly a
-  layering piece.
+- Never place two tops tagged layer "base" in the same look. A second top is
+  allowed only when it is tagged "mid", the layering piece.
 
 STYLING PRINCIPLES
 - Proportion: pair oversized or wide items with fitted or tucked items.

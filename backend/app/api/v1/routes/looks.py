@@ -10,6 +10,7 @@ what a failure is worth on the wire.
 """
 
 import logging
+import time
 from collections.abc import Mapping, Sequence
 
 from fastapi import APIRouter, Depends, status
@@ -127,8 +128,58 @@ def _anchor(request: LookSuggestRequest, wardrobe: Sequence[ItemResponse]) -> It
     return anchor
 
 
+def _locked(
+    request: LookSuggestRequest, wardrobe: Sequence[ItemResponse]
+) -> tuple[ItemResponse, ...]:
+    """The locked rows, matched against the wardrobe that is about to be sent.
+
+    `_anchor`'s lookup, three fields along and refused for the same two
+    reasons: a row belonging to another account is `04-API-SPEC.md`'s own
+    `422`, and one this account owns but the stylist never sees cannot appear
+    in a look either — rule 1 would call the id a hallucination, so letting it
+    through buys two model calls and a `502`.
+
+    Its own code rather than `validation_error`, and it is the second `422` on
+    this endpoint a correct client can provoke: the ↻ badge locks the garments
+    that were on screen a moment ago, and one of them can have been archived
+    from another tab since. `CONVENTIONS.md`, `DECISIONS.md` 177.
+    """
+    by_id = {item.id: item for item in wardrobe}
+    locked: list[ItemResponse] = []
+    for item_id in request.locked_item_ids:
+        item = by_id.get(item_id)
+        if item is None:
+            raise ApiError(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "locked_unavailable",
+                "locked_item_ids: one of those items is no longer part of this wardrobe.",
+            )
+        locked.append(item)
+    return tuple(locked)
+
+
+def _excluded(request: LookSuggestRequest, wardrobe: Sequence[ItemResponse]) -> tuple[str, ...]:
+    """The rejected rows' `short_id`s, and an unknown id is dropped rather than refused.
+
+    The asymmetry with `_locked` is `04-API-SPEC.md`'s: it asks for a `422` on
+    the anchor and on the locks and for nothing here, and the reason survives
+    reading. A lock and an anchor are promises about what the look *will*
+    contain, so an id that names no wardrobe row makes them unkeepable; an
+    exclusion is a promise about what it will not, and an item the stylist is
+    never shown is already excluded from every look it can build.
+    """
+    by_id = {item.id: item for item in wardrobe}
+    return tuple(
+        by_id[item_id].short_id for item_id in request.exclude_item_ids if item_id in by_id
+    )
+
+
 async def _context(
-    request: LookSuggestRequest, user: User, anchor: ItemResponse | None
+    request: LookSuggestRequest,
+    user: User,
+    anchor: ItemResponse | None,
+    locked: Sequence[ItemResponse],
+    excluded_ids: tuple[str, ...],
 ) -> StylistContext:
     """The request, the profile and the sky, in the shape `suggest_looks` takes.
 
@@ -167,9 +218,53 @@ async def _context(
         include_outerwear=request.include_outerwear,
         # The `short_id`, which is the only spelling the prompt and rule 7 use.
         anchor_id=anchor.short_id if anchor is not None else None,
+        locked_ids=tuple(item.short_id for item in locked),
+        excluded_ids=excluded_ids,
+        replace_role=request.replace_role,
         height_cm=user.height_cm,
         style_notes=user.style_notes,
     )
+
+
+async def _attempt(
+    wardrobe: Sequence[ItemResponse],
+    context: StylistContext,
+    attempt: int,
+    correction: str | None = None,
+) -> LookValidation:
+    """One model call, judged, with everything a failure would need reported.
+
+    Both attempts log at `INFO` rather than only the failing one, because the
+    question this endpoint could not answer before was never "did it fail" — the
+    `502` already said that — but "how often, how slowly, and against how big a
+    wardrobe". A line only on failure cannot answer any of the three, since it
+    has nothing to be compared against.
+
+    `item_ids` is logged flat because rule 1 is the rule that fires most and the
+    id it rejected is the whole diagnosis: an invented id and a real id the model
+    shifted the case of are the same message and different bugs.
+    """
+    started = time.monotonic()
+    validation = validate_look_response(
+        await suggest_looks(wardrobe, context, correction=correction), wardrobe, context
+    )
+    logger.info(
+        "Stylist attempt finished",
+        extra={
+            "attempt": attempt,
+            "elapsed_ms": round((time.monotonic() - started) * 1000),
+            # The model actually used, not the pin: `.env` can and does override
+            # `OPENAI_STYLIST_MODEL`, and a rejection rate is meaningless beside
+            # the name of a model that was not called.
+            "model": settings.OPENAI_STYLIST_MODEL,
+            "wardrobe_items": len(wardrobe),
+            "violation": validation.violation,
+            "item_ids": [
+                item_id for look in validation.response.looks for item_id in look.item_ids
+            ],
+        },
+    )
+    return validation
 
 
 async def _judged(wardrobe: Sequence[ItemResponse], context: StylistContext) -> LookValidation:
@@ -182,16 +277,11 @@ async def _judged(wardrobe: Sequence[ItemResponse], context: StylistContext) -> 
     `03-AI-CONTRACTS.md` says the same thing about a timeout — "the request is
     not retried automatically". `DECISIONS.md` 171.
     """
-    validation = validate_look_response(await suggest_looks(wardrobe, context), wardrobe, context)
+    validation = await _attempt(wardrobe, context, attempt=1)
     if validation.ok:
         return validation
 
-    logger.info("Retrying the stylist with the violation named")
-    return validate_look_response(
-        await suggest_looks(wardrobe, context, correction=validation.violation),
-        wardrobe,
-        context,
-    )
+    return await _attempt(wardrobe, context, attempt=2, correction=validation.violation)
 
 
 def _persist(
@@ -293,10 +383,16 @@ async def suggest_look(
             f"Add at least {MIN_WARDROBE_ITEMS} items so I have something to work with.",
         )
 
-    # Beside the small-wardrobe check and for its reason: both are answerable
-    # from rows already in hand, so a request that cannot be served costs
-    # neither the forecast nor the model.
-    context = await _context(request, current_user, _anchor(request, wardrobe))
+    # Beside the small-wardrobe check and for its reason: all four are
+    # answerable from rows already in hand, so a request that cannot be served
+    # costs neither the forecast nor the model.
+    context = await _context(
+        request,
+        current_user,
+        _anchor(request, wardrobe),
+        _locked(request, wardrobe),
+        _excluded(request, wardrobe),
+    )
 
     try:
         validation = await _judged(wardrobe, context)

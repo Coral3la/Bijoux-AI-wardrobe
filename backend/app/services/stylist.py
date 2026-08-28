@@ -6,9 +6,10 @@ to OpenAI.
 into the two messages `03-AI-CONTRACTS.md` specifies, and returns the model's
 answer parsed and **unjudged**.
 
-`validate_look_response` is what judges it — `03`'s validation table, the six
-of its eight rules that have a field to read at Stage 2, run in the documented
-order against the wardrobe that was actually sent. It calls nothing, raises
+`validate_look_response` is what judges it — `03`'s validation table, the eight
+of its nine rules that have a field to read at Stage 2, run in the documented
+order against the wardrobe that was actually sent — in seven calls, because
+rule 3 became one slot of rule 9's table at 2.11b. It calls nothing, raises
 nothing and owns no loop: it returns a verdict beside the normalised response,
 and 2.7 decides whether to spend the one retry through `correction=` or to
 answer `502 stylist_failed`. That is 1.2b's split between `tag_item` and
@@ -35,7 +36,7 @@ exception — and not five.
 
 import json
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
 from functools import lru_cache
@@ -152,6 +153,22 @@ _ANCHOR_BLOCK: Final = (
     "explain the tension in `reasoning`."
 )
 
+# `03-AI-CONTRACTS.md`'s swap block, in three pieces because two of its four
+# lines depend on a field that can be absent. The role line is omitted with
+# `replace_role` and the rejection line with `exclude_item_ids`, which is
+# `_outerwear_line`'s rule applied again: a line printed about a field the user
+# did not send is an instruction nobody gave.
+_LOCKED_BLOCK: Final = "LOCKED: {locked_ids}\nThese items MUST appear unchanged."
+_REPLACE_LINE: Final = "Replace only the {role} with a different option from the wardrobe."
+# Transcribed with `03`'s singular, which is what one tap sends. The ids are
+# joined the way LOCKED's are, so a second swap of the same role reads as a
+# longer list rather than as a second sentence.
+_REJECTED_LINE: Final = "Do not return the previously rejected item {excluded_ids}."
+
+# The two categories a dress replaces. Read by rule 9, which refuses a dress
+# beside either, and by the fake, which must not build one.
+_SEPARATES: Final = frozenset({Category.TOP, Category.BOTTOM})
+
 
 @dataclass(frozen=True, slots=True)
 class StylistContext:
@@ -173,6 +190,12 @@ class StylistContext:
     The wire carries the row's UUID (`04-API-SPEC.md` keeps `short_id` out of
     the client's hands) and 2.7 resolves it against the wardrobe it is about to
     send, so this module still sees only the identifiers it prints.
+    `locked_ids` and `excluded_ids` are the same substitution, one field along.
+
+    `replace_role` is `str` rather than the `Role` the request schema enforces,
+    for `occasion`'s reason: this module prints the word and never branches on
+    it, and typing it here would make a prompt builder import a wire
+    vocabulary to interpolate a string.
     """
 
     date: date
@@ -182,6 +205,9 @@ class StylistContext:
     notes: str | None = None
     include_outerwear: bool | None = None
     anchor_id: str | None = None
+    locked_ids: tuple[str, ...] = ()
+    excluded_ids: tuple[str, ...] = ()
+    replace_role: str | None = None
     height_cm: int | None = None
     style_notes: str | None = None
 
@@ -264,6 +290,15 @@ def _outerwear_line(include_outerwear: bool | None) -> str:
     return "Outerwear: the user has asked for no outerwear. Include none.\n"
 
 
+def _locked_block(context: StylistContext) -> str:
+    block = _LOCKED_BLOCK.format(locked_ids=", ".join(context.locked_ids))
+    if context.replace_role is not None:
+        block += "\n" + _REPLACE_LINE.format(role=context.replace_role)
+    if context.excluded_ids:
+        block += "\n" + _REJECTED_LINE.format(excluded_ids=", ".join(context.excluded_ids))
+    return block
+
+
 def _user_message(wardrobe: Sequence[ItemResponse], context: StylistContext) -> str:
     """`03-AI-CONTRACTS.md`'s user message, single-day block.
 
@@ -284,6 +319,14 @@ def _user_message(wardrobe: Sequence[ItemResponse], context: StylistContext) -> 
     )
     if context.anchor_id is not None:
         request += "\n\n" + _ANCHOR_BLOCK.format(anchor_id=context.anchor_id)
+    # After the anchor, for the reason the anchor is after `Build 1 look.`: the
+    # locks are the narrowest instruction in the message, and the later of two
+    # conflicting ones is the operative one. In practice the two never arrive
+    # together — the ↻ badge sends no anchor, because every item it keeps is
+    # locked anyway and an anchor on the swapped tile would set rule 7 against
+    # rule 8.
+    if context.locked_ids:
+        request += "\n\n" + _locked_block(context)
     return (
         f"WARDROBE ({len(wardrobe)} items):\n"
         f"{serialize_wardrobe(wardrobe)}\n\n"
@@ -296,24 +339,55 @@ def _first(wardrobe: Sequence[ItemResponse], category: Category) -> ItemResponse
     return next((item for item in wardrobe if item.category == category), None)
 
 
-def _fake_items(wardrobe: Sequence[ItemResponse], anchor_id: str | None) -> list[ItemResponse]:
+def _fake_items(wardrobe: Sequence[ItemResponse], context: StylistContext) -> list[ItemResponse]:
     """The placeholder's picks: shoes, then a top and a bottom or a dress.
 
-    The anchor displaces the pick of its own category rather than joining it,
-    and leads the list. Without this the fake would answer a look the anchor is
-    absent from, rule 7 would reject it, the retry would produce the same answer
-    and every `USE_FAKE_AI` request carrying an anchor would be a `502` — which
-    is the opposite of what the flag exists for (`DECISIONS.md` 159).
+    Four of the request's fields change the answer rather than decorate it, and
+    the reason is the same each time: a fake that cannot satisfy the rule the
+    request has just switched on answers a look the validator rejects twice, so
+    every `USE_FAKE_AI` request carrying that field would be a `502` — the
+    opposite of what the flag exists for (`DECISIONS.md` 159). The anchor
+    displaces the pick of its own category and leads the list, which is rule 7.
+    The locked items are all kept and displace the picks that share a category
+    with them, and an excluded id is never picked at all, which is rule 8. A
+    dress already in the look is not joined by a top and a bottom, and half a
+    pair is not joined by a dress, which is rule 9 — the clause added at 2.11b,
+    when generalising the rule turned every anchored or locked dress under the
+    flag into a `502`.
     """
-    top = _first(wardrobe, Category.TOP)
-    bottom = _first(wardrobe, Category.BOTTOM)
-    pair = [top, bottom] if top and bottom else [_first(wardrobe, Category.DRESS)]
-    chosen = [item for item in [_first(wardrobe, Category.SHOES), *pair] if item is not None]
+    excluded = frozenset(context.excluded_ids)
+    locked_ids = frozenset(context.locked_ids)
+    # Locks come off the whole wardrobe and the picks off what is left, so a
+    # request that locks and excludes one id keeps it: both readings answer a
+    # look the validator rejects, and this is the one that says out loud which
+    # instruction won.
+    locked = [item for item in wardrobe if item.short_id in locked_ids]
+    available = [item for item in wardrobe if item.short_id not in excluded]
 
-    anchor = next((item for item in wardrobe if item.short_id == anchor_id), None)
-    if anchor is None:
-        return chosen
-    return [anchor, *(item for item in chosen if item.category is not anchor.category)]
+    anchor = next((item for item in available if item.short_id == context.anchor_id), None)
+    # What the request has already put in the look, which decides what is left
+    # to pick rather than merely what to filter out afterwards. Rule 9 is why:
+    # a dress the user anchored or locked cannot be joined by the pair, and
+    # half a pair cannot be joined by a dress.
+    committed = {item.category for item in (*locked, anchor) if item is not None}
+
+    pair: list[ItemResponse | None]
+    if Category.DRESS in committed:
+        pair = []
+    elif committed & _SEPARATES:
+        pair = [_first(available, Category.TOP), _first(available, Category.BOTTOM)]
+    else:
+        top = _first(available, Category.TOP)
+        bottom = _first(available, Category.BOTTOM)
+        pair = [top, bottom] if top and bottom else [_first(available, Category.DRESS)]
+
+    chosen = [item for item in [_first(available, Category.SHOES), *pair] if item is not None]
+
+    if anchor is not None:
+        chosen = [anchor, *(item for item in chosen if item.category is not anchor.category)]
+
+    held = {item.category for item in locked}
+    return [*locked, *(item for item in chosen if item.category not in held)]
 
 
 def _fake_response(wardrobe: Sequence[ItemResponse], context: StylistContext) -> StylistResponse:
@@ -330,7 +404,8 @@ def _fake_response(wardrobe: Sequence[ItemResponse], context: StylistContext) ->
 
     Deterministic and deliberately not clever: the first shoes, then the first
     top and bottom, falling back to the first dress when the wardrobe has no
-    pair, with the anchor displacing whichever of them shares its category. No
+    pair, with the anchor and the locks displacing whichever of them share a
+    category and the excluded ids never picked at all. No
     styling, no weather, no ordering by anything. The text says out
     loud that it is a placeholder, which is `DECISIONS.md` 081's mitigation for
     the same rule broken the same way on the vision side — a demo accidentally
@@ -341,7 +416,7 @@ def _fake_response(wardrobe: Sequence[ItemResponse], context: StylistContext) ->
             Look(
                 occasion=context.occasion,
                 title="Placeholder look",
-                item_ids=tuple(item.short_id for item in _fake_items(wardrobe, context.anchor_id)),
+                item_ids=tuple(item.short_id for item in _fake_items(wardrobe, context)),
                 reasoning=(
                     "Placeholder response: USE_FAKE_AI is on, so no model was called. "
                     "These items were picked by category, not styled."
@@ -513,17 +588,6 @@ def _incomplete(looks: tuple[Look, ...], known: Mapping[str, ItemResponse]) -> s
     return None
 
 
-def _two_outer_layers(looks: tuple[Look, ...], known: Mapping[str, ItemResponse]) -> str | None:
-    # By `layer`, not by category, which is the prompt's own wording — "Never
-    # place two `outer` layer items". `LAYERS_BY_CATEGORY` lets outerwear be
-    # `mid`, so a blazer worn under a coat is a legal look and two coats are not.
-    for look in looks:
-        outer = [item_id for item_id in look.item_ids if known[item_id].layer is Layer.OUTER]
-        if len(outer) > 1:
-            return f"the look contains two outer layer items: {outer[0]} and {outer[1]}"
-    return None
-
-
 def _wrong_count(looks: tuple[Look, ...]) -> str | None:
     # `03`'s rule 4 is `len(looks) == expected_days`; a single-day request is a
     # trip of length one, so the expected count is 1 and is not a parameter until
@@ -569,6 +633,100 @@ def _missing_anchor(looks: tuple[Look, ...], context: StylistContext) -> str | N
     return None
 
 
+def _broken_lock(looks: tuple[Look, ...], context: StylistContext) -> str | None:
+    """Rule 8, and like rule 7 it needs no wardrobe to answer.
+
+    Both halves are gated on `locked_ids`, which is `03-AI-CONTRACTS.md`'s own
+    wording — *when `locked_item_ids` were supplied, every one of them appears,
+    and the rejected item does not*. An exclusion sent without locks is still
+    printed to the model; what this declines to do is spend the retry and then
+    a `502` enforcing it, on a request that locked nothing and therefore asked
+    for a reroll rather than a swap.
+    """
+    if not context.locked_ids:
+        return None
+    for look in looks:
+        for locked in context.locked_ids:
+            if locked not in look.item_ids:
+                return f"the look does not contain the locked item {locked}, and it must"
+        for rejected in context.excluded_ids:
+            if rejected in look.item_ids:
+                return f"the look contains the rejected item {rejected}, and it must not"
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class SlotRule:
+    label: str
+    limit: int
+    holds: Callable[[ItemResponse], bool]
+
+
+# Rule 9's table: what a person can wear one of at a time. A table rather than
+# seven near-identical loops, because the rule is one sentence in `03` and the
+# thing that varies between slots is which column names them.
+#
+# **`outer` is read by `layer` and the rest by `category`**, which is not an
+# inconsistency but the two questions the vocabulary can answer. Rule 3 asked
+# it of the layer — `LAYERS_BY_CATEGORY` admits `mid` for outerwear, so a
+# cardigan under a coat is one outer layer and two coats are two — and this
+# table absorbs that reading unchanged. The base top needs **both** columns,
+# because `top` is the one category `LAYERS_BY_CATEGORY` answers `None` for: a
+# top is legitimately `base` or `mid`, so `category` alone would refuse the
+# overshirt the prompt allows and `layer` alone would refuse the jeans.
+#
+# `accessories` is the one slot with a limit above 1, and it is the system
+# prompt's own number — "add a bag and up to two accessories".
+SLOT_RULES: Final[tuple[SlotRule, ...]] = (
+    SlotRule("outer layer items", 1, lambda item: item.layer is Layer.OUTER),
+    SlotRule(
+        "base-layer tops",
+        1,
+        lambda item: item.category is Category.TOP and item.layer is Layer.BASE,
+    ),
+    SlotRule("bottoms", 1, lambda item: item.category is Category.BOTTOM),
+    SlotRule("dresses", 1, lambda item: item.category is Category.DRESS),
+    SlotRule("pairs of shoes", 1, lambda item: item.category is Category.SHOES),
+    SlotRule("bags", 1, lambda item: item.category is Category.BAG),
+    SlotRule("accessories", 2, lambda item: item.category is Category.ACCESSORY),
+)
+
+
+def _slot_conflict(looks: tuple[Look, ...], known: Mapping[str, ItemResponse]) -> str | None:
+    """Rule 9: one item per slot, and a dress instead of separates.
+
+    Rule 2 says a look is not missing anything; this says it does not wear
+    anything twice. The two halves are one rule because they are one question
+    asked of one look — *can a person put this on?* — and a dress beside a pair
+    of jeans is the same answer as two pairs of jeans.
+
+    It absorbs rule 3, which was this rule with one slot in it. The number
+    stays in `03`'s table: eight documents, a test and three code comments name
+    it, and renumbering to buy nothing is how a reference becomes wrong.
+    """
+    for look in looks:
+        for slot in SLOT_RULES:
+            worn = [item_id for item_id in look.item_ids if slot.holds(known[item_id])]
+            if len(worn) > slot.limit:
+                named = ", ".join(worn[: slot.limit + 1])
+                return (
+                    f"the look contains {len(worn)} {slot.label} "
+                    f"and may contain at most {slot.limit}: {named}"
+                )
+
+        if any(known[item_id].category is Category.DRESS for item_id in look.item_ids):
+            separate = next(
+                (item_id for item_id in look.item_ids if known[item_id].category in _SEPARATES),
+                None,
+            )
+            if separate is not None:
+                return (
+                    f"the look contains a dress and the separate item {separate}: "
+                    "a dress is worn instead of a top and a bottom, not beside one"
+                )
+    return None
+
+
 def _violation(
     response: StylistResponse, wardrobe: Sequence[ItemResponse], context: StylistContext
 ) -> str | None:
@@ -582,17 +740,21 @@ def _violation(
 
     Rule 5 is absent: it reads `packing_list.item_ids`, and `STYLIST_SCHEMA`
     carries no `packing_list` until Stage 4 designs it beside the trip message
-    (`DECISIONS.md` 157). Rule 7 arrived with the anchor at 2.10; rule 8 waits
-    for the swap at 2.11.
+    (`DECISIONS.md` 157). Rule 7 arrived with the anchor at 2.10, rule 8 with
+    the swap at 2.11, and rule 9 at 2.11a, widened at 2.11b. **Rule 3 is not
+    missing** — it is one slot of rule 9 since 2.11b, so the chain is seven
+    calls for eight rules, and rule 9 runs last because it is last in the
+    table, which is the only ordering this function claims.
     """
     known = {item.short_id: item for item in wardrobe}
     return (
         _unknown_id(response.looks, known)
         or _incomplete(response.looks, known)
-        or _two_outer_layers(response.looks, known)
         or _wrong_count(response.looks)
         or _missing_outerwear(response.looks, known, context)
         or _missing_anchor(response.looks, context)
+        or _broken_lock(response.looks, context)
+        or _slot_conflict(response.looks, known)
     )
 
 

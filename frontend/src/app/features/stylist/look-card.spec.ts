@@ -13,6 +13,7 @@ import { LookCard } from './look-card';
 let fixture: ComponentFixture<LookCard>;
 let mock: HttpTestingController;
 let tries = 0;
+let swapped: Item[] = [];
 
 function item(overrides: Partial<Item> = {}): Item {
   return {
@@ -62,13 +63,25 @@ async function render(
   value: Look,
   missingPieces: readonly MissingPiece[] = [],
   message = '',
+  swappingItemId: string | null = null,
 ): Promise<void> {
   fixture = TestBed.createComponent(LookCard);
   fixture.componentRef.setInput('look', value);
   fixture.componentRef.setInput('missingPieces', missingPieces);
   fixture.componentRef.setInput('message', message);
+  fixture.componentRef.setInput('swappingItemId', swappingItemId);
   fixture.componentInstance.tryAgain.subscribe(() => tries++);
+  fixture.componentInstance.swap.subscribe((item) => swapped.push(item));
   await fixture.whenStable();
+}
+
+// Found by the accessible name rather than by the glyph: the ↻ is decoration
+// and the aria-label is what a screen reader reads out, so a badge that lost
+// its name would still pass a test that clicked on the character.
+function badges(): HTMLButtonElement[] {
+  return [...element().querySelectorAll<HTMLButtonElement>('button[aria-label]')].filter(
+    (candidate) => (candidate.getAttribute('aria-label') ?? '').startsWith('Swap '),
+  );
 }
 
 function element(): HTMLElement {
@@ -101,6 +114,7 @@ describe('LookCard', () => {
     });
     mock = TestBed.inject(HttpTestingController);
     tries = 0;
+    swapped = [];
 
     const loading = TestBed.inject(I18nService).load();
     mock.expectOne('/i18n/en.json').flush(en);
@@ -190,6 +204,63 @@ describe('LookCard', () => {
     await render(look([item({ id: 'item-7' })]));
 
     expect(links()).toContain('/wardrobe/item-7');
+  });
+
+  it('offers a swap badge on every item that has a role, naming the garment', async () => {
+    await render(
+      look([
+        item({ id: 'a', category: 'shoes', layer: 'standalone', display_name: 'loafers' }),
+        item({ id: 'b', category: 'top', layer: 'base', display_name: 'shirt' }),
+      ]),
+    );
+
+    expect(badges().map((badge) => badge.getAttribute('aria-label'))).toEqual([
+      'Swap shirt for something else',
+      'Swap loafers for something else',
+    ]);
+
+    badges()[0].click();
+    await fixture.whenStable();
+
+    expect(swapped.map((garment) => garment.id)).toEqual(['b']);
+  });
+
+  // The vocabulary decides this, not the layout: `replace_role` has no `dress`
+  // — replacing one can legally return a top and a bottom, which is not a
+  // single-item swap — so the badge that would send it is not drawn.
+  // AUDITS.md O-25.
+  it('draws no badge on a dress', async () => {
+    await render(
+      look([
+        item({ id: 'a', category: 'dress', layer: 'standalone', display_name: 'slip dress' }),
+        item({ id: 'b', category: 'shoes', layer: 'standalone', display_name: 'heels' }),
+      ]),
+    );
+
+    expect(badges().map((badge) => badge.getAttribute('aria-label'))).toEqual([
+      'Swap heels for something else',
+    ]);
+  });
+
+  // 05-FRONTEND-SPEC.md: the spinner is on that tile alone and the rest of the
+  // card stays put — so the other garments are still rendered, still in order,
+  // and the badges are held rather than removed.
+  it('waits on the tile being replaced and leaves the rest of the card alone', async () => {
+    await render(
+      look([
+        item({ id: 'a', category: 'shoes', layer: 'standalone', display_name: 'loafers' }),
+        item({ id: 'b', category: 'top', layer: 'base', display_name: 'shirt' }),
+      ]),
+      [],
+      '',
+      'a',
+    );
+
+    const waiting = [...element().querySelectorAll('[role="status"]')];
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0].textContent).toContain(en['stylist.look.swapping']);
+    expect(itemsInOrder()).toEqual(['shirt', 'loafers']);
+    expect(badges().every((badge) => badge.disabled)).toBe(true);
   });
 
   it('asks for another look', async () => {

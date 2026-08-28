@@ -215,6 +215,8 @@ Items are laid out by `layer` and `category`, not in an arbitrary order. Tapping
 
 **Each item also carries a small ↻ badge.** Tapping it re-requests the same look with every other item locked and only that role replaced, adding the rejected item to `exclude_item_ids`. Show a spinner on that tile alone; the rest of the card stays put.
 
+*Amended at task 2.11: **each item that has a role**, which is every garment except a dress.* `replace_role`'s vocabulary has no `dress` — replacing one can legally come back as a top and a bottom, which is a different look rather than a single-item swap — so a dress tile carries no badge and "Try again" is the only reroll for it. `02-DATA-MODEL.md`'s `role` section, `AUDITS.md` **O-25**, `DECISIONS.md` 175.
+
 This matters more than it looks. Most of the time a suggested look is fine and exactly one piece is wrong — usually the shoes. "Try again" rerolls everything and loses the good parts, which is the single most common frustration with outfit apps. Per-item swap is cheap to build on top of the same endpoint and none of the competing apps offer it.
 
 If `missing_pieces` is non-empty, render a muted note beneath: *"A neutral closed shoe would complete this."*

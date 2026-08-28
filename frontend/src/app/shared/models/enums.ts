@@ -124,6 +124,36 @@ export type Condition = (typeof CONDITIONS)[number];
 export const OCCASIONS = ['casual', 'work', 'evening', 'sport', 'formal', 'travel'] as const;
 export type Occasion = (typeof OCCASIONS)[number];
 
+// Not an item column either, and the only list here that is a wire value
+// before it is anything else: `look_items.role` is TEXT and stays NULL
+// (DECISIONS.md 175), so what these six validate is `replace_role` on
+// POST /looks/suggest. Reached this mirror at task 2.11 from 04-API-SPEC.md by
+// way of 02, the way OCCASIONS did one task earlier.
+export const ROLES = ['top', 'bottom', 'outer', 'shoes', 'bag', 'accessory'] as const;
+export type Role = (typeof ROLES)[number];
+
+// The one map in this file with no counterpart in app/enums.py, and that is
+// the shape of the decision rather than an oversight: the backend validates
+// the six values and never derives one, so the derivation lives where the ↻
+// badge is. `dress` is absent because a dress has no role — replacing one can
+// legally return a top *and* a bottom, which is not the single-item swap this
+// field names, so the badge is not drawn on a dress tile. `swimwear` and
+// `sleepwear` are absent because no look contains one. AUDITS.md O-25.
+const ROLE_BY_CATEGORY: Readonly<Partial<Record<Category, Role>>> = {
+  top: 'top',
+  bottom: 'bottom',
+  outerwear: 'outer',
+  shoes: 'shoes',
+  bag: 'bag',
+  accessory: 'accessory',
+};
+
+// Nullable in and possibly-undefined out, because both are real: item.model.ts
+// types `category` nullable, and three of the nine categories have no role.
+export function roleOf(category: Category | null): Role | undefined {
+  return category === null ? undefined : ROLE_BY_CATEGORY[category];
+}
+
 export const SUBCATEGORIES = {
   top: ['t_shirt', 'tank', 'shirt', 'blouse', 'sweater', 'sweatshirt', 'hoodie', 'bodysuit'],
   bottom: ['jeans', 'trousers', 'shorts', 'skirt', 'leggings', 'cargo'],

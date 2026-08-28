@@ -13,6 +13,7 @@ import { ItemsApi } from '../../core/api/items.api';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { StylistStore } from '../../core/state/stylist.store';
 import { WardrobeStore } from '../../core/state/wardrobe.store';
+import { roleOf } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
 import { SuggestRequest } from '../../shared/models/look.model';
 import { LookCard } from './look-card';
@@ -76,11 +77,20 @@ function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
           <p class="text-sm" role="status" aria-live="polite">{{ i18n.t(statusKey()) }}</p>
         </section>
       } @else if (look(); as look) {
+        <!-- Above the card, and only a swap can put it there: the card is on
+             screen, so the error is about the piece that did not change rather
+             than about a look that never arrived. -->
+        @if (store.error(); as key) {
+          <p class="text-sm font-medium text-danger">{{ i18n.t(key) }}</p>
+        }
+
         <app-look-card
           [look]="look"
           [missingPieces]="missingPieces()"
           [message]="message()"
+          [swappingItemId]="store.swappingItemId()"
           (tryAgain)="startOver()"
+          (swap)="swapItem($event)"
         />
       } @else {
         @if (store.error(); as key) {
@@ -131,6 +141,11 @@ export class StylistPage {
   // the form: it outlives the control that renders it, and the skeleton
   // unmounts that control on every submit.
   protected readonly anchor = signal<Item | null>(null);
+
+  // Every garment rejected on this look, oldest first. Held beside the anchor
+  // rather than in the draft for the same reason: it is not something the form
+  // asks for, and it outlives the card that produced it by exactly one request.
+  protected readonly excluded = signal<readonly string[]>([]);
 
   // Casual and today, which is the request a user who touches nothing else
   // sends. `include_outerwear: null` is Auto — the weather rule decides, which
@@ -183,7 +198,39 @@ export class StylistPage {
   }
 
   protected suggest(): void {
+    this.excluded.set([]);
     this.store.suggest(toRequest(this.draft(), this.anchor()));
+  }
+
+  // "Swap the shoes" spelled out: lock everything else, name the role of the
+  // tile that was tapped, and add that garment to the exclusions so the answer
+  // cannot be the same one again.
+  //
+  // The exclusions accumulate across taps — 05-FRONTEND-SPEC.md says *adds* to
+  // `exclude_item_ids` — so a second swap of the same role cannot hand back the
+  // shoe rejected on the first. They are cleared with the look they belong to.
+  //
+  // No anchor. Every garment the anchor was protecting is locked here anyway,
+  // and on the anchored tile itself the two fields would contradict: rule 7
+  // requires the item and rule 8 forbids it, which is a 502 by construction.
+  protected swapItem(item: Item): void {
+    const look = this.look();
+    const role = roleOf(item.category);
+    if (look === null || role === undefined) {
+      return;
+    }
+
+    const excluded = [...this.excluded(), item.id];
+    this.excluded.set(excluded);
+    this.store.swap(
+      {
+        ...toRequest(this.draft(), null),
+        locked_item_ids: look.items.filter((kept) => kept.id !== item.id).map((kept) => kept.id),
+        replace_role: role,
+        exclude_item_ids: excluded,
+      },
+      item.id,
+    );
   }
 
   protected name(item: Item): string {
@@ -232,6 +279,7 @@ export class StylistPage {
   // forecast along with the look, so the date is re-asked for in the same two
   // calls and the same order the constructor makes them.
   protected startOver(): void {
+    this.excluded.set([]);
     this.store.reset();
     this.store.loadWeather(this.draft().date);
   }

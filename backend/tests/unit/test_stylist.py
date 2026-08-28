@@ -324,6 +324,44 @@ def test_no_anchor_prints_no_block() -> None:
     assert "ANCHOR:" not in stylist._user_message(WARDROBE, _context())
 
 
+def test_the_locked_block_is_the_documented_one() -> None:
+    # `03-AI-CONTRACTS.md`'s swap block, all four lines, as the tail of the
+    # message: it is the narrowest instruction in it, so it comes last.
+    message = stylist._user_message(
+        WARDROBE,
+        _context(
+            locked_ids=(TOP_ID, JEANS_ID, BLAZER_ID),
+            replace_role="shoes",
+            excluded_ids=(BOOTS_ID,),
+        ),
+    )
+
+    assert message.endswith(
+        "Build 1 look.\n"
+        "\n"
+        f"LOCKED: {TOP_ID}, {JEANS_ID}, {BLAZER_ID}\n"
+        "These items MUST appear unchanged.\n"
+        "Replace only the shoes with a different option from the wardrobe.\n"
+        f"Do not return the previously rejected item {BOOTS_ID}."
+    )
+
+
+def test_locks_with_no_role_and_no_exclusion_print_two_lines() -> None:
+    # `_outerwear_line`'s rule on a longer block: a sentence about a field the
+    # user did not send is an instruction nobody gave. Without a role there is
+    # nothing to name as replaceable, and without an exclusion nothing was
+    # rejected.
+    message = stylist._user_message(WARDROBE, _context(locked_ids=(TOP_ID, JEANS_ID)))
+
+    assert message.endswith(f"LOCKED: {TOP_ID}, {JEANS_ID}\nThese items MUST appear unchanged.")
+
+
+def test_no_locks_prints_no_block() -> None:
+    # An exclusion alone is not a swap, and `03` prints the rejection line
+    # inside the LOCKED block or not at all.
+    assert "LOCKED:" not in stylist._user_message(WARDROBE, _context(excluded_ids=(BOOTS_ID,)))
+
+
 # --- the request suggest_looks builds ---------------------------------------
 
 
@@ -530,6 +568,31 @@ async def test_an_anchor_the_wardrobe_does_not_hold_leaves_the_fake_alone(fake: 
     answer = await stylist.suggest_looks(WARDROBE, _context(anchor_id="Q7WXYZ"))
 
     assert answer.looks[0].item_ids == (BOOTS_ID, TOP_ID, JEANS_ID)
+
+
+@pytest.mark.asyncio
+async def test_the_fake_keeps_the_locks_and_swaps_the_rejected_item(fake: None) -> None:
+    # Rule 8 judges the fake as well as the model, so a fake that ignored the
+    # locks would make every `USE_FAKE_AI` swap a 502 — the trap the anchor
+    # walked into at 2.10, one field along. The second pair of shoes is what
+    # the swap has to find.
+    loafers = _item("HH7TP2", category="shoes", subcategory="loafers")
+    answer = await stylist.suggest_looks(
+        [*WARDROBE, loafers],
+        _context(locked_ids=(TOP_ID, JEANS_ID), excluded_ids=(BOOTS_ID,), replace_role="shoes"),
+    )
+
+    assert answer.looks[0].item_ids == (TOP_ID, JEANS_ID, "HH7TP2")
+
+
+@pytest.mark.asyncio
+async def test_the_fake_never_puts_a_dress_beside_a_top_and_a_bottom(fake: None) -> None:
+    # Rule 9 judges the fake too, and this is the clause that made it a 502:
+    # a dress in the look — anchored here, locked in a swap — used to be joined
+    # by the pair, which is a look nobody can put on.
+    answer = await stylist.suggest_looks(WARDROBE + [DRESS], _context(anchor_id=DRESS_ID))
+
+    assert answer.looks[0].item_ids == (DRESS_ID, BOOTS_ID)
 
 
 @pytest.mark.asyncio
