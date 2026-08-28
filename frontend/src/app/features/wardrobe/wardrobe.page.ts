@@ -17,6 +17,7 @@ import { FilterBar } from './filter-bar';
 import { ItemCard } from './item-card';
 import { PendingStrip } from './pending-strip';
 import { UploadSheet } from './upload-sheet';
+import { WeatherStrip } from './weather-strip';
 
 // A URL is user input. A value outside the closed vocabulary is dropped rather
 // than applied, so `?category=banana` shows an unfiltered wardrobe under a URL
@@ -42,7 +43,7 @@ function scale(value: string | null): number | undefined {
 @Component({
   selector: 'app-wardrobe-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilterBar, ItemCard, PendingStrip, RouterLink, UploadSheet],
+  imports: [FilterBar, ItemCard, PendingStrip, RouterLink, UploadSheet, WeatherStrip],
   template: `
     <main class="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
       <header class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -77,6 +78,13 @@ function scale(value: string | null): number | undefined {
           {{ i18n.t('wardrobe.signOut') }}
         </button>
       </div>
+
+      <!-- The only route into /stylist in the whole application, which is why
+           it sits above every branch below rather than inside one: an empty
+           wardrobe, a failed load and a filter with no matches are all states
+           this screen can be in, and none of them is a reason to lose the way
+           to the stylist. §2.12. -->
+      <app-weather-strip />
 
       <!-- Above the whole chain below, deliberately. The grid lives in the
            final @else, and on a first-ever upload isEmpty() is still true

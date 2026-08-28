@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 2 — The Stylist
-**Status:** Stage 2 in progress — 2.1 to 2.11b complete; **2.12**, the weather strip, is the last task of the stage and carries the only link into `/stylist`. Everything it links to exists: the screen, the look card, the anchor, the profile screen that sets the home city, and the per-item swap. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below).
+**Status:** Stage 2 — **every task from 2.1 to 2.12 is built**, and the stage's acceptance criteria are the developer's to run: the suites, the demo wardrobe timings and the five-out-of-five anchor check are unmeasured here. The application is connected end to end for the first time — the wardrobe reaches the stylist in one tap, the stylist reaches the look card, the card reaches an item, and the profile screen sets the home city all of it depends on. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below).
 
 This header and the Stage 2 checklist below had not moved since 2.7, while 2.8, 2.9, 2.10 and 2.10a shipped — the same drift the paragraph below records at 2.2, four tasks wide again. Both are corrected here at 2.11; the log itself still has no entries for those four tasks, and this line does not invent them. Their record is `DECISIONS.md` 174 and the annotations in `stages/STAGE-2-stylist.md`.
 
@@ -59,7 +59,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Swap a single item
 - [x] Rule 9 — two base-layer tops (2.11a, opened by O-28)
 - [x] Rule 9 widened — one item per slot (2.11b, O-28 again)
-- [ ] Weather strip
+- [x] Weather strip
 
 ## Stage 3 — Feedback  *(cut line — reduce to "save a look" if behind)*
 `stages/STAGE-3-feedback.md` · target 3 days
@@ -506,3 +506,12 @@ The task was decided by three things the documents did not agree on, and by one 
 - **The fake needed the rule too, and running it is what found that.** `_fake_items` joined a dress with the pair whenever a dress was anchored or locked, so under `USE_FAKE_AI` every anchored dress and every swap on a dress look would have answered `502` — the flag `07-DEPLOYMENT.md` runs the E2E job with. Fixed and pinned in the same commit. **That is three rules the fake has now been taught (7, 8, 9), and it is O-27's open question growing rather than a new one.**
 - **A shirt worn open over a dress is now refused.** The rule reads categories, not intent; a coat over a dress is a different slot and unaffected. Recorded as the cost rather than worked around, because the alternative is a rule that guesses.
 - **No mutation run.** Deleting `_slot_conflict` from `_violation` should turn exactly four unit tests red — the absorbed rule 3 rejection, the base-top one, and the two new rejections — while the three tests that assert a *legal* look stay green, which is the pair worth having.
+
+**2026-08-28 — task 2.12, the weather strip and the way into the stylist.** **5 frontend specs added** — `weather-strip.spec.ts` (4) and one in `wardrobe.page.spec.ts`, with all eight wardrobe spec files passing (139) — and `ng build` and `ng lint` are clean. New: `frontend/src/app/features/wardrobe/weather-strip.ts` and its spec. Changed: `frontend/src/app/features/wardrobe/wardrobe.page.ts` and its spec, `frontend/public/i18n/en.json`, and three documents besides this one. One entry, `DECISIONS.md` 180. No backend, no new API, no new store, no audit item — **nothing in `AUDITS.md` tracked the missing entry point**, which is itself worth noting: the gap was recorded only in `STAGE-2` §2.12's own text.
+
+- **The larger half of the task was the link, not the weather.** Until this commit nothing in the application pointed at `/stylist`: the route has existed since 2.8 and 2.10's "Style around this" is a way in from one garment rather than a way to ask for a look at all. The wardrobe screen now reaches it in one tap.
+- **The strip is not the tap target `05` drew, and the degraded state is why.** §2.12 requires a prompt linking to `/profile` when there is no home city *and* the tap into `/stylist` in the same strip; an anchor inside an anchor is not a document, so the strip carries a labelled **Style me** link that renders in every state. `05` is annotated. 180.
+- **Three states rather than two.** The third is an account that has a home city whose forecast has not arrived or did not: nothing on the left, the link still there. Showing "set your home city" to someone who has one would be the wrong sentence, and a banner would report a failure nobody asked about — `StylistStore.loadWeather`'s judgement, one screen over.
+- **It fetches for itself.** Ten lines that the stylist store also has, in exchange for not wiring the wardrobe screen to the state container of a screen it merely links to. `todayInLocalTime` is imported rather than copied, so the strip and the date picker cannot disagree about which day today is, and the line prints the day's **high** — the number `summarize_forecast` already sends the model (142).
+- **No glyph, against the mock.** Eight conditions, one 🌤 in the drawing, and no icon map: a sun printed over a line reading *Rain* is a wrong statement where a missing icon is only a missing one.
+- **Stage 2 is now built end to end and unmeasured.** Nine of its ten acceptance criteria need a running database, a live model or a stopwatch, and this agent runs none of them.

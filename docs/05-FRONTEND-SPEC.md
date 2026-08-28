@@ -87,7 +87,7 @@ The home screen and the most-used surface.
 ```
 ┌────────────────────────────────┐
 │ Wardrobe            138 items  │
-│ 🌤 18°C Tel Aviv               │  ← weather strip, tappable → stylist
+│ 🌤 18°C Tel Aviv    [Style me] │  ← weather strip, → stylist (see 2.12)
 ├────────────────────────────────┤
 │ [All][Tops][Bottoms][Shoes]…   │  ← horizontal scroll, category chips
 │ [Filters ▾]              [⌗]   │  ← filter sheet + grid/list toggle
@@ -102,6 +102,8 @@ The home screen and the most-used surface.
 │         [ + Add items ]        │  ← FAB, bottom-right on mobile
 └────────────────────────────────┘
 ```
+
+**Built at task 2.12, and two details of the strip above are not what this legend drew.** **The strip is not itself the tap target**: it carries a labelled **Style me** link instead, because the degraded state — no home location, so the temperature is replaced by a prompt linking to `/profile` — would otherwise put an anchor inside an anchor. The link is present in all three states (a forecast, no home city, a home city whose forecast did not arrive), which is what makes this the entry point `STAGE-2` §2.12 requires rather than a decoration that disappears with the weather. **And there is no glyph**: 🌤 above is one icon for eight conditions, and a sun printed over a line reading *Rain* is worse than no icon, so the line is temperature, condition and city in the body face (`DECISIONS.md` 071, which names this strip). `DECISIONS.md` 180.
 
 **Empty state is important.** A first-time user sees: a one-line explanation and a large **Add your first items** button. Do not ship a blank grid.
 

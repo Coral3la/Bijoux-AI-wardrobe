@@ -213,6 +213,14 @@ A persistent strip on the wardrobe screen showing the current temperature and co
 
 **So the tap target does not depend on the forecast.** An account with no home location has no temperature to print, and a strip that rendered nothing in that case would leave the wardrobe with no route to the stylist. It degrades instead: the strip stays, the temperature is replaced by a prompt to set a home city that links to 2.10a's screen, and the tap into `/stylist` is there either way.
 
+**Built at task 2.12, and the strip is not itself the tap target.** `05-FRONTEND-SPEC.md` draws the whole strip as tappable, and the degraded state makes that impossible: the prompt to set a home city is a link to `/profile`, and an anchor inside an anchor is not a document. So the strip is a row — the weather line, or that prompt — with a labelled **Style me** link into `/stylist` that is present in every state. `05` is annotated where it draws it. `DECISIONS.md` 180.
+
+**Three states, not two.** The forecast, the no-home-location prompt, and an account that *has* a home city whose forecast has not arrived or did not — which renders nothing on the left and keeps the link. Showing the set-a-city prompt there would be the wrong sentence about a request that failed, and an error banner would report something the user did not ask about: the strip fails silently, which is `StylistStore.loadWeather`'s own judgement one screen over.
+
+**The component fetches for itself rather than borrowing the stylist's store.** `WeatherStrip` reads `home_lat`/`home_lon` off `AuthService.currentUser()` and calls `GET /weather` — the same ten lines `StylistStore.loadWeather` runs — because the alternative wires the wardrobe screen to the state container of a screen it merely links to. It prints the day's **high**, which is the number `summarize_forecast` already sends the model, and imports `todayInLocalTime` rather than copying it so the strip and the date picker cannot disagree about which day today is.
+
+**No emoji.** The mock in `05` draws 🌤; there are eight conditions and no icon map, and a sun over a rainy line is worse than no glyph at all. Building one was not this task's.
+
 ---
 
 ## Acceptance criteria
@@ -223,6 +231,7 @@ A persistent strip on the wardrobe screen showing the current temperature and co
 - [ ] Every returned item exists in the wardrobe — verified by an integration test using a poisoned fixture that returns an unknown ID, asserting `502`
 - [ ] Forcing 12°C produces outerwear; forcing 30°C produces none. Same wardrobe, same occasion.
 - [ ] A user with 5 items gets `400 wardrobe_too_small` and no AI call is made
+- [ ] The wardrobe screen reaches `/stylist` in one tap, with a home city set and without one
 - [ ] `reasoning` explains the combination rather than listing the items
 - [ ] Two identical requests produce a valid look both times
 - [ ] "Style around this" on a specific item returns a look containing that item, 5 times out of 5

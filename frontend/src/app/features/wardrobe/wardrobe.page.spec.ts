@@ -189,6 +189,7 @@ describe('WardrobePage', () => {
           // its filters from the URL once, on construction.
           { path: 'wardrobe', children: [] },
           { path: 'profile', children: [] },
+          { path: 'stylist', children: [] },
         ]),
       ],
     });
@@ -212,6 +213,22 @@ describe('WardrobePage', () => {
     } finally {
       TestBed.resetTestingModule();
     }
+  });
+
+  // §2.12: the strip is above every branch of the page, so the way into the
+  // stylist survives an empty wardrobe, a failed load and a filter with no
+  // matches. Asserted on the empty state, which is the branch that renders
+  // least — no signed-in user here, so the strip is in its degraded form and
+  // asks for no forecast.
+  it('carries the entry point into the stylist above every state', async () => {
+    await render([]);
+
+    const page = fixture.nativeElement as HTMLElement;
+    const link = [...page.querySelectorAll('a')].find(
+      (candidate) => candidate.textContent?.trim() === en['wardrobe.weather.styleMe'],
+    );
+    expect(link?.getAttribute('href')).toBe('/stylist');
+    expect(page.querySelector('app-weather-strip')).not.toBeNull();
   });
 
   it('loads the wardrobe on arrival with an explicit limit', async () => {
