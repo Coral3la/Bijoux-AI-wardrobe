@@ -98,7 +98,7 @@ contradiction** — a thing no document disagrees about and nobody has looked at
 It was extended at 1.6 rather than duplicated, and **O-15** was opened by the
 same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
-task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, **which task 3.1 closed**, printing both indexes in `02` before migration `0004` built them and finding, on the way, that deleting them failed no test. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had.
+task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, **which task 3.1 closed**, printing both indexes in `02` before migration `0004` built them and finding, on the way, that deleting them failed no test. **O-29 and O-30 were opened at task 3.2**, and they are the two kinds this file has collected most: a cost that only becomes visible on its third instance — three screens with no way into them — and a documented endpoint with nothing under its heading, which is **O-1's shape** found the same way, by the task implementing the section next to it. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -1404,3 +1404,49 @@ bill of health (`CONVENTIONS.md`).
 - **Not looked for:** anything in `06-TESTING-STRATEGY.md`, which is the largest
   unaudited document and the one most likely to describe tests that no longer
   match the suite. That is the obvious scope for audit 2.
+
+#### O-29 · Three screens now exist with nothing linking to them — opened at task 3.2
+
+`/saved` is built, guarded, above the wildcard, and reachable only by typing
+the URL. It is the **third** time this has happened: `app.routes.ts` carries a
+comment saying the same of `/profile` at 2.10a and said it of `/stylist` at 2.8
+until 2.12 built the weather strip. `/profile` is still in that state.
+
+Each was correct in isolation. `STAGE-2` 2.10a specified the profile screen
+without saying how it is reached, 2.8 the same for the stylist, and `STAGE-3`
+3.2 the same for this one — and a navigation bar is in no stage file at all.
+What makes it an item rather than three notes is that the count is going up
+and the fix is one piece of work, not three: the wardrobe screen is the only
+place a user lands, and it currently reaches `/profile` by a header link and
+`/stylist` by the weather strip's **Style me**, each invented by the task that
+needed it.
+
+**Recommendation.** Whoever builds the third entry point should build the
+navigation instead, and `05-FRONTEND-SPEC.md` §2 is where it belongs — it draws
+the wardrobe header and names neither. Stage 5 is the natural owner if nothing
+earlier claims it, since `STAGE-5` 5.3's eleven journeys have to reach every
+screen and cannot do it through the address bar. **Do not let a fourth screen
+ship with a bespoke link.** This item is not a defect in any of the three
+tasks; it is the cost of specifying screens one at a time.
+
+#### O-30 · `GET /looks/{id}` and `DELETE /looks/{id}` are headings with nothing under them — opened at task 3.2
+
+`04-API-SPEC.md` gives both a heading and no body: no request, no response, no
+status codes, no prose. **This is O-1's shape exactly** — `POST /items/{id}/retag`
+and `DELETE /items/{id}` had no documented success response until task 1.4 —
+and it was found the same way, by a task reading the section it was about to
+implement half of.
+
+Neither is built and neither is needed yet: 3.2 lists whole looks and there is
+no look-detail route, so nothing in Stage 3 or 4 has a caller for either. The
+`DELETE` is the one with a real question behind it — `DELETE /items/{id}` is a
+soft archive rather than a delete, and `looks` has no `is_archived` column, so
+whoever builds it has to decide whether a look is archived, hard-deleted, or
+simply unsaved. That is a schema question, not an endpoint question.
+
+**Recommendation.** Answer them in `02-DATA-MODEL.md` and `04-API-SPEC.md`
+before writing either, and if the answer is that neither should exist, strike
+the headings — a heading with nothing under it reads as an endpoint somebody
+forgot to document rather than as one nobody decided to build. Task 3.2 marked
+both in `04` rather than removing them, because striking a documented endpoint
+is not a call a task makes on its way past.

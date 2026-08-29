@@ -1,7 +1,16 @@
-"""The one route that puts Stage 2 together.
+"""The three `/looks` routes: make one, list them, change one.
 
-Wardrobe → forecast → rule → serialise → stylist → validate → persist →
-hydrate, in `STAGE-2` 2.7's order. Everything it calls was built to be called
+`POST /suggest` is the route that puts Stage 2 together — wardrobe → forecast →
+rule → serialise → stylist → validate → persist → hydrate, in `STAGE-2` 2.7's
+order. `GET ""` and `PATCH /{look_id}` are 3.2's and are the first things in
+this project to read a `looks` row back after the request that wrote it: every
+suggestion made since 2.7 becomes visible here.
+
+The two reads share `_hydrate`, which is the whole of what makes a persisted
+look into a wire one. `Look` carries no `relationship()` — following `Item`,
+which names `user_id` and stops — so the items come from an explicit join in
+`look_items.position` order, and that is the second reader `position` was
+written for at 2.7. Everything it calls was built to be called
 from here: `services/stylist.py` holds no `Session` and no clock, `build_rule`
 and `summarize_forecast` are pure, and `validate_look_response` judges without
 raising. What is left for this module is the three things only a request can
@@ -11,11 +20,14 @@ what a failure is worth on the wire.
 
 import logging
 import time
+import uuid
 from collections.abc import Mapping, Sequence
+from datetime import date as date_type
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from openai import OpenAIError
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -27,10 +39,12 @@ from app.models.look import Look, LookItem
 from app.models.user import User
 from app.schemas.item import ItemResponse
 from app.schemas.look import (
+    LookListResponse,
+    LookResponse,
     LookSuggestRequest,
     LookSuggestResponse,
+    LookUpdate,
     MissingPieceResponse,
-    SuggestedLook,
 )
 from app.services.stylist import Look as StylistLook
 from app.services.stylist import (
@@ -290,7 +304,7 @@ def _persist(
     context: StylistContext,
     looks: Sequence[StylistLook],
     known: Mapping[str, ItemResponse],
-) -> list[SuggestedLook]:
+) -> list[LookResponse]:
     """The rows, and the same looks hydrated for the wire.
 
     One pass, because the wire object carries the `id` the insert generated and
@@ -308,7 +322,7 @@ def _persist(
     vocabulary, `04`'s six values do not cover `dress`, and 2.11 is the task
     that first reads one. `AUDITS.md` O-25, `DECISIONS.md` 170.
     """
-    suggested: list[SuggestedLook] = []
+    suggested: list[LookResponse] = []
 
     for answer in looks:
         row = Look(
@@ -330,13 +344,19 @@ def _persist(
         )
 
         suggested.append(
-            SuggestedLook(
+            LookResponse(
                 id=row.id,
                 occasion=context.occasion,
                 title=answer.title,
                 items=[known[item_id] for item_id in answer.item_ids],
                 reasoning=answer.reasoning,
                 weather_note=answer.weather_note,
+                # Read off the row rather than written as False. The INSERT
+                # brings the server default back (test_server_defaults.py), so
+                # this is what the database actually holds; a literal here
+                # would be a second copy of `0002`'s DEFAULT with nothing
+                # comparing them.
+                is_saved=row.is_saved,
             )
         )
 
@@ -344,7 +364,7 @@ def _persist(
     return suggested
 
 
-def _response(looks: list[SuggestedLook], answer: StylistResponse) -> LookSuggestResponse:
+def _response(looks: list[LookResponse], answer: StylistResponse) -> LookSuggestResponse:
     return LookSuggestResponse(
         looks=looks,
         missing_pieces=[
@@ -417,3 +437,121 @@ async def suggest_look(
     answer = validation.response
     known = {item.short_id: item for item in wardrobe}
     return _response(_persist(db, current_user, context, answer.looks, known), answer)
+
+
+def _hydrate(db: Session, rows: Sequence[Look]) -> list[LookResponse]:
+    """Persisted looks, with their items, in the model's own order.
+
+    One query for every look rather than one per look: the list endpoint
+    returns up to two hundred, and the per-look shape of this is the N+1 that
+    `idx_look_items_item_id` was built at 3.1 to make survivable rather than
+    invisible.
+
+    Ordered by `look_items.position`, which is the second reader that column
+    was written for — 2.7 recorded it as destroyed-at-persistence-if-unwritten
+    and 2.11 read it on the card. Without the `order_by` the join returns rows
+    in whatever order the planner likes, and a saved look would relayout
+    between two reloads.
+    """
+    if not rows:
+        return []
+
+    look_ids = [row.id for row in rows]
+    pairs = db.execute(
+        select(LookItem.look_id, Item)
+        .join(Item, Item.id == LookItem.item_id)
+        .where(LookItem.look_id.in_(look_ids))
+        .order_by(LookItem.look_id, LookItem.position)
+    ).all()
+
+    items: dict[uuid.UUID, list[ItemResponse]] = {look_id: [] for look_id in look_ids}
+    for look_id, item in pairs:
+        items[look_id].append(ItemResponse.model_validate(item))
+
+    return [
+        LookResponse(
+            id=row.id,
+            occasion=row.occasion,
+            title=row.title,
+            items=items[row.id],
+            reasoning=row.reasoning,
+            weather_note=row.weather_note,
+            is_saved=row.is_saved,
+        )
+        for row in rows
+    ]
+
+
+def _owned(db: Session, look_id: uuid.UUID, user_id: uuid.UUID) -> Look:
+    look = db.scalar(select(Look).where(Look.id == look_id, Look.user_id == user_id))
+    if look is None:
+        # Another account's look and one that never existed are the same
+        # answer, which is `06-TESTING-STRATEGY.md`'s isolation requirement and
+        # `items.py`'s `_owned` unchanged: a 403 would confirm the row exists.
+        raise ApiError(status.HTTP_404_NOT_FOUND, "not_found", "Look not found.")
+    return look
+
+
+@router.get("")
+def list_looks(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    is_saved: bool | None = None,
+    from_date: date_type | None = None,
+    to_date: date_type | None = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> LookListResponse:
+    # `04-API-SPEC.md` names a fourth filter, `trip_id`, and it is not here:
+    # the column arrives with migration `0005`, and a parameter that filters on
+    # a column the database lacks is a 500 rather than an empty list.
+    filters: list[ColumnElement[bool]] = [Look.user_id == current_user.id]
+    if is_saved is not None:
+        filters.append(Look.is_saved.is_(is_saved))
+    if from_date is not None:
+        filters.append(Look.for_date >= from_date)
+    if to_date is not None:
+        filters.append(Look.for_date <= to_date)
+
+    total = db.scalar(select(func.count()).select_from(Look).where(*filters)) or 0
+    rows = db.scalars(
+        # `GET /items`'s ordering with its tiebreaker dropped: `short_id` broke
+        # the tie there because a whole upload shares one `created_at`, and
+        # looks are written one per request. `id` is the tiebreaker instead —
+        # arbitrary but stable, which is what keeps `offset` from repeating a
+        # row between two pages.
+        select(Look)
+        .where(*filters)
+        .order_by(Look.created_at.desc(), Look.id)
+        .limit(limit)
+        .offset(offset)
+    ).all()
+
+    return LookListResponse(looks=_hydrate(db, rows), total=total)
+
+
+@router.patch("/{look_id}")
+def update_look(
+    look_id: uuid.UUID,
+    changes: LookUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> LookResponse:
+    supplied = changes.model_dump(exclude_unset=True)
+    if not supplied:
+        # `update_item`'s guard, and here it defends less: no column records
+        # that this endpoint ran, so an empty body would be a harmless 200.
+        # It is refused anyway because a client that sent one meant something
+        # by it, and a 200 says the row now reads the way it asked.
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "validation_error",
+            "request: at least one field must be supplied.",
+        )
+
+    look = _owned(db, look_id, current_user.id)
+    for field, value in supplied.items():
+        setattr(look, field, value)
+    db.commit()
+
+    return _hydrate(db, [look])[0]

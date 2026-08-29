@@ -14,6 +14,7 @@ let fixture: ComponentFixture<LookCard>;
 let mock: HttpTestingController;
 let tries = 0;
 let swapped: Item[] = [];
+let saves = 0;
 
 function item(overrides: Partial<Item> = {}): Item {
   return {
@@ -55,6 +56,7 @@ function look(items: readonly Item[], overrides: Partial<Look> = {}): Look {
     items,
     reasoning: 'The high-rise jean balances the oversized shirt.',
     weather_note: 'Mild at 18°C — the blazer is enough.',
+    is_saved: false,
     ...overrides,
   };
 }
@@ -64,15 +66,31 @@ async function render(
   missingPieces: readonly MissingPiece[] = [],
   message = '',
   swappingItemId: string | null = null,
+  saving = false,
 ): Promise<void> {
   fixture = TestBed.createComponent(LookCard);
   fixture.componentRef.setInput('look', value);
   fixture.componentRef.setInput('missingPieces', missingPieces);
   fixture.componentRef.setInput('message', message);
   fixture.componentRef.setInput('swappingItemId', swappingItemId);
+  fixture.componentRef.setInput('saving', saving);
   fixture.componentInstance.tryAgain.subscribe(() => tries++);
   fixture.componentInstance.swap.subscribe((item) => swapped.push(item));
+  fixture.componentInstance.save.subscribe(() => saves++);
   await fixture.whenStable();
+}
+
+// By its accessible name, like the swap badges above and for the same reason:
+// the ♡ is aria-hidden decoration, so a test that clicked the glyph would pass
+// on a button with no name at all.
+function heart(): HTMLButtonElement {
+  const button = element().querySelector<HTMLButtonElement>(
+    `button[aria-label="${en['stylist.look.save']}"]`,
+  );
+  if (button === null) {
+    throw new Error('the card has no save button');
+  }
+  return button;
 }
 
 // Found by the accessible name rather than by the glyph: the ↻ is decoration
@@ -272,5 +290,53 @@ describe('LookCard', () => {
     await fixture.whenStable();
 
     expect(tries).toBe(1);
+  });
+
+  describe('LookCard — the heart', () => {
+    it('emits a save when it is tapped', async () => {
+      await render(look([item()]));
+
+      heart().click();
+
+      expect(saves).toBe(1);
+    });
+
+    it('reports the saved state through aria-pressed rather than its label', async () => {
+      // The accessible name is fixed and the state is on aria-pressed. A label
+      // that swapped between "Save" and "Unsave" would announce the change twice
+      // and disagree with itself about which way the next press goes.
+      await render(look([item()], { is_saved: false }));
+      expect(heart().getAttribute('aria-pressed')).toBe('false');
+      expect(heart().getAttribute('aria-label')).toBe(en['stylist.look.save']);
+
+      await render(look([item()], { is_saved: true }));
+      expect(heart().getAttribute('aria-pressed')).toBe('true');
+      expect(heart().getAttribute('aria-label')).toBe(en['stylist.look.save']);
+    });
+
+    it('fills in when the look is saved', async () => {
+      await render(look([item()], { is_saved: true }));
+      expect(heart().textContent?.trim()).toBe('\u2665');
+
+      await render(look([item()], { is_saved: false }));
+      expect(heart().textContent?.trim()).toBe('\u2661');
+    });
+
+    it('is disabled while the save is in flight', async () => {
+      await render(look([item()]), [], '', null, true);
+
+      expect(heart().disabled).toBe(true);
+    });
+
+    it('does not disable the try-again button while saving', async () => {
+      // The two controls are independent: a save in flight is not a reason to
+      // stop someone rerolling the look.
+      await render(look([item()]), [], '', null, true);
+
+      const tryAgain = [...element().querySelectorAll('button')].find(
+        (candidate) => candidate.textContent?.trim() === en['stylist.look.tryAgain'],
+      );
+      expect(tryAgain?.disabled).toBe(false);
+    });
   });
 });

@@ -33,6 +33,13 @@ describe('routes', () => {
     expect(await navigate('/does-not-exist')).toBe('/wardrobe');
   });
 
+  // Above the wildcard like the three before it, and with the same failure if
+  // it slips below: /saved would redirect to the grid and the screen would be
+  // unreachable by any means at all, since nothing links to it either.
+  it('resolves the saved-looks screen rather than falling through to the wildcard', async () => {
+    expect(await navigate('/saved')).toBe('/saved');
+  });
+
   // Declared above the wildcard. Below it, every item link would redirect to
   // the grid — which looks like a working app and silently loses the screen.
   it('resolves an item id rather than falling through to the wildcard', async () => {

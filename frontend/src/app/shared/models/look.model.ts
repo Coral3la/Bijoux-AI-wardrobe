@@ -35,6 +35,11 @@ export interface MissingPiece {
   readonly reason: string;
 }
 
+// One shape for a look wherever it comes from: POST /looks/suggest,
+// GET /looks and PATCH /looks/{id} all answer with this. The server renamed
+// SuggestedLook to LookResponse at 3.2 for the same reason — a second
+// near-identical type is one row described twice, with nothing keeping the two
+// descriptions in step. DECISIONS.md 182.
 export interface Look {
   readonly id: string;
   readonly occasion: string;
@@ -42,6 +47,22 @@ export interface Look {
   readonly items: readonly Item[];
   readonly reasoning: string;
   readonly weather_note: string;
+  readonly is_saved: boolean;
+}
+
+// PATCH /looks/{id}. Both keys are optional to *omit* and neither may be sent
+// as null: the endpoint refuses a cleared field rather than nulling a column,
+// so `undefined` here means "leave it alone" and there is no way to say
+// "erase it". `feedback` is 3.3's and the schema rejects it today, which is
+// why it is absent rather than optional.
+export interface LookUpdate {
+  readonly is_saved?: boolean;
+  readonly title?: string;
+}
+
+export interface LookListResponse {
+  readonly looks: readonly Look[];
+  readonly total: number;
 }
 
 // `looks` is an array carrying exactly one look today. Typed as the wire types

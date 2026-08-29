@@ -44,6 +44,15 @@ them** rather than spelling `Literal[-1, 1]`. `DECISIONS.md` 181.
 
 **If cutting this stage, this task alone is what you keep.**
 
+**Built.** `SuggestedLook` became `LookResponse` and is now what all three
+`/looks` endpoints answer with — `04-API-SPEC.md`'s `GET /looks` and
+`PATCH /looks/{id}` were a heading and a one-line body before this task and are
+written out now. `feedback` is refused by the PATCH schema until 3.3, which
+**3.3 changes in `LookUpdate` and in `LookResponse` together**. The screen is
+`/saved`, backed by a new `LooksStore`, and **nothing links to it** —
+`AUDITS.md` O-29. `GET /looks/{id}` and `DELETE /looks/{id}` are still
+undocumented and unbuilt: **O-30**. `DECISIONS.md` 182.
+
 ### 3.3 Feedback
 `PATCH /looks/{id}` accepting `feedback` as `1` or `-1`. Thumbs up and down on the look card. Optimistic UI update.
 

@@ -213,6 +213,14 @@ Submitting swaps the form for a look card. Expect 4–8 seconds — show a skele
 └────────────────────────────────┘
 ```
 
+*Amended at task 3.2: the heart is built and the two thumbs are 3.3's.* It is a
+**toggle button with a fixed accessible name** — "Save this look" — and
+`aria-pressed` carrying the state, rather than a label that swaps between Save
+and Unsave: a name that changes with the state announces the change twice and
+disagrees with itself about which way the next press goes. The glyph (♡ / ♥) is
+`aria-hidden` decoration. It is not optimistic — the `PATCH` answers with the
+look and that is what renders. `DECISIONS.md` 182.
+
 Items are laid out by `layer` and `category`, not in an arbitrary order. Tapping an item opens its detail page.
 
 **Each item also carries a small ↻ badge.** Tapping it re-requests the same look with every other item locked and only that role replaced, adding the rejected item to `exclude_item_ids`. Show a spinner on that tile alone; the rest of the card stays put.
@@ -222,6 +230,44 @@ Items are laid out by `layer` and `category`, not in an arbitrary order. Tapping
 This matters more than it looks. Most of the time a suggested look is fine and exactly one piece is wrong — usually the shoes. "Try again" rerolls everything and loses the good parts, which is the single most common frustration with outfit apps. Per-item swap is cheap to build on top of the same endpoint and none of the competing apps offer it.
 
 If `missing_pieces` is non-empty, render a muted note beneath: *"A neutral closed shoe would complete this."*
+
+### 6a. Saved looks — `/saved` *(Stage 3)*
+
+**Added at task 3.2.** `STAGE-3` 3.2 asks for a saved-looks list screen and this
+document had no screen for it — the heart was drawn on the card above and the
+list it feeds was specified nowhere.
+
+```
+┌────────────────────────────────┐
+│  ← Wardrobe   Saved looks      │
+│  ┌──────────────────────────┐  │
+│  │ Morning meetings      ♥  │  │
+│  │ 18°C — the blazer is …   │  │
+│  │ ┌───┐┌───┐┌───┐┌───┐     │  │
+│  │ └───┘└───┘└───┘└───┘     │  │
+│  └──────────────────────────┘  │
+│  ┌──────────────────────────┐  │
+│  │ Dinner out            ♥  │  │
+│  …                             │
+└────────────────────────────────┘
+```
+
+**Not the look card.** That component groups by layer, carries a ↻ badge on
+every garment and ends in "Try again", none of which a saved look can do —
+there is no request behind it to re-run. A row carries the title, the weather
+note, the garments as a flat strip **in the server's order**, and the heart.
+Reusing the card would have meant two inputs whose only job is to switch its own
+features off.
+
+**Unsaving leaves the row where it is**, with an empty heart, until the next
+load. Taking it away under the finger that unsaved it makes the tap
+uncorrectable; leaving it makes it one tap back.
+
+Empty state links to `/stylist` — it is the likeliest first visit, since the
+heart is one task old and no account has used it.
+
+**Nothing links to this screen.** `AUDITS.md` **O-29**; the entry point is its
+own work, as `/stylist`'s was at 2.12.
 
 ### 7. Trips — `/trips` *(Stage 4)*
 

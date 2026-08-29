@@ -106,13 +106,33 @@ function isCategory(value: string): value is Category {
         </section>
       }
 
-      <button
-        type="button"
-        (click)="tryAgain.emit()"
-        class="min-h-11 self-start rounded-md bg-accent px-4 text-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
-        {{ i18n.t('stylist.look.tryAgain') }}
-      </button>
+      <!-- 05-FRONTEND-SPEC.md draws [♡ Save] [👍] [👎] [↻ Again] as one row;
+           the two thumbs are 3.3's and land between these. -->
+      <div class="flex items-center gap-3">
+        <!-- A toggle button with a fixed accessible name, rather than a label
+             that swaps between "Save" and "Unsave": aria-pressed already
+             carries the state, and changing both means a screen reader
+             announces the change twice and disagrees with itself about which
+             direction the press goes. -->
+        <button
+          type="button"
+          (click)="save.emit()"
+          [disabled]="saving()"
+          [attr.aria-pressed]="look().is_saved"
+          [attr.aria-label]="i18n.t('stylist.look.save')"
+          class="min-h-11 min-w-11 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
+        >
+          <span aria-hidden="true">{{ look().is_saved ? '♥' : '♡' }}</span>
+        </button>
+
+        <button
+          type="button"
+          (click)="tryAgain.emit()"
+          class="min-h-11 rounded-md bg-accent px-4 text-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {{ i18n.t('stylist.look.tryAgain') }}
+        </button>
+      </div>
     </article>
   `,
 })
@@ -123,9 +143,13 @@ export class LookCard {
   readonly missingPieces = input<readonly MissingPiece[]>([]);
   readonly message = input('');
   readonly swappingItemId = input<string | null>(null);
+  readonly saving = input(false);
 
   readonly tryAgain = output<void>();
   readonly swap = output<Item>();
+  // No payload: the card renders one look and the page already holds it. The
+  // heart says "this one changed", not which one.
+  readonly save = output<void>();
 
   // Sorted by layer then category, then cut into runs — which is the whole of
   // the grouping, because a run can only break where the layer changes once

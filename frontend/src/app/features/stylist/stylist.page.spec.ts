@@ -98,6 +98,7 @@ function response(overrides: Partial<SuggestResponse> = {}): SuggestResponse {
         items: [],
         reasoning: 'The blazer lifts the knit without making it formal.',
         weather_note: 'Warm at 31°C.',
+        is_saved: false,
       },
     ],
     missing_pieces: [],
@@ -631,5 +632,92 @@ describe('StylistPage', () => {
     await submit();
 
     expect(suggestRequest().request.body).not.toHaveProperty('exclude_item_ids');
+  });
+
+  // The heart on the stylist screen. It is the same button look-card.spec.ts
+  // covers; what is measured here is the wiring the card cannot see — which
+  // store it reaches, and how the card learns the row changed.
+  describe('saving the look on screen', () => {
+    function heart(): HTMLButtonElement {
+      return element().querySelector<HTMLButtonElement>(
+        `button[aria-label="${en['stylist.look.save']}"]`,
+      )!;
+    }
+
+    async function suggested(): Promise<void> {
+      buttonWith(en['stylist.submit']).click();
+      suggestRequest().flush(response());
+      await fixture.whenStable();
+    }
+
+    it('patches the look it was shown', async () => {
+      await render();
+      await suggested();
+
+      heart().click();
+
+      const request = mock.expectOne(`${environment.apiUrl}/looks/look-1`);
+      expect(request.request.method).toBe('PATCH');
+      expect(request.request.body).toEqual({ is_saved: true });
+      request.flush({ ...response().looks[0], is_saved: true });
+    });
+
+    it('fills the heart in from the response and not from the tap', async () => {
+      // StylistStore still holds is_saved: false — the suggest response is
+      // never rewritten. The card shows the PATCH answer because the page
+      // prefers the newer of the two by id, which is the whole of that
+      // computed. Without it the heart would empty again on the next render.
+      await render();
+      await suggested();
+
+      heart().click();
+      mock
+        .expectOne(`${environment.apiUrl}/looks/look-1`)
+        .flush({ ...response().looks[0], is_saved: true });
+      await fixture.whenStable();
+
+      expect(heart().getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('unsaves on a second tap', async () => {
+      await render();
+      await suggested();
+
+      heart().click();
+      mock
+        .expectOne(`${environment.apiUrl}/looks/look-1`)
+        .flush({ ...response().looks[0], is_saved: true });
+      await fixture.whenStable();
+
+      heart().click();
+      const request = mock.expectOne(`${environment.apiUrl}/looks/look-1`);
+      expect(request.request.body).toEqual({ is_saved: false });
+      request.flush({ ...response().looks[0], is_saved: false });
+    });
+
+    it("does not carry the previous look's saved state onto the next one", async () => {
+      // `updated` is matched by id, so a second suggestion — a different row —
+      // must not inherit the first one's filled heart.
+      await render();
+      await suggested();
+      heart().click();
+      mock
+        .expectOne(`${environment.apiUrl}/looks/look-1`)
+        .flush({ ...response().looks[0], is_saved: true });
+      await fixture.whenStable();
+
+      await press(en['stylist.look.tryAgain']);
+      weatherRequest().flush(weather());
+      await fixture.whenStable();
+      buttonWith(en['stylist.submit']).click();
+      const second = response();
+      suggestRequest().flush({
+        ...second,
+        looks: [{ ...second.looks[0], id: 'look-2' }],
+      });
+      await fixture.whenStable();
+
+      expect(heart().getAttribute('aria-pressed')).toBe('false');
+    });
   });
 });

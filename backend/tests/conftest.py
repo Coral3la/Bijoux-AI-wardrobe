@@ -63,6 +63,7 @@ from app.core.short_id import generate_short_id  # noqa: E402
 from app.db.session import engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.item import Item  # noqa: E402
+from app.models.look import Look, LookItem  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services import stylist, vision  # noqa: E402
 
@@ -252,6 +253,35 @@ def make_item(db: Session, make_user: Callable[..., User]) -> Callable[..., Item
         db.add(item)
         db.commit()
         return item
+
+    return _make
+
+
+@pytest.fixture
+def make_look(db: Session, make_user: Callable[..., User]) -> Callable[..., Look]:
+    """A persisted look, with `look_items` rows in the order given.
+
+    Here rather than copied into two files because `GET /looks` and
+    `PATCH /looks/{id}` both need one and neither is four lines — which is the
+    line `test_looks_rows.py`'s `statements` fixture is on the other side of.
+
+    `items` is a list of rows, and `position` is the index, so a test that cares
+    about ordering states it by writing the list in the order it expects back.
+    """
+
+    def _make(items: list[Item] | None = None, **columns: Any) -> Look:
+        user_id = columns.pop("user_id", None) or make_user().id
+        look = Look(user_id=user_id, **columns)
+        db.add(look)
+        db.flush()
+        db.add_all(
+            [
+                LookItem(look_id=look.id, item_id=item.id, position=position)
+                for position, item in enumerate(items if items is not None else [])
+            ]
+        )
+        db.commit()
+        return look
 
     return _make
 

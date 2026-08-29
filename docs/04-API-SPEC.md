@@ -333,15 +333,63 @@ save-rate arithmetic `02-DATA-MODEL.md` describes would count answers nobody
 ever got. `look_items.position` records the model's own ordering; `role` is left
 `NULL` — see `AUDITS.md` **O-25**, which 2.11 owns. `DECISIONS.md` 170.
 
-### `GET /looks`
-Query: `is_saved`, `trip_id`, `from_date`, `to_date`. Returns looks with hydrated items.
+### `GET /looks` *(Stage 3)*
+```json
+← 200 { "looks": [ { "id": "uuid", "occasion": "work", "title": "Morning meetings",
+                     "items": [ { … } ], "reasoning": "…", "weather_note": "…",
+                     "is_saved": true } ],
+        "total": 12 }
+```
+
+Query: `is_saved`, `from_date`, `to_date`, `limit`, `offset`. Ordered
+`created_at DESC`, with `id` as the tiebreaker — `GET /items`'s ordering with
+its `short_id` tiebreaker swapped, because a whole upload shares one
+`created_at` and a look is written one per request. `limit` defaults to `100`
+and is capped at `200`, both mirroring `GET /items`; `total` counts the filtered
+set rather than the page.
+
+`from_date` and `to_date` are inclusive and filter on **`for_date`** — the day
+the look was *for*, not the day it was made.
+
+**`trip_id` is named here and not implemented.** The column arrives with
+migration `0005`, so the parameter is undeclared and FastAPI ignores it: sending
+one today filters nothing and answers `200` with every look. Built at Stage 4
+with the column.
+
+Items are hydrated in `look_items.position` order, which is the model's own —
+this endpoint is that column's first reader on the server.
 
 ### `GET /looks/{id}` · `DELETE /looks/{id}`
 
+**Neither is specified and neither is built.** No request, no response, no
+status codes — the same shape as `POST /items/{id}/retag` before task 1.4.
+`AUDITS.md` **O-30**. Nothing in Stage 3 needs either: the saved-looks screen
+lists whole looks and there is no look-detail route.
+
 ### `PATCH /looks/{id}` *(Stage 3)*
 ```json
-→ { "is_saved": true, "feedback": 1, "title": "Client meeting" }
+→ { "is_saved": true, "title": "Client meeting" }
+← 200 { look }
 ```
+
+Merges over the stored row: a key left out is a field left alone. Answers the
+whole look, hydrated, so the client that tapped the heart can render the row it
+just changed without a second request.
+
+**`feedback` is task 3.3's and is refused until then.** The body above printed
+it from Stage 0 and 3.2 ships the other two; the schema is `extra="forbid"`, so
+sending it now is a `422` rather than a key accepted and dropped — which would
+be a `200` reporting a look as rated while the column stayed `NULL`.
+
+**Neither field can be cleared.** `null` on either is a `422`, not a write:
+`is_saved` is `NOT NULL`, so an accepted `null` reaches Postgres as an
+`IntegrityError` and a `500` with no `code`, and a cleared `title` leaves the
+card with an empty heading. `title` is stripped and must be non-empty. This is
+the opposite of `PATCH /items/{id}`, where `null` clears a tag on purpose.
+
+`422` with `code: "validation_error"` on an empty body. `404` with
+`code: "not_found"` for a look belonging to another account — the same code and
+status as one that never existed, per `06-TESTING-STRATEGY.md`.
 
 ### `POST /looks/{id}/wear` *(Stage 3)*
 ```json

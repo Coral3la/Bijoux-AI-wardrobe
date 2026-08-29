@@ -11,11 +11,12 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import { ItemsApi } from '../../core/api/items.api';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { LooksStore } from '../../core/state/looks.store';
 import { StylistStore } from '../../core/state/stylist.store';
 import { WardrobeStore } from '../../core/state/wardrobe.store';
 import { roleOf } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
-import { SuggestRequest } from '../../shared/models/look.model';
+import { Look, SuggestRequest } from '../../shared/models/look.model';
 import { LookCard } from './look-card';
 import { LookDraft, LookRequestForm, todayInLocalTime } from './look-request-form';
 
@@ -89,8 +90,10 @@ function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
           [missingPieces]="missingPieces()"
           [message]="message()"
           [swappingItemId]="store.swappingItemId()"
+          [saving]="looksStore.updatingId() === look.id"
           (tryAgain)="startOver()"
           (swap)="swapItem($event)"
+          (save)="toggleSaved(look)"
         />
       } @else {
         @if (store.error(); as key) {
@@ -129,6 +132,7 @@ function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
 export class StylistPage {
   protected readonly i18n = inject(I18nService);
   protected readonly store = inject(StylistStore);
+  protected readonly looksStore = inject(LooksStore);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly items = inject(ItemsApi);
@@ -161,7 +165,19 @@ export class StylistPage {
   private timer: ReturnType<typeof setInterval> | null = null;
 
   protected readonly statusKey = computed(() => STATUS_KEYS[this.statusIndex()]);
-  protected readonly look = computed(() => this.store.result()?.looks[0] ?? null);
+  // The suggested look, unless the heart has since written to it. StylistStore
+  // holds what the stylist answered and LooksStore holds what PATCH answered,
+  // and neither can hand the other a look — so the newer of the two wins here,
+  // matched by id. Without this the heart fills in and empties again on the
+  // next change detection, because `result()` still says is_saved: false.
+  protected readonly look = computed<Look | null>(() => {
+    const suggested = this.store.result()?.looks[0] ?? null;
+    const updated = this.looksStore.updated();
+    if (suggested !== null && updated !== null && updated.id === suggested.id) {
+      return updated;
+    }
+    return suggested;
+  });
   protected readonly message = computed(() => this.store.result()?.message ?? '');
   protected readonly missingPieces = computed(() => this.store.result()?.missing_pieces ?? []);
 
@@ -169,6 +185,7 @@ export class StylistPage {
     // Reset first, then load: this store is providedIn: 'root' and a second
     // visit arrives holding the first visit's look and forecast.
     this.store.reset();
+    this.looksStore.reset();
     this.store.loadWeather(this.draft().date);
     this.readAnchor();
 
@@ -183,6 +200,13 @@ export class StylistPage {
     // The interval has no owner otherwise. Leaving one running behind the next
     // screen is DECISIONS.md 107's failure with a cheaper timer in it.
     inject(DestroyRef).onDestroy(() => this.stopStatusCycle());
+  }
+
+  // The heart. It sends the opposite of what the row currently says rather
+  // than a fixed `true`, because the same button unsaves — and it reads that
+  // from `look`, which is the merged value above and not `result()`.
+  protected toggleSaved(look: Look): void {
+    this.looksStore.update(look.id, { is_saved: !look.is_saved });
   }
 
   // One method sets the state and refreshes the forecast, in that order, so
