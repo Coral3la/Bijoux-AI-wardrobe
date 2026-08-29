@@ -194,6 +194,25 @@ Three of these are worth more than a row in a table.
 
 **Task 2.6 paid that second failure off, because it is the first task since 1.1 to add a migration.** A mutation to `0002_looks` executes only if the schema is rebuilt from it: `alembic downgrade 0001` with `DATABASE_URL` set to `TEST_DATABASE_URL` for that one command — never the value in `backend/.env`, which is the developer's own database — and then the next `pytest` re-upgrades from the mutated file. **The trap has a second half, and it was walked into at 2.6 before it was written down here:** the test database stays on the mutated schema after the run, so a control executed without downgrading again is red for the *previous* cycle's reason and reads as a broken deliverable rather than as a dirty database. Downgrade before every cycle, including the final control.
 
+**The trap has a third half, walked into at task 3.1, and it is the one the two
+above do not cover.** `0004`'s mutation set includes deleting the two indexes,
+which means deleting them from `upgrade()` **and** from `downgrade()` — and a
+`downgrade()` that no longer drops an object leaves it standing. The next
+cycle's upgrade did not need to create it, the index was there from the control,
+and the mutation came back **survived** when it had simply never been tested.
+The reverse then bit on the way out: once a mutated `upgrade()` has skipped an
+object, the *pristine* `downgrade()` fails on `DROP INDEX` for something that is
+not there, alembic leaves the revision where it was, and every run after that is
+against a stale schema. That one was invisible because the downgrade's stderr
+was being discarded.
+
+So, for a migration mutation specifically: **mutate `upgrade()` only, never
+`downgrade()`, and read the downgrade's output rather than silencing it.** The
+general rule underneath is 1.1's, one artefact along — a mutation to a migration
+is only a measurement if the schema it describes is actually rebuilt from it, and
+the half of the file that does the tearing down is part of what has to still
+work for that to be true.
+
 ### The vision-service mutation run, task 1.2b
 
 Sixteen mutations plus a fatal control, against `validate_tags`, the required-field check and the rendered rules. Run from a pristine copy, baseline green at both ends (353 passed before and after). **All seventeen caught, none survived** — with one caught in a way that is worth more than the row.
@@ -684,6 +703,47 @@ One mutation was discarded rather than recorded as a survivor. Giving
 the only construction of that model supplies the field on every path — a
 mutation that cannot be reached is not a mutation that survived, which this
 document has required since 1.1.
+
+### The migration 0004 mutation run, task 3.1
+
+Five mutations plus a control, run in the scratchpad mirror with the baseline
+green at both ends and the database downgraded to `0003` at the start of every
+cycle. **One survived, and adding the test that kills it is the substantive
+change this task made to the suite** — so the baseline moves inside the run:
+mutations 1 and 2 were measured against 875, mutation 3 against 875 and then
+against 876, and 4 and 5 against 876. The final control is 876.
+
+| # | Mutation | Result |
+|---|---|---|
+| 1 | the `CHECK` deleted from `0004`'s `upgrade()` | 3 failed |
+| 2 | `wear_count` loses `server_default` and `NOT NULL` | 1 failed |
+| 3 | both `create_index` calls deleted from `upgrade()` | **survived** → 1 failed after |
+| 4 | `ck_looks_feedback_values` dropped from `EXPECTED_NAMES` | 1 failed |
+| 5 | `FEEDBACK_UP` changed from `1` to `2` in the model | 1 failed |
+
+**Mutation 3 is the one worth having run.** Both indexes deleted, and all 875
+tests stayed green — because **an index changes no result, only the plan**, and
+nothing in this suite asserts on a plan. The index half of `AUDITS.md` O-25 was
+about to be closed with two objects that no test could tell were missing, which
+is the shape this document has objected to since 1.1 in the other direction: a
+row that reads as coverage and is not. `test_the_two_indexes_0004_builds_exist`
+now reads `pg_indexes` and compares it against the two names, which is
+`test_db_naming.py`'s move — compare the artefacts directly, because behaviour
+cannot see the difference — one artefact along, and against the database rather
+than against the metadata, since `Table.constraints` does not hold an index.
+
+**Mutation 5 is what makes `FEEDBACK_UP` and `FEEDBACK_DOWN` load-bearing rather
+than decorative.** Changing the constant to `2` turns
+`test_the_feedback_check_admits_the_two_named_values_and_null[2]` red on an
+`IntegrityError`: the parametrisation is derived from the module under test, so
+ordinarily it would move with the mutation — but here the *database* holds the
+literal, written by the migration, and the two cannot move together. This is the
+one shape where a derived expectation is safe, and it is worth naming beside the
+warning two subsections above: it is safe because the second copy is in
+PostgreSQL and is not editable from Python.
+
+Mutation 4 needs no database and is `test_db_naming.py` doing exactly its job.
+Mutations 1 and 2 are the DDL that a column list cannot show.
 
 ### What mutation testing has actually found on this project
 

@@ -111,10 +111,11 @@ class ItemStatsResponse(BaseModel):
     by_color: dict[str, int]
     processing: int
     failed: int
-    # Both wait for migration 0004, which adds `wear_count` and
-    # `last_worn_at` at Stage 3. Zero rather than `total`, which
+    # Both wait for task 3.6 now, not for the migration: 0004
+    # added `wear_count` and `last_worn_at` and this endpoint
+    # still does not read them. Zero rather than `total`, which
     # is what "nothing has been worn yet" would honestly report:
-    # that number would change meaning when the columns arrive,
+    # that number would change meaning when 3.6 starts counting,
     # and nothing would catch it. `04-API-SPEC.md` prints the
     # zeros.
     never_worn: int

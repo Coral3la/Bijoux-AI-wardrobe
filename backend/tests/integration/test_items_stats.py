@@ -110,9 +110,9 @@ def test_the_wear_numbers_are_zero_until_stage_3(
     make_user: Callable[..., User],
     authorization: Callable[[User], dict[str, str]],
 ) -> None:
-    # `wear_count` and `last_worn_at` arrive with migration 0004. Reporting
-    # `never_worn = total` would be true today and would silently change
-    # meaning when the columns land.
+    # The columns exist from migration 0004 and this endpoint does not read
+    # them until 3.6. Reporting `never_worn = total` would be true today and
+    # would silently change meaning when 3.6 starts counting.
     user = make_user()
     make_item(user_id=user.id, category="top", **READY)
 

@@ -98,7 +98,7 @@ contradiction** — a thing no document disagrees about and nobody has looked at
 It was extended at 1.6 rather than duplicated, and **O-15** was opened by the
 same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
-task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, which is Stage 3's. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had.
+task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, **which task 3.1 closed**, printing both indexes in `02` before migration `0004` built them and finding, on the way, that deleting them failed no test. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -1101,7 +1101,7 @@ reads — in a table whose rules 7 and 8 already belong to 2.10 and 2.11. Stage 
 reintroduces a day number beside the trip message that gives it a meaning.
 `DECISIONS.md` 163.
 
-#### O-25 · ~~`look_items.role` has no vocabulary~~, and two foreseeable indexes are deferred — **vocabulary closed at task 2.11**, indexes open until Stage 3
+#### O-25 · ~~`look_items.role` has no vocabulary, and two foreseeable indexes are deferred~~ — **vocabulary closed at task 2.11, indexes at 3.1**
 
 Two halves of one question — what `02-DATA-MODEL.md` prints for `look_items`
 that nothing can yet honour. Migration `0002` built the table exactly as
@@ -1179,9 +1179,31 @@ arrive with the vocabulary. Writing it now would fill a column for Stage 3's
 aggregation in advance, which is the thing 2.7 declined to do. `DECISIONS.md`
 175, 176.
 
-**The index half is untouched and still Stage 3's.** Both remain unbuilt and
-both readers still arrive there. 2.7 reads `look_items` only by `look_id`, which
-the composite primary key already serves.
+**The index half closed at task 3.1, on this item's own recommendation and in
+that order.** `02-DATA-MODEL.md` prints both `CREATE INDEX` lines beside the two
+tables first, and migration `0004` builds them — Stage 3's only migration, which
+is what decided the owner: a second migration in this stage would renumber
+`0005_trips` a second time, and 2.6a measured what that sweep costs across eight
+documents and three code comments. `idx_looks_user_id` and
+`idx_look_items_item_id`, following `idx_items_wardrobe`'s spelling rather than
+the convention's `ix_` prefix, because that is the one index this project had
+already named.
+
+**Closing it turned up the thing the item could not have known, and it is the
+reason there is now a test.** Deleting both `create_index` calls from `0004`
+left **all 875 tests green**: an index changes no result, only the plan. The
+recommendation above would therefore have been satisfied by two objects that
+nothing could tell were missing — the shape `06-TESTING-STRATEGY.md` has refused
+since 1.1, arrived at from the opposite side. `test_the_two_indexes_0004_builds_exist`
+reads `pg_indexes` and compares it against the two names, which is
+`test_db_naming.py`'s artefact comparison one artefact along; with it the same
+mutation fails exactly one test. `06`'s task 3.1 run has the table.
+
+**What is still not defended is the name in two places.** Each index is spelled
+in `0004` and again in `__table_args__`, and nothing compares those two — the
+same seam `test_db_naming.py` closes for constraints, still open for indexes,
+now recorded rather than assumed. The new test would pass if the model's copy
+were renamed, because the database's copy comes from the migration.
 
 #### O-26 · `Look.occasion` in `STYLIST_SCHEMA` now has no reader — opened at task 2.7
 

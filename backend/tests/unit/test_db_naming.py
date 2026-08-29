@@ -28,9 +28,14 @@ from app.models import item, look, user  # noqa: F401  — registers the tables 
 MIGRATION_0001 = Path(__file__).resolve().parents[2] / "alembic" / "versions" / "0001_initial.py"
 
 # Every constraint the migrations create, under the name the convention expands
-# to. `0002`'s five are in the same set rather than a second one: the property
-# under test is that one list matches the metadata, and splitting it by
-# migration would let a table belong to neither.
+# to. `0002`'s five and `0004`'s one are in the same set rather than in sets of
+# their own: the property under test is that one list matches the metadata, and
+# splitting it by migration would let a table belong to neither.
+#
+# Indexes are not constraints and are absent here — `Table.constraints` does not
+# hold them — so `idx_items_wardrobe` and `0004`'s two are named in exactly one
+# place each and nothing compares them. That is the same seam this file exists
+# to close for constraints, still open one artefact along.
 EXPECTED_NAMES = {
     "pk_users",
     "uq_users_email",
@@ -45,12 +50,14 @@ EXPECTED_NAMES = {
     "pk_look_items",
     "fk_look_items_look_id_looks",
     "fk_look_items_item_id_items",
+    "ck_looks_feedback_values",
 }
 
 # The two the write paths match on by name, in a narrow `if` so that a violation
 # nobody anticipated still becomes a 500 rather than a wrong answer (037). Both
 # are `0001`'s, which is why the literal check below reads that file alone: no
-# route matches on a name `0002` spells, and one that did would belong here.
+# route matches on a name `0002` or `0004` spells, and one that did would belong
+# here.
 MATCHED_BY_A_ROUTE = ("uq_users_email", "uq_items_short_id")
 
 

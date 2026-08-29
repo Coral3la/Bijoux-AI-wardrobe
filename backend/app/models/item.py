@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -8,8 +8,10 @@ from sqlalchemy import (
     TIMESTAMP,
     Boolean,
     CheckConstraint,
+    Date,
     ForeignKey,
     Index,
+    Integer,
     SmallInteger,
     Text,
     text,
@@ -80,6 +82,13 @@ class Item(Base):
     ai_confidence: Mapped[float | None] = mapped_column(REAL)
     user_edited: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     error_message: Mapped[str | None] = mapped_column(Text)
+
+    # Added by migration 0004, which is what lifts the omission task 0.7
+    # recorded here. `wear_count` is NOT NULL DEFAULT 0 and `last_worn_at` is
+    # NULL, so a wardrobe that predates the column reads as never worn rather
+    # than as unknown — 3.6's `never_worn` counts it and is right to.
+    wear_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    last_worn_at: Mapped[date | None] = mapped_column(Date)
 
     is_archived: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
 

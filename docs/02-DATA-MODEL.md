@@ -386,7 +386,7 @@ Notes worth understanding:
   `coerced` is the **accepted** answer's discarded values and no others (`DECISIONS.md` 086) — the record 084 found missing, where a real garment attribute the model observed was correctly nulled and remembered by nothing. It is written as `[]` when nothing was discarded, and is **absent** on a `failed` row, where there is no accepted answer to have discarded from. `prompt_version` is written on both paths, so a row can be traced to the prompt that tagged it or failed to.
 - **`short_id`** is 6 characters from an unambiguous alphabet — `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, no `0`/`O`/`1`/`I`/`L`. Generate, check uniqueness, retry on collision. It carries no index of its own: the `UNIQUE` constraint already creates one, and a second would be an exact duplicate maintained on every write. "Check uniqueness" is done by *inserting* and catching the violation on `uq_items_short_id`, not by selecting first — the same race-free pattern 037 chose for `uq_users_email`. The generator lives in `app/core/short_id.py` (`DECISIONS.md` 052).
 - **`updated_at` is maintained by the ORM, not by the database.** `DEFAULT now()` fires on insert only; PostgreSQL has no column-level `ON UPDATE` and migration `0001` installs no trigger. Task 1.3 added `onupdate=text("now()")` to `Item.updated_at`, which is a **Core-level** default: it applies to ORM flushes and to `update()` statements, and **not** to raw `text()` SQL or to anything typed into `psql`. Database-level truth is a trigger and needs its own migration; it was not built. The startup sweep reads this column to decide which `processing` rows have been abandoned, so the two are one decision and neither survives the other's removal — `DECISIONS.md` 088.
-- **`wear_count` and `last_worn_at` are shown above but do not exist yet.** Migration `0004` adds them, per the table below. The ORM model added at task 0.7 deliberately omits both, because a model declaring a column the database lacks breaks every query against it.
+- **`wear_count` and `last_worn_at` exist from migration `0004`**, added at task 3.1. They were shown above and absent from the database for eleven tasks, and `app/models/item.py` omitted them for exactly that long, because a model declaring a column the database lacks breaks every query against it. **Nothing reads them yet**: `GET /items/stats` still reports `never_worn` as `0` rather than as the arithmetic truth until task 3.6, and `ItemResponse` does not carry either field until 3.4 puts them on the wire. `wear_count` is `NOT NULL DEFAULT 0`, so a garment uploaded before the column existed reads as worn zero times rather than as unknown — which is what makes 3.6's count correct over the whole wardrobe rather than over the part Stage 3 has touched.
 
 ---
 
@@ -418,7 +418,31 @@ CREATE TABLE look_items (
   position  SMALLINT NOT NULL DEFAULT 0,
   PRIMARY KEY (look_id, item_id)
 );
+
+CREATE INDEX idx_looks_user_id ON looks (user_id);
+CREATE INDEX idx_look_items_item_id ON look_items (item_id);
 ```
+
+**Both indexes are migration `0004`'s, not `0002`'s.** They were foreseen when
+`looks` was built and deliberately not built then — an index on two empty
+tables, chosen against no measured query — and adopted at Stage 3, where the
+readers arrive: `GET /looks` filtered by user at 3.2, and 3.5's per-item
+aggregation over `look_items`. The second is the one that is not obvious:
+**PostgreSQL indexes the referenced side of a foreign key and not the
+referencing side**, so without it the `ON DELETE CASCADE` from `items` scans
+the table. The composite primary key already covers every lookup by `look_id`,
+which is the direction 2.7 and 2.9 read, so no third index is warranted.
+`AUDITS.md` **O-25**, closed at task 3.1.
+
+**`feedback` is `-1` or `1` and never `0`.** The column has no default, so an
+unrated look is `NULL`: "nobody has rated this" and "somebody rated it
+neutrally" cannot be the same value, and 3.5 counts rated looks without having
+to exclude one. The two numbers live in `app/models/look.py` as `FEEDBACK_UP`
+and `FEEDBACK_DOWN`, the `CheckConstraint` is built from them, and 3.3's
+`Literal[FEEDBACK_UP, FEEDBACK_DOWN]` imports them — the `height_cm` shape from
+`CONVENTIONS.md`, one definition honoured in three places with the compiler
+between them. They are **not** `MIN`/`MAX`: this is set membership, and there is
+nothing between `-1` and `1` to admit.
 
 **`look_items.role` is still `NULL` on every row.** The vocabulary above is
 adopted and enforced on the wire, but nothing writes the column: 2.7 declined
@@ -474,7 +498,7 @@ One Alembic migration per stage, never a single mega-migration.
 | `0001_initial` | 0 | extensions, enum types, `users`, `items` |
 | `0002_looks` | 2 | `looks`, `look_items` |
 | `0003_vocabulary` | 2 | `item_category` gains `swimwear` and `sleepwear` |
-| `0004_feedback` | 3 | `looks.feedback`, `looks.worn_at`, `items.wear_count`, `items.last_worn_at` |
+| `0004_feedback` | 3 | `looks.feedback`, `looks.worn_at`, `items.wear_count`, `items.last_worn_at`, and O-25's two indexes |
 | `0005_trips` | 4 | `trips`, `looks.trip_id` |
 
 **`0003` renumbered the two that follow it**, which is what a migration inserted
@@ -489,7 +513,7 @@ the re-upgrade over two surviving labels clean. That both statements run inside
 the transaction `alembic/env.py` opens was **measured on PostgreSQL 18.6 at
 2.6a**, not inferred from the version number.
 
-Stage 3's columns are shown inline in the table definitions above for readability, but they are added by migration `0004`. If Stage 3 is cut, migration `0004` is simply never written. **`looks.trip_id` is the same case one stage further out**, and is named here because the `looks` DDL above shows it as a foreign key to a table that does not exist until Stage 4: migration `0002` creates `looks` **without** it, and `0005` adds it alongside `trips`. Added at the 2026-08-18 audit — the migrations table already said so and this paragraph did not.
+Stage 3's columns were shown inline in the table definitions above for readability before they existed, and **migration `0004` built them at task 3.1**, so the two now agree. The cut this paragraph anticipated did not happen. Had it, `0004` would indeed never have been written: the one task that survives the cut is 3.2, and both columns it needs — `is_saved` and `title` — are `0002`'s. **`looks.trip_id` is the case this paragraph still describes, one stage further out**, and is named here because the `looks` DDL above shows it as a foreign key to a table that does not exist until Stage 4: migration `0002` creates `looks` **without** it, and `0005` adds it alongside `trips`. Added at the 2026-08-18 audit — the migrations table already said so and this paragraph did not.
 
 Migrations are written by hand from the DDL above, never autogenerated — autogenerate does not faithfully reproduce `CITEXT`, partial indexes or `CHECK` constraints. Alembic reads `DATABASE_URL` from `app.core.config.settings`, never from `alembic.ini`, which is committed to the repository.
 

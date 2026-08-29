@@ -29,6 +29,16 @@ No trips. No recommendation model trained on feedback — feedback is fed back a
 ### 3.1 Migration 0004
 `looks.feedback`, `looks.worn_at`, `items.wear_count`, `items.last_worn_at`.
 
+**Built, and it carries two things this line did not name.** `AUDITS.md`
+**O-25**'s two deferred indexes — `idx_looks_user_id` and
+`idx_look_items_item_id` — are in `0004` because Stage 3 has one migration and a
+second would renumber `0005_trips`; `02-DATA-MODEL.md` prints both before the
+migration builds them, which was O-25's own condition. And the `feedback` CHECK
+is written as raw DDL, because `op.create_check_constraint` applies the naming
+convention a second time and emits `ck_looks_ck_looks_feedback_values`.
+`FEEDBACK_UP` and `FEEDBACK_DOWN` live in `app/models/look.py`; **3.3 imports
+them** rather than spelling `Literal[-1, 1]`. `DECISIONS.md` 181.
+
 ### 3.2 Save a look
 `PATCH /looks/{id}` accepting `is_saved` and `title`. `GET /looks?is_saved=true`. A heart button on the look card and a saved-looks list screen.
 

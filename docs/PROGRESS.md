@@ -1,7 +1,9 @@
 # Progress
 
-**Current stage:** Stage 2 — The Stylist
-**Status:** Stage 2 — **every task from 2.1 to 2.12 is built**, and the stage's acceptance criteria are the developer's to run: the suites, the demo wardrobe timings and the five-out-of-five anchor check are unmeasured here. The application is connected end to end for the first time — the wardrobe reaches the stylist in one tap, the stylist reaches the look card, the card reaches an item, and the profile screen sets the home city all of it depends on. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below).
+**Current stage:** Stage 3 — Saving, Feedback and Wear Tracking
+**Status:** Stage 3 — **3.1 is built**; 3.2 to 3.6 are not started. Stage 2 is built end to end from 2.1 to 2.12 and its acceptance criteria are still the developer's to run: the suites, the demo wardrobe timings and the five-out-of-five anchor check are unmeasured here. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below). **Stage 3 is the designated cut line** and has not been cut.
+
+The header is moved with the task this time rather than four tasks later, which is the drift both paragraphs below record.
 
 This header and the Stage 2 checklist below had not moved since 2.7, while 2.8, 2.9, 2.10 and 2.10a shipped — the same drift the paragraph below records at 2.2, four tasks wide again. Both are corrected here at 2.11; the log itself still has no entries for those four tasks, and this line does not invent them. Their record is `DECISIONS.md` 174 and the annotations in `stages/STAGE-2-stylist.md`.
 
@@ -64,7 +66,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 ## Stage 3 — Feedback  *(cut line — reduce to "save a look" if behind)*
 `stages/STAGE-3-feedback.md` · target 3 days
 
-- [ ] Migration 0004
+- [x] Migration 0004 — and O-25's two indexes
 - [ ] Save a look
 - [ ] Thumbs up/down
 - [ ] Wear tracking
@@ -515,3 +517,16 @@ The task was decided by three things the documents did not agree on, and by one 
 - **It fetches for itself.** Ten lines that the stylist store also has, in exchange for not wiring the wardrobe screen to the state container of a screen it merely links to. `todayInLocalTime` is imported rather than copied, so the strip and the date picker cannot disagree about which day today is, and the line prints the day's **high** — the number `summarize_forecast` already sends the model (142).
 - **No glyph, against the mock.** Eight conditions, one 🌤 in the drawing, and no icon map: a sun printed over a line reading *Rain* is a wrong statement where a missing icon is only a missing one.
 - **Stage 2 is now built end to end and unmeasured.** Nine of its ten acceptance criteria need a running database, a live model or a stopwatch, and this agent runs none of them.
+
+
+**2026-08-29 — task 3.1, migration 0004.** **876 backend tests pass (867 before, 9 added)** — the full suite, run in the scratchpad mirror against `TEST_DATABASE_URL` from a database downgraded to `0003` first, so the migration actually executed. `ruff` and `mypy` are clean. Frontend untouched and not run: this task ships no screen and changes no wire shape the browser reads. New: `backend/alembic/versions/0004_feedback.py`. Changed: `backend/app/models/look.py`, `backend/app/models/item.py`, `backend/app/schemas/item.py`, `backend/tests/unit/test_db_naming.py`, `backend/tests/integration/test_looks_rows.py` (4 test functions, 8 cases under parametrisation), `backend/tests/integration/test_items_rows.py` (1), `backend/tests/integration/test_items_stats.py`, and six documents besides this one. One entry, `DECISIONS.md` 181. Audit **O-25 closed** — the first item this project closed on its own recommendation and then had to strengthen before the close was worth anything.
+
+**The migration has not been applied to the developer's database.** The suite migrates `TEST_DATABASE_URL` itself, so the 876 above ran against the real schema; `DATABASE_URL` is now **three** `alembic upgrade head` runs behind — `0002` from 2.6, `0003` from 2.6a and `0004` from this task.
+
+- **`op.create_check_constraint` emits the wrong name, and this is the only migration in the project that could have found that.** `env.py` sets `target_metadata = Base.metadata`, alembic builds the constraint on a `MetaData` carrying its `naming_convention`, and the `ck` template is applied to a name that already carries it: `ck_looks_feedback_values` in, **`ck_looks_ck_looks_feedback_values`** out. Measured with `alembic upgrade --sql` before the file was written. `0001` never met it because a CHECK inside `create_table` is not expanded, and `0002`–`0003` add none. The constraint is raw DDL for that reason. 181.
+- **O-25's indexes were about to be closed with two objects no test could see.** Deleting both `create_index` calls left **all 875 tests green** — an index changes no result, only the plan. `test_the_two_indexes_0004_builds_exist` reads `pg_indexes` and compares it against the two names, which is `test_db_naming.py`'s artefact comparison one artefact along, and with it the same mutation fails exactly one test. **What is still undefended is the name in two places**: each index is spelled in `0004` and again in `__table_args__`, and nothing compares those — recorded on O-25 rather than fixed.
+- **Five mutations, all caught, control green at both ends — and the run found a third half of `06`'s migration trap.** Mutation 3 deleted the indexes from `upgrade()` *and* `downgrade()`, so the downgrade stopped dropping them, they survived from the previous cycle, and the mutation read as **survived** when it had never been tested. The reverse then bit: with the objects missing, the pristine `downgrade()` failed on `DROP INDEX`, alembic left the revision where it was, and two later cycles ran against a stale schema — invisible because the downgrade's stderr was being discarded. Both are in `06-TESTING-STRATEGY.md`. **Mutate `upgrade()` only, and read the downgrade's output.**
+- **`FEEDBACK_UP` and `FEEDBACK_DOWN`, not `MIN`/`MAX`.** `feedback IN (-1, 1)` is set membership and there is nothing between the two to admit; bounds names would invite the `BETWEEN` that admits `0`. Mutation 5 is what makes them load-bearing: changing `FEEDBACK_UP` to `2` turns a test red on an `IntegrityError`, because the second copy of the number is in PostgreSQL and cannot move with the first.
+- **No `server_default` on `feedback`, deliberately.** An unrated look is `NULL`, so "nobody rated this" and a neutral rating are not one value, and 3.5 counts rated looks without a predicate. `wear_count` goes the other way — `NOT NULL DEFAULT 0` — so a garment uploaded before the column existed reads as worn zero times rather than as unknown, which is what makes 3.6's `never_worn` correct over the whole wardrobe.
+- **Two comments were corrected outside the task's own surface.** `app/schemas/item.py` and `tests/integration/test_items_stats.py` both said the stats zeros "wait for migration 0004". They wait for **3.6** now: the columns exist and the endpoint still does not read them. `CONVENTIONS.md`'s rule is that the test is whether a sentence is false *now*, and after this commit both were.
+- **Four columns now exist that nothing reads** — `feedback` until 3.3, `worn_at` and the two `items` columns until 3.4 and 3.6. Same shape as `look_items.position` at 2.7 and defensible for the same reason: a migration is the one artefact that is expensive to add late.

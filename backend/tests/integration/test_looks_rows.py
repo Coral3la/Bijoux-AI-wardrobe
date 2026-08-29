@@ -6,8 +6,17 @@ column list and that no unit test can see: the composite primary key, and the
 two `ON DELETE CASCADE` paths that decide what happens to a look when the user
 or the look itself goes away.
 
+Migration `0004`'s `feedback` CHECK and its two indexes are here for the same
+reason. `FEEDBACK_UP` and `FEEDBACK_DOWN` are readable without a database and
+the constraint built from them is not, so what the CHECK tests assert is that
+the numbers in the module and the numbers in the column are the same numbers.
+
+The indexes are the harder half: an index changes no result, only the plan, so
+deleting both from the migration leaves every other test in this suite green.
+Measured — that mutation was run, and the test below is what it bought.
+
 `tests/unit/test_db_naming.py` covers the other half — that the constraint names
-`0002` spells are the ones the convention generates.
+`0002` and `0004` spell are the ones the convention generates.
 """
 
 import uuid
@@ -16,12 +25,12 @@ from datetime import date
 from typing import Any
 
 import pytest
-from sqlalchemy import Connection, delete, event, func, select
+from sqlalchemy import Connection, delete, event, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.item import Item
-from app.models.look import Look, LookItem
+from app.models.look import FEEDBACK_DOWN, FEEDBACK_UP, Look, LookItem
 from app.models.user import User
 
 
@@ -123,3 +132,56 @@ def test_deleting_a_user_deletes_their_looks(
 
     assert db.scalar(select(func.count()).select_from(Look).where(Look.user_id == user.id)) == 0
     assert _look_items(db, look.id) == 0
+
+
+def test_a_look_starts_unrated_and_unworn(db: Session, make_user: Callable[..., User]) -> None:
+    # NULL rather than 0: `feedback` has no server default, so "nobody has
+    # rated this" and "somebody rated it neutrally" cannot be the same value.
+    look = Look(user_id=make_user().id)
+    db.add(look)
+    db.commit()
+
+    assert look.feedback is None
+    assert look.worn_at is None
+
+
+@pytest.mark.parametrize("feedback", [FEEDBACK_UP, FEEDBACK_DOWN, None])
+def test_the_feedback_check_admits_the_two_named_values_and_null(
+    db: Session, make_user: Callable[..., User], feedback: int | None
+) -> None:
+    look = Look(user_id=make_user().id, feedback=feedback)
+    db.add(look)
+    db.commit()
+
+    assert look.feedback == feedback
+
+
+@pytest.mark.parametrize("feedback", [0, 2, -2])
+def test_the_feedback_check_refuses_anything_else(
+    db: Session, make_user: Callable[..., User], feedback: int
+) -> None:
+    # 0 is the one that matters: it is what an unrated look would hold if the
+    # column had a default, and it is the value a client sends by mistake.
+    db.add(Look(user_id=make_user().id, feedback=feedback))
+
+    with pytest.raises(IntegrityError) as exc_info:
+        db.commit()
+
+    assert "ck_looks_feedback_values" in str(exc_info.value)
+    db.rollback()
+
+
+def test_the_two_indexes_0004_builds_exist(db: Session) -> None:
+    # `tests/unit/test_db_naming.py` compares the convention against the
+    # constraint names and explicitly cannot see an index, because
+    # `Table.constraints` does not hold one. This is that comparison for the
+    # two `AUDITS.md` O-25 deferred, made against the database rather than
+    # against the metadata: their only readers are 3.2 and 3.5, and a query
+    # plan is not something a test in this project asserts on.
+    built = set(
+        db.scalars(
+            text("SELECT indexname FROM pg_indexes WHERE tablename IN ('looks', 'look_items')")
+        )
+    )
+
+    assert {"idx_looks_user_id", "idx_look_items_item_id"} <= built

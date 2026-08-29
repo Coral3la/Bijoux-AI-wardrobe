@@ -505,3 +505,14 @@ def test_the_category_type_accepts_the_two_values_0003_added(
     stored = db.execute(select(Item).where(Item.id == item.id)).scalar_one()
 
     assert stored.category is category
+
+
+def test_a_new_item_has_never_been_worn(make_item: Callable[..., Item]) -> None:
+    # Migration 0004's default, and the reason 3.6 can count `never_worn` over
+    # every row rather than over the ones Stage 3 has touched: a wardrobe
+    # uploaded before this column existed reads as worn zero times, not as
+    # unknown.
+    item = make_item()
+
+    assert item.wear_count == 0
+    assert item.last_worn_at is None
