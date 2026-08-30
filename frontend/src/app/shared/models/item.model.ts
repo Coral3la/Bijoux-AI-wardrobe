@@ -35,6 +35,14 @@ export interface Item {
   readonly ai_confidence: number | null;
   readonly user_edited: boolean;
   readonly error_message: string | null;
+
+  // On the wire from 3.4, when POST /looks/{id}/wear became the first writer.
+  // `wear_count` is NOT NULL DEFAULT 0 on the column, so a garment uploaded
+  // before it existed reads 0 rather than null — never-worn is a real state and
+  // `last_worn_at` is where it is expressed, as a null.
+  readonly wear_count: number;
+  readonly last_worn_at: string | null;
+
   readonly is_archived: boolean;
 
   readonly created_at: string;

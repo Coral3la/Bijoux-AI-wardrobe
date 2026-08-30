@@ -386,7 +386,11 @@ Notes worth understanding:
   `coerced` is the **accepted** answer's discarded values and no others (`DECISIONS.md` 086) — the record 084 found missing, where a real garment attribute the model observed was correctly nulled and remembered by nothing. It is written as `[]` when nothing was discarded, and is **absent** on a `failed` row, where there is no accepted answer to have discarded from. `prompt_version` is written on both paths, so a row can be traced to the prompt that tagged it or failed to.
 - **`short_id`** is 6 characters from an unambiguous alphabet — `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, no `0`/`O`/`1`/`I`/`L`. Generate, check uniqueness, retry on collision. It carries no index of its own: the `UNIQUE` constraint already creates one, and a second would be an exact duplicate maintained on every write. "Check uniqueness" is done by *inserting* and catching the violation on `uq_items_short_id`, not by selecting first — the same race-free pattern 037 chose for `uq_users_email`. The generator lives in `app/core/short_id.py` (`DECISIONS.md` 052).
 - **`updated_at` is maintained by the ORM, not by the database.** `DEFAULT now()` fires on insert only; PostgreSQL has no column-level `ON UPDATE` and migration `0001` installs no trigger. Task 1.3 added `onupdate=text("now()")` to `Item.updated_at`, which is a **Core-level** default: it applies to ORM flushes and to `update()` statements, and **not** to raw `text()` SQL or to anything typed into `psql`. Database-level truth is a trigger and needs its own migration; it was not built. The startup sweep reads this column to decide which `processing` rows have been abandoned, so the two are one decision and neither survives the other's removal — `DECISIONS.md` 088.
-- **`wear_count` and `last_worn_at` exist from migration `0004`**, added at task 3.1. They were shown above and absent from the database for eleven tasks, and `app/models/item.py` omitted them for exactly that long, because a model declaring a column the database lacks breaks every query against it. **Nothing reads them yet**: `GET /items/stats` still reports `never_worn` as `0` rather than as the arithmetic truth until task 3.6, and `ItemResponse` does not carry either field until 3.4 puts them on the wire. `wear_count` is `NOT NULL DEFAULT 0`, so a garment uploaded before the column existed reads as worn zero times rather than as unknown — which is what makes 3.6's count correct over the whole wardrobe rather than over the part Stage 3 has touched.
+- **`wear_count` and `last_worn_at` exist from migration `0004`**, added at task 3.1. They were shown above and absent from the database for eleven tasks, and `app/models/item.py` omitted them for exactly that long, because a model declaring a column the database lacks breaks every query against it. `wear_count` is `NOT NULL DEFAULT 0`, so a garment uploaded before the column existed reads as worn zero times rather than as unknown — which is what makes 3.6's count correct over the whole wardrobe rather than over the part Stage 3 has touched.
+
+  **Both are written and both are on the wire from task 3.4**, which is what this entry said it was waiting for. `POST /looks/{id}/wear` is the only writer: it increments `wear_count` and moves `last_worn_at` for every item in the look, in the transaction that sets `looks.worn_at`. `ItemResponse` carries both, so they appear on every item payload in the application — `GET /items`, the upload response, and the hydrated items inside every look. `GET /items/stats` still reports `never_worn` as `0` until **3.6**, which is now the only part of this deferral left.
+
+  **`last_worn_at` moves forward only** — the update is `GREATEST(last_worn_at, :date)`. A wearing recorded for a past date must not drag a garment worn more recently backwards, because 3.5 reads exactly this column to avoid recommending something worn in the last three days. The consequence is that a look's `worn_at` and its items' `last_worn_at` can disagree, and both are correct: **the look records the day the look was worn, the item records the last day it was worn in anything.** Two looks sharing one shirt, worn Monday and Tuesday, leave the Monday look reading Monday and the shirt reading Tuesday.
 
 ---
 
@@ -406,7 +410,7 @@ CREATE TABLE looks (
 
   is_saved      BOOLEAN NOT NULL DEFAULT FALSE,
   feedback      SMALLINT CHECK (feedback IN (-1, 1)),
-  worn_at       DATE,
+  worn_at       DATE,                     -- the most recent wearing; see below
 
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -457,6 +461,18 @@ table, so writing it would be a column filled for Stage 3 in advance.
 `position` is the opposite case and is written, because the model's ordering is
 destroyed at persistence if nothing records it. `AUDITS.md` **O-25**,
 `DECISIONS.md` 170 and 176.
+
+**`worn_at` holds one date, and that bounds what wear tracking can promise.**
+Written at task 3.4. `POST /looks/{id}/wear` is idempotent against *this* value:
+a request naming the date the column already holds changes nothing, which is the
+guarantee `STAGE-3` 3.4 asks for. A different date is a real second wearing and
+overwrites it. It follows that a look worn Monday, then Tuesday, then Monday
+again is counted three times — the column cannot remember a day it has
+overwritten, and nothing else in the schema does either. **The fix, if it is
+ever needed, is a `look_wears` table keyed `(look_id, worn_on)`, and Stage 3
+deliberately does not build one:** it would be a fourth table and a second
+migration in a stage that is the designated cut line, to correct a miscount that
+requires a user to record wearings out of order. `DECISIONS.md` 184.
 
 Every suggested look is persisted immediately, whether or not the user saves it. This costs nothing and buys the entire evaluation story: how many suggestions were made, how many were saved, how many were thumbed up, how many were actually worn.
 

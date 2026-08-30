@@ -7,6 +7,7 @@ import {
   Look,
   LookListResponse,
   LookUpdate,
+  LookWearRequest,
   SuggestRequest,
   SuggestResponse,
 } from '../../shared/models/look.model';
@@ -42,5 +43,14 @@ export class LooksApi {
   // there is no DELETE for the flag.
   update(id: string, changes: LookUpdate): Observable<Look> {
     return this.http.patch<Look>(`${environment.apiUrl}/looks/${id}`, changes);
+  }
+
+  // POST rather than a PATCH of `worn_at`, because the write is not one column:
+  // the endpoint also increments every item in the look, in the same
+  // transaction. Sending the same date twice is safe — the server compares it
+  // against the date the row holds and does nothing when they match.
+  wear(id: string, date: string): Observable<Look> {
+    const body: LookWearRequest = { date };
+    return this.http.post<Look>(`${environment.apiUrl}/looks/${id}/wear`, body);
   }
 }

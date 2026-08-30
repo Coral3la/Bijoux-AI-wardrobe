@@ -42,6 +42,8 @@ function item(overrides: Partial<Item> = {}): Item {
     ai_confidence: 0.9,
     user_edited: false,
     error_message: null,
+    wear_count: 0,
+    last_worn_at: null,
     is_archived: false,
     created_at: '2026-08-19T09:00:00Z',
     updated_at: '2026-08-19T09:00:00Z',
@@ -59,6 +61,7 @@ function look(items: readonly Item[], overrides: Partial<Look> = {}): Look {
     weather_note: 'Mild at 18°C — the blazer is enough.',
     is_saved: false,
     feedback: null,
+    worn_at: null,
     ...overrides,
   };
 }

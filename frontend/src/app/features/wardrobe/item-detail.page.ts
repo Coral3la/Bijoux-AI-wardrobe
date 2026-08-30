@@ -86,11 +86,21 @@ import { TagEditor } from './tag-editor';
 
         <section class="flex flex-col gap-2">
           <h2 class="font-display text-xl">{{ i18n.t('item.wear.title') }}</h2>
-          <!-- Stage 3 adds wear_count and last_worn_at at migration 0003.
-               There is nothing to read yet, so this says so rather than
-               rendering a zero that would change meaning when the columns
-               arrive — the same reasoning ItemStatsResponse already carries. -->
-          <p class="text-sm">{{ i18n.t('item.wear.placeholder') }}</p>
+          <!-- Real from 3.4, which is what the placeholder here was waiting
+               for. Never-worn gets its own sentence rather than a zero and a
+               blank date: it is the state most of a wardrobe is in, and 3.6
+               builds a whole insights panel on counting it. -->
+          @if (row.wear_count === 0) {
+            <p class="text-sm">{{ i18n.t('item.wear.never') }}</p>
+          } @else {
+            <p class="text-sm">{{ i18n.t('item.wear.count', { count: row.wear_count }) }}</p>
+            <!-- Guarded rather than assumed. Every writer of wear_count also
+                 writes last_worn_at, so this cannot be false today — but the
+                 two are separate nullable columns and the type says so. -->
+            @if (row.last_worn_at; as worn) {
+              <p class="text-sm">{{ i18n.t('item.wear.last', { date: worn }) }}</p>
+            }
+          }
         </section>
 
         <div class="flex flex-wrap items-center gap-3 border-t border-current/10 pt-4">

@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { LooksStore } from '../../core/state/looks.store';
 import { Look } from '../../shared/models/look.model';
+import { todayInLocalTime } from '../stylist/look-request-form';
 import { ItemCard } from '../wardrobe/item-card';
 
 // Deliberately not LookCard. That component is the stylist's payoff — it groups
@@ -80,6 +81,24 @@ import { ItemCard } from '../wardrobe/item-card';
                   <li><app-item-card [item]="item" /></li>
                 }
               </ul>
+
+              <!-- Below the garments rather than beside the heart: the heart is
+                   about this list and this button is about today, and a text
+                   label does not sit in a row built for a glyph.
+
+                   It stays on screen after a successful tap, disabled and
+                   relabelled, because the state is worth showing — and the
+                   endpoint is idempotent for exactly this date anyway, so a
+                   client that retries costs nothing. It does not become a
+                   toggle: there is no way to un-wear a look. -->
+              <button
+                type="button"
+                (click)="wear(look)"
+                [disabled]="store.updatingId() !== null || wornToday(look)"
+                class="min-h-11 self-start rounded-md bg-accent px-4 text-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
+              >
+                {{ wornToday(look) ? i18n.t('saved.wear.done') : i18n.t('saved.wear') }}
+              </button>
             </li>
           }
         </ul>
@@ -101,5 +120,17 @@ export class SavedLooksPage {
 
   protected toggleSaved(look: Look): void {
     this.store.update(look, { is_saved: !look.is_saved });
+  }
+
+  // The browser's today, not the server's — imported from the stylist's form
+  // rather than copied, which is the precedent `weather-strip.ts` set for the
+  // same function and the same reason: two spellings of "today" in one
+  // application would disagree for anyone not on UTC.
+  protected wear(look: Look): void {
+    this.store.wear(look, todayInLocalTime());
+  }
+
+  protected wornToday(look: Look): boolean {
+    return look.worn_at === todayInLocalTime();
   }
 }

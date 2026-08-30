@@ -47,6 +47,8 @@ function item(overrides: Partial<Item> = {}): Item {
     ai_confidence: 0.9,
     user_edited: false,
     error_message: null,
+    wear_count: 0,
+    last_worn_at: null,
     is_archived: false,
     created_at: '2026-08-19T09:00:00Z',
     updated_at: '2026-08-19T09:00:00Z',
@@ -254,12 +256,26 @@ describe('ItemDetailPage', () => {
     expect(text()).not.toContain('does not describe category');
   });
 
-  it('shows the wear placeholder rather than a zero', async () => {
-    await seedStore([item()]);
+  // The placeholder test that stood here until 3.4 is deleted rather than
+  // edited, the way `test_feedback_is_refused_until_task_3_3` was on the
+  // server: it asserted that nothing was readable yet, and something is.
+
+  it('says a garment has never been worn rather than printing a zero', async () => {
+    await seedStore([item({ wear_count: 0, last_worn_at: null })]);
     await render();
 
     expect(text()).toContain('Wear history');
-    expect(text()).toContain('once outfits arrive');
+    expect(text()).toContain('Never worn');
+    expect(text()).not.toContain('Wears: 0');
+  });
+
+  it('shows the count and the last day once it has been worn', async () => {
+    await seedStore([item({ wear_count: 3, last_worn_at: '2026-03-09' })]);
+    await render();
+
+    expect(text()).toContain('Wears: 3');
+    expect(text()).toContain('Last worn 2026-03-09');
+    expect(text()).not.toContain('Never worn');
   });
 
   // --- retag, two steps ----------------------------------------------------

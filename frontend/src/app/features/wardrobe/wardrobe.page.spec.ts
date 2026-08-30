@@ -38,6 +38,8 @@ function item(overrides: Partial<Item> = {}): Item {
     ai_confidence: 0.9,
     user_edited: false,
     error_message: null,
+    wear_count: 0,
+    last_worn_at: null,
     is_archived: false,
     created_at: '2026-08-19T09:00:00Z',
     updated_at: '2026-08-19T09:00:00Z',

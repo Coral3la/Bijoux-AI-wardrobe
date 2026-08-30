@@ -132,6 +132,38 @@ export class LooksStore {
     });
   }
 
+  // **Not optimistic, and that is an exception to `DECISIONS.md` 183 rather
+  // than an oversight.** That entry made every control on the look card
+  // optimistic on the argument that a toggle should answer the finger
+  // immediately and can be rolled back if the write fails. None of the three
+  // premises holds here: wearing is not a toggle, so a second tap does not
+  // undo it; the response changes `wear_count` on every garment in the look and
+  // this client cannot derive those numbers; and there is no previous state
+  // worth restoring, because nothing was written before the answer arrived.
+  // A guess that cannot be checked and cannot be withdrawn is not optimism.
+  wear(look: Look, date: string): void {
+    if (this.updatingSignal() !== null) {
+      return;
+    }
+
+    this.updatingSignal.set(look.id);
+    this.errorSignal.set(null);
+
+    this.api.wear(look.id, date).subscribe({
+      next: (saved) => {
+        this.write(saved);
+        this.updatingSignal.set(null);
+      },
+      // No restore, unlike `update`: nothing was changed on the way in, so
+      // there is nothing to put back. The row on screen is still the row the
+      // server holds.
+      error: (error: unknown) => {
+        this.errorSignal.set(updateErrorKey(error));
+        this.updatingSignal.set(null);
+      },
+    });
+  }
+
   private write(look: Look): void {
     this.updatedSignal.set(look);
     // Replaced where it stands rather than removed when it is unsaved. The

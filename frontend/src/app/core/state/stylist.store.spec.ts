@@ -57,6 +57,7 @@ function response(overrides: Partial<SuggestResponse> = {}): SuggestResponse {
         weather_note: 'Mild at 19°C.',
         is_saved: false,
         feedback: null,
+        worn_at: null,
       },
     ],
     missing_pieces: [],

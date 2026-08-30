@@ -76,6 +76,17 @@ Idempotent per date — calling it twice for the same date must not double-count
 
 An "I wore this" button on saved looks. Wear count and last-worn date on the item detail screen.
 
+**Built, and three things this line did not name.** The idempotency it asks for
+is **per the date the row currently holds**, which is as deep as one `DATE`
+column can reach: Monday → Tuesday → Monday counts three wearings, and a test
+asserts that number rather than leaving it to be discovered. `items.last_worn_at`
+moves **forward only** — `GREATEST` — because 3.5 reads it to avoid recommending
+something worn in the last three days. And the button is **the one control in
+the application that is not optimistic**, a deliberate exception to
+`DECISIONS.md` 183: wearing is not a toggle, the client cannot derive the new
+`wear_count` for every garment, and there is no previous state to roll back to.
+`DECISIONS.md` 184.
+
 ### 3.5 Feed preferences back into the prompt
 Extend the stylist user message with a preferences block assembled from the user's history:
 

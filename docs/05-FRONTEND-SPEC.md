@@ -164,7 +164,7 @@ The editor is always open rather than behind an **Edit tags** control, because t
 
 **Retag is one control.** It sends the unforced request; a `409 item_edited` opens a second step naming what will be discarded, and only that step sends `force=true`. Forcing straight away whenever `user_edited` is set would mean the `409` is never produced from the UI, and Stage 1's sixth acceptance criterion would stay a route test (122). **Delete arms on the first press and deletes on the second** — not `window.confirm`, which returns `undefined` in the test environment, and not a modal (126).
 
-Wear count and last worn remain *(Stage 3)*: the columns arrive at migration `0004`, so the section says so rather than rendering a zero that would change meaning when they land.
+Wear count and last worn are **built at task 3.4**. Until then the section carried a placeholder — the columns existed from migration `0004` and nothing wrote them, so a zero would have changed meaning when they landed. It now reads *"Never worn"* on an unworn garment and *"Wears: 3"* with *"Last worn 2026-03-09"* on a worn one. **Never-worn gets its own sentence rather than a zero and a blank date**, because it is the state most of a wardrobe is in and 3.6 builds a whole insights panel on counting it. The date is printed as the ISO day the server sent: this application has no date-formatting layer, and adding one for a single line would be the speculative abstraction `CONVENTIONS.md` forbids.
 
 **"Style around this" is not built, and this is where it was promised.** The line that said *"Primary action on this screen … do not bury it behind the edit and delete actions"* described a navigation into the stylist with `anchor_item_id` pre-set — a Stage 2 screen, out of scope for the whole of Stage 1, and named in no Stage 1 task. It is not cut: it is the first thing this screen should gain when the stylist exists, and the reasoning for it stands — it is the shortest path from *I am looking at this garment* to *here is what goes with it*. Recorded here so that whoever builds Stage 2 finds it, on 090's test: ownership, not affordance.
 
@@ -270,12 +270,31 @@ list it feeds was specified nowhere.
 │  │ 18°C — the blazer is …   │  │
 │  │ ┌───┐┌───┐┌───┐┌───┐     │  │
 │  │ └───┘└───┘└───┘└───┘     │  │
+│  │ [ I wore this ]          │  │  ← task 3.4
 │  └──────────────────────────┘  │
 │  ┌──────────────────────────┐  │
 │  │ Dinner out            ♥  │  │
 │  …                             │
 └────────────────────────────────┘
 ```
+
+**"I wore this", added at task 3.4.** Below the garments rather than beside the
+heart: the heart is about the list and this is about today, and a text label
+does not belong in a row built for a glyph. It is the only control in the
+application that is **not** optimistic, which is a deliberate exception to
+`DECISIONS.md` 183 rather than an omission — wearing is not a toggle, so a
+second tap does not undo it; the response changes `wear_count` on every garment
+and the client cannot derive those numbers; and there is no previous state to
+roll back to, because nothing is written before the answer arrives. It shows a
+busy state and renders what the server says. `DECISIONS.md` 184.
+
+**After a successful tap it stays, disabled, reading "Worn today."** The state is
+worth showing, and the endpoint is idempotent for that exact date anyway, so a
+client that retried would cost nothing. A look worn on an *earlier* day gets the
+button back, enabled: that is a second wearing and the server counts it as one.
+The date sent is the browser's local today, from the same `todayInLocalTime` the
+stylist form and the weather strip use — two spellings of "today" in one
+application would disagree for anyone off UTC.
 
 **Not the look card.** That component groups by layer, carries a ↻ badge on
 every garment and ends in "Try again", none of which a saved look can do —

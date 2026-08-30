@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 3 — Saving, Feedback and Wear Tracking
-**Status:** Stage 3 — **3.1, 3.2 and 3.3 are built**; 3.4 to 3.6 are not started. Stage 2 is built end to end from 2.1 to 2.12 and its acceptance criteria are still the developer's to run: the suites, the demo wardrobe timings and the five-out-of-five anchor check are unmeasured here. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below). **Stage 3 is the designated cut line** and has not been cut.
+**Status:** Stage 3 — **3.1, 3.2, 3.3 and 3.4 are built**; 3.5 and 3.6 are not started. Stage 2 is built end to end from 2.1 to 2.12 and its acceptance criteria are still the developer's to run: the suites, the demo wardrobe timings and the five-out-of-five anchor check are unmeasured here. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below). **Stage 3 is the designated cut line** and has not been cut.
 
 The header is moved with the task this time rather than four tasks later, which is the drift both paragraphs below record.
 
@@ -69,7 +69,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Migration 0004 — and O-25's two indexes
 - [x] Save a look — `GET /looks`, `PATCH /looks/{id}`, the heart, `/saved`
 - [x] Thumbs up/down — and the heart became optimistic with them
-- [ ] Wear tracking
+- [x] Wear tracking — and the one control that is deliberately not optimistic
 - [ ] Preferences fed into the prompt
 - [ ] Wardrobe insights
 
@@ -554,3 +554,14 @@ The task was decided by three things the documents did not agree on, and by one 
 - **The type system did the work again, in five files this time.** `Look` gaining a required `feedback` failed the build in every spec carrying a fixture — the same free catch `is_saved` got in three files at 3.2, and still the thing no backend test does for the wire shape.
 - **No mutation run.** The test worth mutating first is `test_look_schemas.py`: changing `FEEDBACK_UP` to `2` should turn exactly the two `get_args` tests red and leave the integration tests green, which is the seam that file exists to close.
 
+---
+
+**2026-08-30 — task 3.4, wear tracking.** **939 backend tests pass (923 before, 16 added) and 466 frontend tests pass (454 before, 12 added).** `ruff`, `ruff format`, `mypy`, `ng build`, `ng lint` and `prettier` are clean; both suites were run in full in the scratchpad mirror, and **six backend mutations and five frontend mutations were all caught with the control green at both ends**. New: `backend/tests/integration/test_looks_wear.py` (16). Changed: `backend/app/schemas/look.py`, `backend/app/schemas/item.py`, `backend/app/api/v1/routes/looks.py`, `backend/tests/integration/test_looks_list.py`, three backend unit-test fixtures, `frontend/src/app/shared/models/look.model.ts` and `item.model.ts`, `core/api/looks.api.ts`, `core/state/looks.store.ts`, `features/looks/saved-looks.page.ts`, `features/wardrobe/item-detail.page.ts`, ten spec files, `public/i18n/en.json`, and five documents besides this one. One entry, `DECISIONS.md` 184. No migration: `0004` built all four columns at 3.1 and this is the task that writes and reads them.
+
+- **The guard against double-counting is a `WHERE`, not an `if`.** `UPDATE looks SET worn_at = :date WHERE id = :id AND worn_at IS DISTINCT FROM :date RETURNING id`, and the items are incremented only if that returned a row. A read-then-write in Python leaves a gap the second of two rapid taps fits through — both read `NULL`, both increment, nothing raises. `IS DISTINCT FROM` rather than `!=` because `NULL != date` is `NULL`, so the plain comparison would never record a first wearing: **that mutation killed nine tests**, the largest of the eleven run.
+- **Idempotency reaches exactly one date deep, and a test asserts the miscount.** Monday → Tuesday → Monday counts three wearings, because `looks.worn_at` is one column and cannot remember a day it has overwritten. `test_idempotency_reaches_back_exactly_one_date` pins that number so the limitation is a decision with a name rather than a bug found later; `02-DATA-MODEL.md` names `look_wears` as the fix and Stage 3 deliberately does not build it.
+- **`last_worn_at` moves forward only.** `GREATEST(COALESCE(last_worn_at, :date), :date)`, because 3.5 asks that column which garments were worn in the last three days and a correction entered for last Tuesday must not drag a garment worn yesterday backwards. The consequence is documented rather than hidden: a look's `worn_at` and its items' `last_worn_at` can disagree and both are true.
+- **The backend finally got the property the frontend has had since 3.2.** Two required fields on `ItemResponse` made **three unit-test fixtures fail to construct**, and the collection error named all three at once — the same free catch the TypeScript compiler gave at 3.2 and 3.3, arriving on the server for the first time. `test_looks_list.py`'s literal key set caught `worn_at` exactly as its own comment predicted it would.
+- **One control in this application is not optimistic, and it says so.** `DECISIONS.md` 183 made every control on the look card optimistic; none of its three premises holds for a wearing — not a toggle, counts the client cannot derive, no previous state to restore. This is the second documented exception this project has taken to a rule one task old, and it is written in the store, in `05-FRONTEND-SPEC.md` §6a and in 184.
+- **A mutation harness left a mutation behind, which is the trap `06-TESTING-STRATEGY.md` names.** The first frontend run wrote its backup outside the mirror, so the restore silently failed and mutations two and three ran stacked on mutation one — the control came back red and read as a broken deliverable. Re-run from a verified-clean tree: five mutations, all caught, control green at both ends. The numbers quoted above are the second run's.
+- **`item.wear.placeholder` and the test that pinned it are deleted, purpose expired** — the same marker `test_feedback_is_refused_until_task_3_3` was at 3.3.

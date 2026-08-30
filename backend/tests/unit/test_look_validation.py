@@ -72,6 +72,12 @@ def _item(short_id: str, **tags: Any) -> ItemResponse:
         "ai_confidence": None,
         "user_edited": False,
         "error_message": None,
+        # Added at 3.4 with the two columns' first appearance on the wire. Both
+        # are required rather than defaulted, so this fixture failed to build
+        # until they were written here — the collection error that named all
+        # three copies of this dict at once.
+        "wear_count": 0,
+        "last_worn_at": None,
         "is_archived": False,
         "created_at": _EPOCH,
         "updated_at": _EPOCH,

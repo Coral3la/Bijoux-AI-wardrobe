@@ -253,8 +253,16 @@ The response is `03-AI-CONTRACTS.md`'s object with `item_ids` **replaced** by
 `items`, hydrated to the same shape `GET /items` returns, and with the `id` of
 the row this call persisted — the look is a resource from the moment it is
 suggested, and `PATCH /looks/{id}` at Stage 3 is the heart button on this very
-card. `is_saved`, `feedback` and `worn_at` are not in the look object: two of
-them are columns that do not exist until migration `0004`. `DECISIONS.md` 172.
+card. `DECISIONS.md` 172.
+
+*Amended at 3.4, and the sentence that stood here was wrong by then.* It read
+*"`is_saved`, `feedback` and `worn_at` are not in the look object: two of them
+are columns that do not exist until migration `0004`"* — true when written at
+2.7 and false in three steps: 3.2 put `is_saved` on the shape, 3.3 `feedback`,
+3.4 `worn_at`. **All three are in the look object on every endpoint that
+answers with one**, this one included, because 3.2 made `LookResponse` a single
+shape rather than one per endpoint. On a freshly suggested look the three read
+`false`, `null` and `null`, off the row rather than written as literals.
 
 `include_outerwear`: `true` forces a coat, `false` forbids one, `null` lets the weather rule decide.
 `occasion`: one of `casual · work · evening · sport · formal · travel`. The six
@@ -337,7 +345,7 @@ ever got. `look_items.position` records the model's own ordering; `role` is left
 ```json
 ← 200 { "looks": [ { "id": "uuid", "occasion": "work", "title": "Morning meetings",
                      "items": [ { … } ], "reasoning": "…", "weather_note": "…",
-                     "is_saved": true, "feedback": 1 } ],
+                     "is_saved": true, "feedback": 1, "worn_at": "2026-03-14" } ],
         "total": 12 }
 ```
 
@@ -402,6 +410,40 @@ status as one that never existed, per `06-TESTING-STRATEGY.md`.
 ← 200 { look }
 ```
 Sets `looks.worn_at` and, in the same transaction, increments `wear_count` and updates `last_worn_at` on every item in the look. Idempotent per date — calling it twice for the same date does not double-count.
+
+**Written at task 3.4, and the one-line spec above needed five things said.**
+
+`date` is **required** and has no upper bound. The client sends the local today
+its own browser is standing in, and a browser east of UTC routinely names a day
+this server would still call tomorrow — so a future-date refusal would be a
+`422` that a *correct* client provokes by its timezone, which is the one thing
+`CONVENTIONS.md` says a validation error must never be. The column is
+descriptive rather than a claim about time. An unknown key is
+`validation_error`, per `extra="forbid"`.
+
+**Idempotency is per the date the row currently holds, and that is its exact
+reach.** A repeat naming the stored date changes nothing and answers `200`. A
+*different* date is a genuine second wearing: `worn_at` is overwritten and every
+item is incremented again. It follows that Monday → Tuesday → Monday counts
+three wearings, because one `DATE` column cannot remember a day it has already
+overwritten. That is a limitation of the schema and it is taken deliberately —
+a `look_wears` table would remember and is not built. `DECISIONS.md` 184, and
+`tests/integration/test_looks_wear.py` asserts the three-count case so it is a
+decision rather than a surprise.
+
+**`last_worn_at` moves forward only.** It is `GREATEST(last_worn_at, :date)`,
+so recording a wearing for last Tuesday cannot drag a garment worn yesterday
+backwards — task 3.5 asks that column which items were worn in the last three
+days, and a backwards move would silently un-hide one. A look's `worn_at` and
+its items' `last_worn_at` may therefore disagree, and both are true: the look
+records when *it* was worn, the garment when it was last worn in anything.
+
+**`is_saved` is not consulted.** Any look the account owns can be marked worn.
+The button lives on the saved-looks screen and that is the screen's policy, not
+the endpoint's.
+
+`404` with `code: "not_found"` for a look belonging to another account, the same
+code and status as one that never existed.
 
 ---
 

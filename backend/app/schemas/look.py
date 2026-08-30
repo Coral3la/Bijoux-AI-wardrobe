@@ -1,4 +1,4 @@
-"""The wire shapes of the three `/looks` endpoints.
+"""The wire shapes of the four `/looks` endpoints.
 
 A look on the wire is `03-AI-CONTRACTS.md`'s answer with one substitution:
 `item_ids` become `items`, full `ItemResponse` objects. `04-API-SPEC.md` calls
@@ -20,9 +20,9 @@ The cost of one shape is that **suggest responses now carry `is_saved: false`**,
 a field that endpoint's client had no use for; it is true of the row rather
 than padding, which is what made it acceptable.
 
-`feedback` arrived at 3.3 and `worn_at` is still out, waiting for 3.4 — the
-three-commits-over-one-shape churn `DECISIONS.md` 182 accepted on purpose, two
-thirds spent.
+`feedback` arrived at 3.3 and `worn_at` arrives here at 3.4 — the
+three-commits-over-one-shape churn `DECISIONS.md` 182 accepted on purpose,
+now spent in full. Nothing in Stage 4 adds a fourth.
 
 **`feedback` is `Literal[-1, 1]`, not `Literal[FEEDBACK_UP, FEEDBACK_DOWN]`**,
 which is what 3.1 said this task would write and which does not type-check:
@@ -116,6 +116,11 @@ class LookResponse(BaseModel):
     # 3.5 counts rated looks and needs it to stay distinguishable from a
     # neutral score, which is why the column has no server default (181).
     feedback: Literal[-1, 1] | None
+    # The day this look was **most recently** worn, which is not the same claim
+    # as any of its items' `last_worn_at`: one column holds one date, so wearing
+    # the same look on a second day overwrites this, while each garment keeps
+    # the latest day it was worn in *any* look. `DECISIONS.md` 184.
+    worn_at: date | None
 
 
 class LookSuggestResponse(BaseModel):
@@ -132,6 +137,27 @@ class LookListResponse(BaseModel):
 # The fields whose `NULL` is not a state any screen can render. `feedback` is
 # deliberately absent: see the validator below.
 _UNCLEARABLE = ("is_saved", "title")
+
+
+class LookWearRequest(BaseModel):
+    """`POST /looks/{id}/wear`, whose whole body is one required date.
+
+    Required rather than defaulted to the server's today: the button that sends
+    it is in a browser, and a browser east of UTC calls a day by a name the
+    server would not. The client owns the calendar it is standing in, and this
+    endpoint records what it is told.
+
+    **No upper bound, deliberately.** A future date reads as nonsense and is
+    still not refused: `todayInLocalTime()` in the browser is routinely the
+    server's tomorrow, so a strict check would be a `422` that a *correct*
+    client provokes by being east of Greenwich — which is the one thing
+    `CONVENTIONS.md` says a validation error must never be. The column is
+    descriptive rather than a claim about time. `DECISIONS.md` 184.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    date: date
 
 
 class LookUpdate(BaseModel):

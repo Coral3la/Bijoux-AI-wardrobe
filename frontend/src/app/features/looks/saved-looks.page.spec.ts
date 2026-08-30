@@ -10,6 +10,7 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { LooksStore } from '../../core/state/looks.store';
 import { Item } from '../../shared/models/item.model';
 import { Look } from '../../shared/models/look.model';
+import { todayInLocalTime } from '../stylist/look-request-form';
 import { SavedLooksPage } from './saved-looks.page';
 
 let fixture: ComponentFixture<SavedLooksPage>;
@@ -40,6 +41,8 @@ function item(overrides: Partial<Item> = {}): Item {
     ai_confidence: 0.9,
     user_edited: false,
     error_message: null,
+    wear_count: 0,
+    last_worn_at: null,
     is_archived: false,
     created_at: '2026-08-19T09:00:00Z',
     updated_at: '2026-08-19T09:00:00Z',
@@ -57,6 +60,7 @@ function look(overrides: Partial<Look> = {}): Look {
     weather_note: 'Mild at 18°C — the blazer is enough.',
     is_saved: true,
     feedback: null,
+    worn_at: null,
     ...overrides,
   };
 }
@@ -75,6 +79,12 @@ function hearts(): HTMLButtonElement[] {
       `button[aria-label="${en['stylist.look.save']}"]`,
     ),
   ];
+}
+
+function wearButtons(): HTMLButtonElement[] {
+  return [...element().querySelectorAll<HTMLButtonElement>('button')].filter((candidate) =>
+    [en['saved.wear'], en['saved.wear.done']].includes(candidate.textContent?.trim() ?? ''),
+  );
 }
 
 function listRequest() {
@@ -228,6 +238,57 @@ describe('SavedLooksPage', () => {
     await fixture.whenStable();
 
     expect(text()).toContain(en['looks.error.load']);
+  });
+
+  it('sends today as the wear date', async () => {
+    await render();
+    listRequest().flush({ looks: [look()], total: 1 });
+    await fixture.whenStable();
+
+    wearButtons()[0].click();
+
+    const request = mock.expectOne(`${environment.apiUrl}/looks/look-1/wear`);
+    // The browser's today, which is the whole reason the endpoint refuses no
+    // date: a client east of UTC names a day the server would call tomorrow.
+    expect(request.request.body).toEqual({ date: todayInLocalTime() });
+
+    request.flush(look({ worn_at: todayInLocalTime() }));
+    await fixture.whenStable();
+  });
+
+  it('relabels and disables the button once the look was worn today', async () => {
+    await render();
+    listRequest().flush({ looks: [look({ worn_at: todayInLocalTime() })], total: 1 });
+    await fixture.whenStable();
+
+    expect(wearButtons()[0].textContent?.trim()).toBe(en['saved.wear.done']);
+    expect(wearButtons()[0].disabled).toBe(true);
+  });
+
+  it('still offers the button when the look was worn on an earlier day', async () => {
+    // A look worn last Tuesday can be worn again today, and the endpoint counts
+    // that as a second wearing. Only today's date closes the button.
+    await render();
+    listRequest().flush({ looks: [look({ worn_at: '2020-01-01' })], total: 1 });
+    await fixture.whenStable();
+
+    expect(wearButtons()[0].textContent?.trim()).toBe(en['saved.wear']);
+    expect(wearButtons()[0].disabled).toBe(false);
+  });
+
+  it('reports a failed wear without emptying the list', async () => {
+    await render();
+    listRequest().flush({ looks: [look()], total: 1 });
+    await fixture.whenStable();
+
+    wearButtons()[0].click();
+    mock
+      .expectOne(`${environment.apiUrl}/looks/look-1/wear`)
+      .flush({ detail: 'boom' }, { status: 500, statusText: 'Server Error' });
+    await fixture.whenStable();
+
+    expect(text()).toContain(en['looks.error.general']);
+    expect(wearButtons()[0].textContent?.trim()).toBe(en['saved.wear']);
   });
 
   it('reports a failed write without emptying the list', async () => {

@@ -163,6 +163,9 @@ def test_a_look_carries_the_documented_fields(
     # the wire contains — so 3.3's `feedback` and 3.4's `worn_at` would land
     # the same way. `CONVENTIONS.md`'s rule about a derived expectation, one
     # artefact along: this list is transcribed from `04-API-SPEC.md`.
+    #
+    # It caught both of them. `feedback` at 3.3 and `worn_at` at 3.4 each
+    # failed here first, which is what the comment above was predicting.
     user = make_user()
     make_look(user_id=user.id, items=[make_item(user_id=user.id, **READY)], **TEXT)
 
@@ -177,6 +180,7 @@ def test_a_look_carries_the_documented_fields(
         "weather_note",
         "is_saved",
         "feedback",
+        "worn_at",
     }
 
 

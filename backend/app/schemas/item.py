@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, StringConstraints, computed_field
@@ -35,6 +35,16 @@ class ItemResponse(BaseModel):
     ai_confidence: float | None
     user_edited: bool
     error_message: str | None
+
+    # On the wire from task 3.4, which is `02-DATA-MODEL.md`'s own deadline for
+    # them: the columns landed at `0004` and this is the first shape that reads
+    # them. `wear_count` is `NOT NULL DEFAULT 0`, so a garment uploaded before
+    # the column existed answers `0` rather than `null` — the property 3.6's
+    # `never_worn` counts on. `last_worn_at` stays nullable because never-worn
+    # is a real state and not a zero.
+    wear_count: int
+    last_worn_at: date | None
+
     is_archived: bool
 
     created_at: datetime

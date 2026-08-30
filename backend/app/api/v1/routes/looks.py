@@ -1,4 +1,4 @@
-"""The three `/looks` routes: make one, list them, change one.
+"""The four `/looks` routes: make one, list them, change one, wear one.
 
 `POST /suggest` is the route that puts Stage 2 together — wardrobe → forecast →
 rule → serialise → stylist → validate → persist → hydrate, in `STAGE-2` 2.7's
@@ -6,7 +6,12 @@ order. `GET ""` and `PATCH /{look_id}` are 3.2's and are the first things in
 this project to read a `looks` row back after the request that wrote it: every
 suggestion made since 2.7 becomes visible here.
 
-The two reads share `_hydrate`, which is the whole of what makes a persisted
+`POST /{look_id}/wear` is 3.4's and is the only route here that writes a row
+it did not read into Python first: the guard against double-counting is a
+conditional `UPDATE`, so two rapid taps race in the database rather than in
+this module.
+
+The three reads share `_hydrate`, which is the whole of what makes a persisted
 look into a wire one. `Look` carries no `relationship()` — following `Item`,
 which names `user_id` and stops — so the items come from an explicit join in
 `look_items.position` order, and that is the second reader `position` was
@@ -27,7 +32,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 from openai import OpenAIError
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -44,6 +49,7 @@ from app.schemas.look import (
     LookSuggestRequest,
     LookSuggestResponse,
     LookUpdate,
+    LookWearRequest,
     MissingPieceResponse,
 )
 from app.services.stylist import Look as StylistLook
@@ -362,6 +368,9 @@ def _persist(
                 # reason. 3.5 counts unrated looks, so this is a value rather
                 # than an absence.
                 feedback=row.feedback,
+                # Also always None here, and read off the row for the same
+                # reason: a look is suggested before it can have been worn.
+                worn_at=row.worn_at,
             )
         )
 
@@ -483,6 +492,7 @@ def _hydrate(db: Session, rows: Sequence[Look]) -> list[LookResponse]:
             weather_note=row.weather_note,
             is_saved=row.is_saved,
             feedback=row.feedback,
+            worn_at=row.worn_at,
         )
         for row in rows
     ]
@@ -559,5 +569,79 @@ def update_look(
     for field, value in supplied.items():
         setattr(look, field, value)
     db.commit()
+
+    return _hydrate(db, [look])[0]
+
+
+@router.post("/{look_id}/wear")
+def wear_look(
+    look_id: uuid.UUID,
+    worn: LookWearRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> LookResponse:
+    """Record a look as worn, and age every garment in it by one wearing.
+
+    **The guard is the `UPDATE`'s own `WHERE`, not a read in Python.** A
+    `look.worn_at != worn.date` here would be two statements with a gap between
+    them, and the gap is exactly wide enough for the second of two rapid taps:
+    both read `NULL`, both increment, and the item counts are wrong with no
+    error anywhere. `IS DISTINCT FROM` rather than `!=` because the column is
+    `NULL` on every look that has never been worn, and `NULL != date` is `NULL`
+    — which is not `TRUE`, so the first wearing would never be recorded.
+
+    **What idempotency does and does not promise.** A repeat is a request whose
+    date matches the date the row currently holds, and that is the whole of it:
+    `looks.worn_at` is one column, so wearing a look on a second day overwrites
+    the first and a *third* request naming the first day counts again. The look
+    genuinely was worn twice, so incrementing is right; what is lost is the
+    ability to notice that the first day has already been counted. A
+    `look_wears` table would remember, and 3.4 deliberately does not build one.
+    `DECISIONS.md` 184.
+
+    `is_saved` is not consulted. The button lives on the saved-looks screen and
+    that is a decision about the screen — encoding it here would make the API
+    refuse a request no client sends, which is 3.3's reasoning about the thumbs
+    living on the card only.
+    """
+    look = _owned(db, look_id, current_user.id)
+
+    # `RETURNING` rather than `rowcount`, which SQLAlchemy types as belonging to
+    # `CursorResult` while `Session.execute` is annotated `Result[Any]` — so the
+    # obvious spelling needs a cast to type-check. This asks the same question
+    # in one statement and answers it with a row or nothing.
+    changed = (
+        db.execute(
+            update(Look)
+            .where(Look.id == look.id, Look.worn_at.is_distinct_from(worn.date))
+            .values(worn_at=worn.date)
+            .returning(Look.id)
+        ).scalar_one_or_none()
+        is not None
+    )
+
+    if changed:
+        db.execute(
+            update(Item)
+            .where(Item.id.in_(select(LookItem.item_id).where(LookItem.look_id == look.id)))
+            .values(
+                wear_count=Item.wear_count + 1,
+                # GREATEST rather than assignment, so a correction entered for
+                # last Tuesday cannot drag a garment worn yesterday backwards.
+                # 3.5 reads this column to avoid recommending something worn in
+                # the last three days, and a backwards move silently un-hides
+                # it. COALESCE because GREATEST(NULL, date) is NULL in
+                # PostgreSQL only when every argument is NULL — but the column
+                # is NULL on a garment never worn, and being explicit here is
+                # cheaper than depending on which of the two behaviours this
+                # version implements.
+                last_worn_at=func.greatest(func.coalesce(Item.last_worn_at, worn.date), worn.date),
+            )
+        )
+
+    db.commit()
+    # Refreshed rather than returned from the object in hand: the UPDATE went
+    # round the identity map, so `look.worn_at` is still whatever was loaded.
+    db.refresh(look)
 
     return _hydrate(db, [look])[0]

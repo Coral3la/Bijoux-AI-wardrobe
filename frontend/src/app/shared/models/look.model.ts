@@ -54,6 +54,11 @@ export interface Look {
   readonly weather_note: string;
   readonly is_saved: boolean;
   readonly feedback: Feedback | null;
+  // The day this look was *most recently* worn. Not the same claim as any of
+  // its items' `last_worn_at`: one column holds one date, so wearing the look
+  // again overwrites it, while a garment keeps the latest day it was worn in
+  // anything at all. DECISIONS.md 184.
+  readonly worn_at: string | null;
 }
 
 // PATCH /looks/{id}. Every key is optional to *omit* — `undefined` means
@@ -66,6 +71,13 @@ export interface LookUpdate {
   // Optional to omit *and* nullable to send: unlike the other two, `null` here
   // is a documented write rather than a 422. It un-rates the look.
   readonly feedback?: Feedback | null;
+}
+
+// POST /looks/{id}/wear. One required key, and the date is the *client's* local
+// today rather than the server's: a browser east of UTC names a day the server
+// would still call tomorrow, and the endpoint refuses no date for that reason.
+export interface LookWearRequest {
+  readonly date: string;
 }
 
 export interface LookListResponse {

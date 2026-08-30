@@ -20,6 +20,7 @@ function look(overrides: Partial<Look> = {}): Look {
     weather_note: 'Mild at 19°C.',
     is_saved: true,
     feedback: null,
+    worn_at: null,
     ...overrides,
   };
 }
@@ -268,6 +269,88 @@ describe('LooksStore.update — optimistically', () => {
     expect(store.updated()?.feedback).toBeNull();
 
     request.flush(look({ feedback: null }));
+  });
+});
+
+describe('LooksStore.wear', () => {
+  it('posts the date to the wear endpoint', () => {
+    store.wear(look(), '2026-03-09');
+
+    const request = mock.expectOne(`${environment.apiUrl}/looks/look-1/wear`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ date: '2026-03-09' });
+
+    request.flush(look({ worn_at: '2026-03-09' }));
+  });
+
+  // The deliberate difference from `update`, and the reason this test exists:
+  // 183 made every control on the look card optimistic and this one is not.
+  // A wear changes `wear_count` on every garment in the look, which this
+  // client cannot compute — so it shows nothing until the server says what
+  // the row now holds.
+  it('shows nothing before the server has answered', () => {
+    store.wear(look(), '2026-03-09');
+
+    expect(store.updated()).toBeNull();
+
+    mock
+      .expectOne(`${environment.apiUrl}/looks/look-1/wear`)
+      .flush(look({ worn_at: '2026-03-09' }));
+
+    expect(store.updated()?.worn_at).toBe('2026-03-09');
+  });
+
+  it('writes the server answer into the list as well', () => {
+    store.loadSaved();
+    mock
+      .expectOne(`${environment.apiUrl}/looks?is_saved=true`)
+      .flush({ looks: [look()], total: 1 });
+
+    store.wear(look(), '2026-03-09');
+    mock
+      .expectOne(`${environment.apiUrl}/looks/look-1/wear`)
+      .flush(look({ worn_at: '2026-03-09' }));
+
+    expect(store.looks()[0].worn_at).toBe('2026-03-09');
+  });
+
+  it('holds the row while the write is in flight', () => {
+    store.wear(look(), '2026-03-09');
+
+    expect(store.updatingId()).toBe('look-1');
+
+    mock
+      .expectOne(`${environment.apiUrl}/looks/look-1/wear`)
+      .flush(look({ worn_at: '2026-03-09' }));
+
+    expect(store.updatingId()).toBeNull();
+  });
+
+  it('refuses a second write while one is running', () => {
+    store.wear(look(), '2026-03-09');
+    store.wear(look(), '2026-03-09');
+
+    // One request, not two: the gate is the same `updatingId` the heart uses.
+    mock
+      .expectOne(`${environment.apiUrl}/looks/look-1/wear`)
+      .flush(look({ worn_at: '2026-03-09' }));
+  });
+
+  it('says what went wrong and leaves the row alone', () => {
+    store.loadSaved();
+    mock
+      .expectOne(`${environment.apiUrl}/looks?is_saved=true`)
+      .flush({ looks: [look()], total: 1 });
+
+    store.wear(look(), '2026-03-09');
+    mock
+      .expectOne(`${environment.apiUrl}/looks/look-1/wear`)
+      .flush({ detail: 'gone', code: 'not_found' }, { status: 404, statusText: 'Not Found' });
+
+    expect(store.error()).toBe('looks.error.notFound');
+    // Nothing to roll back, because nothing was written on the way in.
+    expect(store.looks()[0].worn_at).toBeNull();
+    expect(store.updatingId()).toBeNull();
   });
 });
 
