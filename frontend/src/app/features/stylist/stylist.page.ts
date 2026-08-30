@@ -7,7 +7,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { ItemsApi } from '../../core/api/items.api';
 import { I18nService } from '../../core/i18n/i18n.service';
@@ -58,9 +58,22 @@ function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
 @Component({
   selector: 'app-stylist-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [LookCard, LookRequestForm],
+  imports: [LookCard, LookRequestForm, RouterLink],
   template: `
     <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
+      <!-- Outside the three-way branch below rather than inside the header,
+           because the branch replaces the whole screen: during the four-to-eight
+           second wait, and again once the card is up, this is the only way out
+           of the stylist that is not the browser's own back button. Same string
+           and same treatment as item detail and profile, which is what makes it
+           read as the app's back link rather than this screen's. -->
+      <a
+        routerLink="/wardrobe"
+        class="inline-flex min-h-11 items-center self-start text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        {{ i18n.t('stylist.back') }}
+      </a>
+
       <header>
         <h1 class="font-display text-3xl">{{ i18n.t('stylist.title') }}</h1>
       </header>

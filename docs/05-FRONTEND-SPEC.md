@@ -193,6 +193,18 @@ When arriving with an anchor, the item appears pinned above the form: *"Building
 
 Submitting swaps the form for a look card. Expect 4–8 seconds — show a skeleton of the look card itself, not a spinner, and cycle two or three short status lines ("Reading the forecast…", "Going through your wardrobe…").
 
+*Amended after task 3.3: the screen has a way out.* A **Back to wardrobe** link
+sits above the heading — `stylist.back`, the same string and the same treatment
+as item detail and profile, so it reads as the application's back link rather
+than this screen's invention. It is deliberately **outside** the three-way branch
+this section describes: that branch replaces everything below the heading, so a
+link inside it would disappear for the four to eight seconds of the wait and
+again for as long as the card is up, which is most of the time anybody spends
+here. A real anchor, not a history call — `/wardrobe` is a place, and the browser
+back button on a screen reached from the weather strip goes somewhere else.
+It is the fourth hand-placed navigation control in the application; `AUDITS.md`
+**O-29** counts it.
+
 ### 6. Look card — the visual payoff
 
 ```

@@ -1429,6 +1429,18 @@ screen and cannot do it through the address bar. **Do not let a fourth screen
 ship with a bespoke link.** This item is not a defect in any of the three
 tasks; it is the cost of specifying screens one at a time.
 
+**A fourth was shipped anyway, after task 3.3.** `/stylist` gained a **Back to
+wardrobe** link, and the count this item keeps is now four bespoke controls
+across four tasks. Two things are worth separating. The first three are entry
+points *into* screens; this one is an exit *out of* one, which is the half of
+the problem a navigation bar solves that nobody had yet named — the stylist was
+reachable from the weather strip and leavable only by the browser's back button.
+And it is not a new invention: it is `item.back` and `profile.back`'s string and
+treatment used a third time, which is the cheapest possible version of the wrong
+answer. **The recommendation does not change, and the deadline is now past.**
+Whoever opens `05-FRONTEND-SPEC.md` §2 next builds the navigation and deletes
+these four — by then there will be at least a trip screen too.
+
 #### O-30 · `GET /looks/{id}` and `DELETE /looks/{id}` are headings with nothing under them — opened at task 3.2
 
 `04-API-SPEC.md` gives both a heading and no body: no request, no response, no

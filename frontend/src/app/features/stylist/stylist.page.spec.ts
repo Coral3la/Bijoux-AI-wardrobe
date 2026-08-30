@@ -134,6 +134,10 @@ function buttonWith(label: string): HTMLButtonElement {
   )!;
 }
 
+function backLink(): HTMLAnchorElement | null {
+  return element().querySelector<HTMLAnchorElement>('a[href="/wardrobe"]');
+}
+
 function weatherRequest() {
   return mock.expectOne((candidate) => candidate.url === `${environment.apiUrl}/weather`);
 }
@@ -367,6 +371,24 @@ describe('StylistPage', () => {
     suggestRequest().flush(response());
     TestBed.tick();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  // Asserted in two states, because one state proves nothing here: the link is
+  // correct only if it sits outside the branch that swaps the form for the
+  // skeleton and then for the card. Moving it inside the header would still
+  // pass the first expectation and fail the last.
+  it('offers a way back to the wardrobe from every state', async () => {
+    await render();
+
+    expect(backLink()?.textContent?.trim()).toBe(en['stylist.back']);
+
+    await submit();
+    expect(backLink()).not.toBeNull();
+
+    suggestRequest().flush(response());
+    await fixture.whenStable();
+
+    expect(backLink()).not.toBeNull();
   });
 
   it('renders the look it was given', async () => {
