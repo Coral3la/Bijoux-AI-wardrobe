@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import en from '../../../../public/i18n/en.json';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { Item } from '../../shared/models/item.model';
-import { Look, MissingPiece } from '../../shared/models/look.model';
+import { Feedback, Look, MissingPiece } from '../../shared/models/look.model';
 import { LookCard } from './look-card';
 
 let fixture: ComponentFixture<LookCard>;
@@ -15,6 +15,7 @@ let mock: HttpTestingController;
 let tries = 0;
 let swapped: Item[] = [];
 let saves = 0;
+let ratings: (Feedback | null)[] = [];
 
 function item(overrides: Partial<Item> = {}): Item {
   return {
@@ -57,6 +58,7 @@ function look(items: readonly Item[], overrides: Partial<Look> = {}): Look {
     reasoning: 'The high-rise jean balances the oversized shirt.',
     weather_note: 'Mild at 18°C — the blazer is enough.',
     is_saved: false,
+    feedback: null,
     ...overrides,
   };
 }
@@ -66,23 +68,34 @@ async function render(
   missingPieces: readonly MissingPiece[] = [],
   message = '',
   swappingItemId: string | null = null,
-  saving = false,
+  busy = false,
 ): Promise<void> {
   fixture = TestBed.createComponent(LookCard);
   fixture.componentRef.setInput('look', value);
   fixture.componentRef.setInput('missingPieces', missingPieces);
   fixture.componentRef.setInput('message', message);
   fixture.componentRef.setInput('swappingItemId', swappingItemId);
-  fixture.componentRef.setInput('saving', saving);
+  fixture.componentRef.setInput('busy', busy);
   fixture.componentInstance.tryAgain.subscribe(() => tries++);
   fixture.componentInstance.swap.subscribe((item) => swapped.push(item));
   fixture.componentInstance.save.subscribe(() => saves++);
+  fixture.componentInstance.rated.subscribe((value) => ratings.push(value));
   await fixture.whenStable();
 }
 
-// By its accessible name, like the swap badges above and for the same reason:
-// the ♡ is aria-hidden decoration, so a test that clicked the glyph would pass
-// on a button with no name at all.
+// Both found by accessible name, like the swap badges above and for the same
+// reason: every glyph on these three controls is aria-hidden decoration, so a
+// test that clicked the character would pass on a button with no name at all.
+// It is also what pins the names as fixed — aria-pressed carries the state.
+function thumb(direction: 'Up' | 'Down'): HTMLButtonElement {
+  const label = en[`stylist.look.thumb${direction}` as keyof typeof en];
+  const button = element().querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  if (button === null) {
+    throw new Error(`the card has no thumb ${direction} button`);
+  }
+  return button;
+}
+
 function heart(): HTMLButtonElement {
   const button = element().querySelector<HTMLButtonElement>(
     `button[aria-label="${en['stylist.look.save']}"]`,
@@ -133,6 +146,8 @@ describe('LookCard', () => {
     mock = TestBed.inject(HttpTestingController);
     tries = 0;
     swapped = [];
+    saves = 0;
+    ratings = [];
 
     const loading = TestBed.inject(I18nService).load();
     mock.expectOne('/i18n/en.json').flush(en);
@@ -337,6 +352,75 @@ describe('LookCard', () => {
         (candidate) => candidate.textContent?.trim() === en['stylist.look.tryAgain'],
       );
       expect(tryAgain?.disabled).toBe(false);
+    });
+  });
+
+  describe('LookCard — the thumbs', () => {
+    it('rates the look up and down', async () => {
+      await render(look([item()]));
+
+      thumb('Up').click();
+      thumb('Down').click();
+
+      expect(ratings).toEqual([1, -1]);
+    });
+
+    it('clears the rating when the thumb already on is pressed again', async () => {
+      // The tap that withdraws a rating is the same button, not a third
+      // control — so the card emits the value to write rather than the button
+      // that was pressed.
+      await render(look([item()], { feedback: 1 }));
+
+      thumb('Up').click();
+
+      expect(ratings).toEqual([null]);
+    });
+
+    it('replaces the rating when the other thumb is pressed', async () => {
+      await render(look([item()], { feedback: 1 }));
+
+      thumb('Down').click();
+
+      expect(ratings).toEqual([-1]);
+    });
+
+    it('reports which thumb is on through aria-pressed', async () => {
+      await render(look([item()], { feedback: 1 }));
+      expect(thumb('Up').getAttribute('aria-pressed')).toBe('true');
+      expect(thumb('Down').getAttribute('aria-pressed')).toBe('false');
+
+      await render(look([item()], { feedback: -1 }));
+      expect(thumb('Up').getAttribute('aria-pressed')).toBe('false');
+      expect(thumb('Down').getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('shows neither as pressed on an unrated look', async () => {
+      await render(look([item()], { feedback: null }));
+
+      expect(thumb('Up').getAttribute('aria-pressed')).toBe('false');
+      expect(thumb('Down').getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('keeps a fixed accessible name in both states', async () => {
+      // aria-pressed carries the state. A name that changed with it would
+      // announce the change twice and disagree about the next press.
+      await render(look([item()], { feedback: 1 }));
+      expect(thumb('Up').getAttribute('aria-label')).toBe(en['stylist.look.thumbUp']);
+
+      await render(look([item()], { feedback: null }));
+      expect(thumb('Up').getAttribute('aria-label')).toBe(en['stylist.look.thumbUp']);
+    });
+
+    it('disables both thumbs and the heart together while a write is in flight', async () => {
+      // One flag, because the store takes one write at a time: a rating and a
+      // save cannot be running together.
+      await render(look([item()]), [], '', null, true);
+
+      expect([thumb('Up').disabled, thumb('Down').disabled, heart().disabled]).toEqual([
+        true,
+        true,
+        true,
+      ]);
     });
   });
 });

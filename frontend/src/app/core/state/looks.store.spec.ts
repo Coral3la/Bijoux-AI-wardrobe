@@ -19,6 +19,7 @@ function look(overrides: Partial<Look> = {}): Look {
     reasoning: 'The blazer lifts the knit.',
     weather_note: 'Mild at 19°C.',
     is_saved: true,
+    feedback: null,
     ...overrides,
   };
 }
@@ -79,7 +80,7 @@ describe('LooksStore.loadSaved', () => {
 
 describe('LooksStore.update', () => {
   it('sends only the fields it was given', () => {
-    store.update('look-1', { is_saved: false });
+    store.update(look(), { is_saved: false });
 
     const request = mock.expectOne(`${environment.apiUrl}/looks/look-1`);
     expect(request.request.method).toBe('PATCH');
@@ -93,7 +94,7 @@ describe('LooksStore.update', () => {
       .expectOne(`${environment.apiUrl}/looks?is_saved=true`)
       .flush({ looks: [look(), look({ id: 'look-2' })], total: 2 });
 
-    store.update('look-1', { is_saved: false });
+    store.update(look(), { is_saved: false });
     mock.expectOne(`${environment.apiUrl}/looks/look-1`).flush(look({ is_saved: false }));
 
     // Still two rows. Taking the row away under the finger that unsaved it
@@ -104,7 +105,7 @@ describe('LooksStore.update', () => {
   });
 
   it('exposes the updated look so a screen holding its own copy can prefer it', () => {
-    store.update('look-1', { is_saved: true });
+    store.update(look(), { is_saved: true });
     mock.expectOne(`${environment.apiUrl}/looks/look-1`).flush(look({ is_saved: true }));
 
     expect(store.updated()?.id).toBe('look-1');
@@ -112,7 +113,7 @@ describe('LooksStore.update', () => {
   });
 
   it('marks which look is being written and clears it after', () => {
-    store.update('look-1', { is_saved: true });
+    store.update(look(), { is_saved: true });
     expect(store.updatingId()).toBe('look-1');
 
     mock.expectOne(`${environment.apiUrl}/looks/look-1`).flush(look());
@@ -120,8 +121,8 @@ describe('LooksStore.update', () => {
   });
 
   it('drops a second write while one is in flight', () => {
-    store.update('look-1', { is_saved: true });
-    store.update('look-2', { is_saved: true });
+    store.update(look(), { is_saved: true });
+    store.update(look({ id: 'look-2' }), { is_saved: true });
 
     mock.expectOne(`${environment.apiUrl}/looks/look-1`).flush(look());
     // The second never left: expectNone would pass on a store that queued it,
@@ -130,7 +131,7 @@ describe('LooksStore.update', () => {
   });
 
   it('reads the documented code rather than the status', () => {
-    store.update('look-1', { is_saved: true });
+    store.update(look(), { is_saved: true });
     mock
       .expectOne(`${environment.apiUrl}/looks/look-1`)
       .flush(
@@ -143,7 +144,7 @@ describe('LooksStore.update', () => {
   });
 
   it('falls back to the general message on a code it does not know', () => {
-    store.update('look-1', { is_saved: true });
+    store.update(look(), { is_saved: true });
     mock
       .expectOne(`${environment.apiUrl}/looks/look-1`)
       .flush({ detail: 'boom' }, { status: 500, statusText: 'Server Error' });
@@ -157,7 +158,7 @@ describe('LooksStore.update', () => {
       .expectOne(`${environment.apiUrl}/looks?is_saved=true`)
       .flush({ looks: [look()], total: 1 });
 
-    store.update('look-1', { is_saved: false });
+    store.update(look(), { is_saved: false });
     mock
       .expectOne(`${environment.apiUrl}/looks/look-1`)
       .flush({ detail: 'boom' }, { status: 500, statusText: 'Server Error' });
@@ -177,6 +178,112 @@ describe('LooksStore.reset', () => {
 
     expect(store.looks()).toEqual([]);
     expect(store.updated()).toBeNull();
+    expect(store.error()).toBeNull();
+  });
+});
+
+describe('LooksStore.update — optimistically', () => {
+  it('shows the change before the server has answered', () => {
+    store.update(look({ is_saved: true }), { is_saved: false });
+
+    // Nothing has been flushed. This is the whole of what "optimistic" buys
+    // and the whole of what it risks.
+    expect(store.updated()?.is_saved).toBe(false);
+
+    mock.expectOne(`${environment.apiUrl}/looks/look-1`).flush(look({ is_saved: false }));
+  });
+
+  it('shows a rating before the server has answered', () => {
+    store.update(look(), { feedback: 1 });
+
+    expect(store.updated()?.feedback).toBe(1);
+
+    mock.expectOne(`${environment.apiUrl}/looks/look-1`).flush(look({ feedback: 1 }));
+  });
+
+  it('updates the row in the list optimistically too', () => {
+    store.loadSaved();
+    mock
+      .expectOne(`${environment.apiUrl}/looks?is_saved=true`)
+      .flush({ looks: [look(), look({ id: 'look-2' })], total: 2 });
+
+    store.update(look(), { feedback: -1 });
+
+    expect(store.looks()[0].feedback).toBe(-1);
+    expect(store.looks()[1].feedback).toBeNull();
+
+    mock.expectOne(`${environment.apiUrl}/looks/look-1`).flush(look({ feedback: -1 }));
+  });
+
+  it('prefers the server answer over the guess', () => {
+    // They normally agree. When they do not — a value the endpoint clamped or
+    // ignored — the row is what the database holds, not what was predicted.
+    store.update(look(), { feedback: 1 });
+    mock
+      .expectOne(`${environment.apiUrl}/looks/look-1`)
+      .flush(look({ feedback: 1, title: 'Renamed by somebody else' }));
+
+    expect(store.updated()?.title).toBe('Renamed by somebody else');
+  });
+
+  it('rolls the guess back when the write fails', () => {
+    store.loadSaved();
+    mock
+      .expectOne(`${environment.apiUrl}/looks?is_saved=true`)
+      .flush({ looks: [look({ feedback: 1 })], total: 1 });
+
+    store.update(look({ feedback: 1 }), { feedback: -1 });
+    expect(store.looks()[0].feedback).toBe(-1);
+
+    mock
+      .expectOne(`${environment.apiUrl}/looks/look-1`)
+      .flush({ detail: 'boom' }, { status: 500, statusText: 'Server Error' });
+
+    expect(store.looks()[0].feedback).toBe(1);
+    expect(store.error()).toBe('looks.error.general');
+  });
+
+  it('rolls `updated` back to null rather than to the pre-tap look', () => {
+    // The first tap on the stylist screen happens with `updated` still null.
+    // Restoring the look instead would leave a value behind that was never
+    // there, and the stylist page prefers `updated` by id — so a failed first
+    // rating would start overriding the card it never changed.
+    expect(store.updated()).toBeNull();
+
+    store.update(look(), { feedback: 1 });
+    mock
+      .expectOne(`${environment.apiUrl}/looks/look-1`)
+      .flush({ detail: 'boom' }, { status: 500, statusText: 'Server Error' });
+
+    expect(store.updated()).toBeNull();
+  });
+
+  it('clears a rating by sending null', () => {
+    store.update(look({ feedback: 1 }), { feedback: null });
+
+    const request = mock.expectOne(`${environment.apiUrl}/looks/look-1`);
+    // `null` on the wire, not an omitted key: omitting it would leave the
+    // rating alone, which is the opposite instruction.
+    expect(request.request.body).toEqual({ feedback: null });
+    expect(store.updated()?.feedback).toBeNull();
+
+    request.flush(look({ feedback: null }));
+  });
+});
+
+describe('LooksStore.clearError', () => {
+  it('drops an error the stylist page is about to replace', () => {
+    // The stylist screen renders this store's error and StylistStore's in one
+    // line, and a swap cannot clear an error it knows nothing about. Without
+    // this the line would have two live errors and no principle to pick one.
+    store.update(look(), { feedback: 1 });
+    mock
+      .expectOne(`${environment.apiUrl}/looks/look-1`)
+      .flush({ detail: 'boom' }, { status: 500, statusText: 'Server Error' });
+    expect(store.error()).toBe('looks.error.general');
+
+    store.clearError();
+
     expect(store.error()).toBeNull();
   });
 });

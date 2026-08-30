@@ -213,13 +213,26 @@ Submitting swaps the form for a look card. Expect 4–8 seconds — show a skele
 └────────────────────────────────┘
 ```
 
-*Amended at task 3.2: the heart is built and the two thumbs are 3.3's.* It is a
-**toggle button with a fixed accessible name** — "Save this look" — and
-`aria-pressed` carrying the state, rather than a label that swaps between Save
-and Unsave: a name that changes with the state announces the change twice and
-disagrees with itself about which way the next press goes. The glyph (♡ / ♥) is
-`aria-hidden` decoration. It is not optimistic — the `PATCH` answers with the
-look and that is what renders. `DECISIONS.md` 182.
+*Amended at task 3.2: the heart is built. Amended again at 3.3: so are the
+thumbs, and the heart stopped waiting for the server.* All three are **toggle
+buttons with fixed accessible names** — "Save this look", "Good look", "Not for
+me" — with `aria-pressed` carrying the state, rather than labels that swap
+between Save and Unsave: a name that changes with the state announces the change
+twice and disagrees with itself about which way the next press goes.
+
+The heart's glyph (♡ / ♥) is `aria-hidden` decoration. **The thumbs use a ring
+rather than a second glyph**: emoji have no hollow/filled pair for 👍 the way
+♡/♥ are a pair, and the nearest thing — the same thumb with a skin-tone
+modifier — would encode "off" as a skin tone.
+
+**Pressing the thumb that is already on withdraws the rating** rather than
+rewriting it, sending `feedback: null`. The other thumb replaces it. A rating
+that could only be replaced and never withdrawn would make a mis-tap permanent
+in what 3.5 tells the stylist.
+
+**All three are optimistic** and roll back on failure, and the error line above
+the card reads both stores — until 3.3 it read the stylist's alone, so a failed
+heart tap rolled the control back and explained nothing. `DECISIONS.md` 182, 183.
 
 Items are laid out by `layer` and `category`, not in an arbitrary order. Tapping an item opens its detail page.
 

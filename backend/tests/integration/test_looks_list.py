@@ -176,6 +176,7 @@ def test_a_look_carries_the_documented_fields(
         "reasoning",
         "weather_note",
         "is_saved",
+        "feedback",
     }
 
 

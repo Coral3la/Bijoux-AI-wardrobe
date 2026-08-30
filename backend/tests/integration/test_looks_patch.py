@@ -1,10 +1,13 @@
-"""`PATCH /looks/{id}` — the heart button, and the two keys it is allowed.
+"""`PATCH /looks/{id}` — the heart, the thumbs, and the three keys they write.
 
 `04-API-SPEC.md`'s example body prints `is_saved`, `feedback` and `title`
-together. Only two of the three are 3.2's, and `extra="forbid"` is what makes
-the third a `422` rather than a silently dropped instruction — which is the
-case worth testing hardest, because it is the one a reader of that document
-would expect to work.
+together, and since 3.3 the endpoint takes all three — `test_feedback_is_refused_until_task_3_3`
+lived here until then and was deleted rather than edited, its purpose expired.
+
+The interesting asymmetry is `null`: it **clears** `feedback` and is refused on
+the other two. Unrated is the state every look starts in and the one 3.5 counts
+against, where a null `is_saved` is an `IntegrityError` and a null `title` is a
+card with no heading.
 
 The rest is `update_item`'s shape one resource along: `exclude_unset` separates
 a field left alone from a field changed, an empty body is refused, and another
@@ -194,27 +197,147 @@ def test_an_empty_body_is_refused(
     assert response.json()["code"] == "validation_error"
 
 
-def test_feedback_is_refused_until_task_3_3(
+@pytest.mark.parametrize("feedback", [1, -1])
+def test_a_thumb_is_recorded(
+    client: TestClient,
+    db: Session,
+    make_look: Callable[..., Look],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+    feedback: int,
+) -> None:
+    # This is where `test_feedback_is_refused_until_task_3_3` was. Its whole
+    # purpose was to expire at this task, and deleting it is the clearest
+    # single marker in the suite that 3.3 landed.
+    user = make_user()
+    look = make_look(user_id=user.id, **TEXT)
+
+    response = client.patch(
+        f"{LOOKS_URL}/{look.id}", json={"feedback": feedback}, headers=authorization(user)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["feedback"] == feedback
+    db.expire(look)
+    assert look.feedback == feedback
+
+
+def test_a_look_starts_unrated_on_the_wire(
     client: TestClient,
     make_look: Callable[..., Look],
     make_user: Callable[..., User],
     authorization: Callable[[User], dict[str, str]],
 ) -> None:
-    # `04-API-SPEC.md` prints this key in the example body for this endpoint.
-    # `extra="forbid"` is what stops it being accepted and dropped, which would
-    # be a 200 saying a look was rated when the column is still NULL.
+    user = make_user()
+    look = make_look(user_id=user.id, **TEXT)
+
+    body = client.patch(
+        f"{LOOKS_URL}/{look.id}", json={"is_saved": True}, headers=authorization(user)
+    ).json()
+
+    assert body["feedback"] is None
+
+
+def test_a_thumb_can_be_taken_back(
+    client: TestClient,
+    db: Session,
+    make_look: Callable[..., Look],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # The one field of the three whose null is a real state. A mis-tap that
+    # could not be undone would permanently change what 3.5 tells the stylist
+    # about this user.
+    user = make_user()
+    look = make_look(user_id=user.id, feedback=1, **TEXT)
+
+    response = client.patch(
+        f"{LOOKS_URL}/{look.id}", json={"feedback": None}, headers=authorization(user)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["feedback"] is None
+    db.expire(look)
+    assert look.feedback is None
+
+
+def test_the_other_thumb_replaces_the_first(
+    client: TestClient,
+    db: Session,
+    make_look: Callable[..., Look],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    user = make_user()
+    look = make_look(user_id=user.id, feedback=1, **TEXT)
+
+    client.patch(f"{LOOKS_URL}/{look.id}", json={"feedback": -1}, headers=authorization(user))
+
+    db.expire(look)
+    assert look.feedback == -1
+
+
+@pytest.mark.parametrize("feedback", [0, 2, -2])
+def test_a_score_outside_the_two_is_refused(
+    client: TestClient,
+    make_look: Callable[..., Look],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+    feedback: int,
+) -> None:
+    # Refused by the schema before the column sees it: `ck_looks_feedback_values`
+    # would answer the same question with a 500 and no `code`.
     user = make_user()
     look = make_look(user_id=user.id, **TEXT)
 
     response = client.patch(
-        f"{LOOKS_URL}/{look.id}", json={"feedback": 1}, headers=authorization(user)
+        f"{LOOKS_URL}/{look.id}", json={"feedback": feedback}, headers=authorization(user)
     )
 
     assert response.status_code == 422
 
 
+def test_rating_a_look_leaves_the_other_two_fields_alone(
+    client: TestClient,
+    db: Session,
+    make_look: Callable[..., Look],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    user = make_user()
+    look = make_look(user_id=user.id, is_saved=True, **TEXT)
+
+    client.patch(f"{LOOKS_URL}/{look.id}", json={"feedback": 1}, headers=authorization(user))
+
+    db.expire(look)
+    assert (look.is_saved, look.title) == (True, "Morning meetings")
+
+
+def test_all_three_keys_can_be_sent_together(
+    client: TestClient,
+    db: Session,
+    make_look: Callable[..., Look],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # `04-API-SPEC.md`'s example body, accepted whole for the first time since
+    # Stage 0 printed it.
+    user = make_user()
+    look = make_look(user_id=user.id, **TEXT)
+
+    response = client.patch(
+        f"{LOOKS_URL}/{look.id}",
+        json={"is_saved": True, "feedback": 1, "title": "Client meeting"},
+        headers=authorization(user),
+    )
+
+    assert response.status_code == 200
+    db.expire(look)
+    assert (look.is_saved, look.feedback, look.title) == (True, 1, "Client meeting")
+
+
 @pytest.mark.parametrize("body", [{"is_saved": None}, {"title": None}])
-def test_neither_field_can_be_cleared(
+def test_the_other_two_fields_cannot_be_cleared(
     client: TestClient,
     make_look: Callable[..., Look],
     make_user: Callable[..., User],
@@ -223,6 +346,7 @@ def test_neither_field_can_be_cleared(
 ) -> None:
     # `is_saved` is NOT NULL, so an accepted null is an IntegrityError and a
     # 500 with no `code`; a cleared title is a card with an empty heading.
+    # `feedback` is deliberately not in this list — see the test above.
     user = make_user()
     look = make_look(user_id=user.id, **TEXT)
 

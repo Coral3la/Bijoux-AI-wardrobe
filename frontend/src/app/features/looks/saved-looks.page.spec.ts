@@ -56,6 +56,7 @@ function look(overrides: Partial<Look> = {}): Look {
     reasoning: 'The high-rise jean balances the oversized shirt.',
     weather_note: 'Mild at 18°C — the blazer is enough.',
     is_saved: true,
+    feedback: null,
     ...overrides,
   };
 }

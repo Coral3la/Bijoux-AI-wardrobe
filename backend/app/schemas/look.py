@@ -20,11 +20,18 @@ The cost of one shape is that **suggest responses now carry `is_saved: false`**,
 a field that endpoint's client had no use for; it is true of the row rather
 than padding, which is what made it acceptable.
 
-`feedback` and `worn_at` stay out. Both columns exist from migration `0004`,
-and their readers are 3.3 and 3.4 — so this class changes in each of the next
-two tasks, three commits over one shape. That churn was accepted deliberately
-rather than pre-empted by adding fields now that no endpoint writes and no
-screen draws. `DECISIONS.md` 182.
+`feedback` arrived at 3.3 and `worn_at` is still out, waiting for 3.4 — the
+three-commits-over-one-shape churn `DECISIONS.md` 182 accepted on purpose, two
+thirds spent.
+
+**`feedback` is `Literal[-1, 1]`, not `Literal[FEEDBACK_UP, FEEDBACK_DOWN]`**,
+which is what 3.1 said this task would write and which does not type-check:
+PEP 586 admits literal values only, and `Final` does not exempt a name —
+`error: Parameter 1 of Literal[...] is invalid`. Pydantic accepts the spelling
+happily at runtime, so this is a `mypy` finding rather than a broken import.
+The two constants are still the single definition; what changed is that a
+**test** compares `get_args` against them instead of the compiler.
+`tests/unit/test_look_schemas.py`, and `DECISIONS.md` 181 is corrected.
 
 **Five columns are nullable and typed non-null here**, which is not a new claim:
 `title`, `occasion`, `reasoning` and `weather_note` were already non-null on
@@ -35,7 +42,7 @@ writer, and it is named here because the next writer is Stage 4's packing run.
 
 import uuid
 from datetime import date
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
@@ -105,6 +112,10 @@ class LookResponse(BaseModel):
     reasoning: str
     weather_note: str
     is_saved: bool
+    # `None` is a real state and the commonest one: a look nobody has rated.
+    # 3.5 counts rated looks and needs it to stay distinguishable from a
+    # neutral score, which is why the column has no server default (181).
+    feedback: Literal[-1, 1] | None
 
 
 class LookSuggestResponse(BaseModel):
@@ -118,15 +129,20 @@ class LookListResponse(BaseModel):
     total: int
 
 
-class LookUpdate(BaseModel):
-    """`PATCH /looks/{id}`, with two of `04-API-SPEC.md`'s three keys.
+# The fields whose `NULL` is not a state any screen can render. `feedback` is
+# deliberately absent: see the validator below.
+_UNCLEARABLE = ("is_saved", "title")
 
-    **`feedback` is 3.3's and sending it here is a `422`**, said out loud
-    because `04`'s example body prints all three keys together and a reader
-    would reasonably expect this to take them. `extra="forbid"` is
-    `ItemUpdate`'s and `LookSuggestRequest`'s reasoning unchanged: a dropped key
-    is an instruction the user gave and the row did not obey, reported as a
-    success.
+
+class LookUpdate(BaseModel):
+    """`PATCH /looks/{id}`, carrying all three of `04-API-SPEC.md`'s keys.
+
+    `extra="forbid"` is `ItemUpdate`'s and `LookSuggestRequest`'s reasoning
+    unchanged: a dropped key is an instruction the user gave and the row did not
+    obey, reported as a success.
+
+    **One of the three can be cleared and two cannot**, which is the whole of
+    `_no_clearing_what_has_no_empty_state` below.
 
     `title` cannot be cleared. The column stays nullable — the model writes one
     on every row and a future writer may not — but the API offers no way back
@@ -139,21 +155,33 @@ class LookUpdate(BaseModel):
 
     is_saved: bool | None = None
     title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] | None = None
+    feedback: Literal[-1, 1] | None = None
 
     @model_validator(mode="after")
-    def _neither_field_can_be_cleared(self) -> Self:
-        """`None` means *omitted* on this body and never *clear it*.
+    def _no_clearing_what_has_no_empty_state(self) -> Self:
+        """`null` clears `feedback` and is refused on the other two.
 
-        Both fields are typed optional so that either may be left out, which is
-        what `exclude_unset` reads in the route. That spelling also admits an
-        explicit `null`, and the two columns answer it differently and both
-        badly: `is_saved` is `NOT NULL`, so `null` reaches Postgres as an
-        `IntegrityError` and a `500` with no `code`; `title` would take it and
-        leave the card with an empty heading. `ItemUpdate` types its fields the
-        same way and means the opposite by them — there, clearing a tag is the
-        point — so the difference is stated here rather than inferred.
+        Every field is typed optional so that any may be left out, which is what
+        `exclude_unset` reads in the route. That spelling also admits an
+        explicit `null`, and the three columns answer it differently:
+
+        - `is_saved` is `NOT NULL`, so `null` reaches Postgres as an
+          `IntegrityError` and a `500` with no `code`.
+        - `title` would take it and leave the card with an empty heading.
+        - `feedback` **should** take it. `NULL` is unrated, which is the state
+          every look starts in and the one 3.5 counts against — so a mis-tapped
+          thumb that could not be taken back would permanently change what the
+          stylist is told about this user.
+
+        Narrowed at 3.3. Until then this refused a `null` on any field, which
+        was right for the two fields that existed and would have been wrong for
+        this one by inheritance rather than by decision.
         """
-        cleared = [name for name in self.model_fields_set if getattr(self, name) is None]
+        cleared = [
+            name
+            for name in _UNCLEARABLE
+            if name in self.model_fields_set and getattr(self, name) is None
+        ]
         if cleared:
             raise ValueError(f"{', '.join(sorted(cleared))}: cannot be cleared, only changed")
         return self

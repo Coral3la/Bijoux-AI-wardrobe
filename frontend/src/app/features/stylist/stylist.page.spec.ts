@@ -99,6 +99,7 @@ function response(overrides: Partial<SuggestResponse> = {}): SuggestResponse {
         reasoning: 'The blazer lifts the knit without making it formal.',
         weather_note: 'Warm at 31°C.',
         is_saved: false,
+        feedback: null,
       },
     ],
     missing_pieces: [],
@@ -718,6 +719,129 @@ describe('StylistPage', () => {
       await fixture.whenStable();
 
       expect(heart().getAttribute('aria-pressed')).toBe('false');
+    });
+  });
+
+  // The thumbs on the stylist screen. look-card.spec.ts covers the buttons;
+  // what is measured here is the wiring — that the page reaches LooksStore
+  // with the value the card decided, and that the optimistic render lands on
+  // a card whose look lives in the *other* store.
+  describe('rating the look on screen', () => {
+    function thumb(direction: 'Up' | 'Down'): HTMLButtonElement {
+      const label = en[`stylist.look.thumb${direction}` as keyof typeof en];
+      return element().querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+    }
+
+    async function suggested(): Promise<void> {
+      buttonWith(en['stylist.submit']).click();
+      suggestRequest().flush(response());
+      await fixture.whenStable();
+    }
+
+    it('patches the look with the rating', async () => {
+      await render();
+      await suggested();
+
+      thumb('Up').click();
+
+      const request = mock.expectOne(`${environment.apiUrl}/looks/look-1`);
+      expect(request.request.method).toBe('PATCH');
+      expect(request.request.body).toEqual({ feedback: 1 });
+      request.flush({ ...response().looks[0], feedback: 1 });
+    });
+
+    it('marks the thumb before the server answers', async () => {
+      // The optimistic half, on the screen where it is hardest: the look comes
+      // from StylistStore, which is never rewritten, so this only works
+      // because the page prefers LooksStore's copy by id.
+      await render();
+      await suggested();
+
+      thumb('Up').click();
+      await fixture.whenStable();
+
+      expect(thumb('Up').getAttribute('aria-pressed')).toBe('true');
+
+      mock
+        .expectOne(`${environment.apiUrl}/looks/look-1`)
+        .flush({ ...response().looks[0], feedback: 1 });
+    });
+
+    it('withdraws the rating when the same thumb is pressed again', async () => {
+      await render();
+      await suggested();
+
+      thumb('Up').click();
+      mock
+        .expectOne(`${environment.apiUrl}/looks/look-1`)
+        .flush({ ...response().looks[0], feedback: 1 });
+      await fixture.whenStable();
+
+      thumb('Up').click();
+      const request = mock.expectOne(`${environment.apiUrl}/looks/look-1`);
+      expect(request.request.body).toEqual({ feedback: null });
+      request.flush({ ...response().looks[0], feedback: null });
+    });
+
+    it('puts the thumb back when the write fails', async () => {
+      await render();
+      await suggested();
+
+      thumb('Down').click();
+      await fixture.whenStable();
+      expect(thumb('Down').getAttribute('aria-pressed')).toBe('true');
+
+      mock
+        .expectOne(`${environment.apiUrl}/looks/look-1`)
+        .flush({ detail: 'boom' }, { status: 500, statusText: 'Server Error' });
+      await fixture.whenStable();
+
+      expect(thumb('Down').getAttribute('aria-pressed')).toBe('false');
+      expect(text()).toContain(en['looks.error.general']);
+    });
+
+    it('says so when a save fails, which it did not until this task', async () => {
+      // The heart shipped at 3.2 with its failure invisible on this screen:
+      // the error line read StylistStore alone, so a failed tap rolled the
+      // control back and explained nothing. Found by the rating rollback test
+      // above and fixed for both controls at once.
+      await render();
+      await suggested();
+
+      element()
+        .querySelector<HTMLButtonElement>(`button[aria-label="${en['stylist.look.save']}"]`)!
+        .click();
+      mock
+        .expectOne(`${environment.apiUrl}/looks/look-1`)
+        .flush({ detail: 'boom' }, { status: 500, statusText: 'Server Error' });
+      await fixture.whenStable();
+
+      expect(text()).toContain(en['looks.error.general']);
+    });
+
+    it('rates and saves the same look independently', async () => {
+      // Two fields, two requests, and neither body carries the other's key —
+      // `exclude_unset` on the server is what makes that a field left alone
+      // rather than a field overwritten.
+      await render();
+      await suggested();
+
+      thumb('Up').click();
+      mock
+        .expectOne(`${environment.apiUrl}/looks/look-1`)
+        .flush({ ...response().looks[0], feedback: 1 });
+      await fixture.whenStable();
+
+      element()
+        .querySelector<HTMLButtonElement>(`button[aria-label="${en['stylist.look.save']}"]`)!
+        .click();
+
+      const request = mock.expectOne(`${environment.apiUrl}/looks/look-1`);
+      expect(request.request.body).toEqual({ is_saved: true });
+      request.flush({ ...response().looks[0], feedback: 1, is_saved: true });
+      await fixture.whenStable();
+
+      expect(thumb('Up').getAttribute('aria-pressed')).toBe('true');
     });
   });
 });

@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, output } f
 import { I18nService } from '../../core/i18n/i18n.service';
 import { CATEGORIES, Category, LAYERS, Layer, roleOf } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
-import { Look, MissingPiece } from '../../shared/models/look.model';
+import { Feedback, Look, MissingPiece } from '../../shared/models/look.model';
 import { ItemCard } from '../wardrobe/item-card';
 
 interface LayerGroup {
@@ -117,12 +117,47 @@ function isCategory(value: string): value is Category {
         <button
           type="button"
           (click)="save.emit()"
-          [disabled]="saving()"
+          [disabled]="busy()"
           [attr.aria-pressed]="look().is_saved"
           [attr.aria-label]="i18n.t('stylist.look.save')"
           class="min-h-11 min-w-11 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
         >
           <span aria-hidden="true">{{ look().is_saved ? '♥' : '♡' }}</span>
+        </button>
+
+        <!-- Two toggles rather than one three-state control, because that is
+             what 05-FRONTEND-SPEC.md draws and what the wire says: the tap
+             that clears a rating is the *same* thumb pressed again, and
+             aria-pressed carries which one is on. Fixed accessible names, for
+             the heart's reason one control along.
+
+             The pressed state is a ring rather than a second glyph: emoji have
+             no hollow/filled pair for thumbs the way ♡/♥ are a pair, and the
+             nearest thing — the same thumb with a skin-tone modifier — would
+             encode "off" as a skin tone. aria-pressed is what actually carries
+             the state; the ring is its visible half. -->
+        <button
+          type="button"
+          (click)="rate(1)"
+          [disabled]="busy()"
+          [attr.aria-pressed]="look().feedback === 1"
+          [attr.aria-label]="i18n.t('stylist.look.thumbUp')"
+          [class.ring-2]="look().feedback === 1"
+          class="min-h-11 min-w-11 rounded-md ring-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
+        >
+          <span aria-hidden="true">👍</span>
+        </button>
+
+        <button
+          type="button"
+          (click)="rate(-1)"
+          [disabled]="busy()"
+          [attr.aria-pressed]="look().feedback === -1"
+          [attr.aria-label]="i18n.t('stylist.look.thumbDown')"
+          [class.ring-2]="look().feedback === -1"
+          class="min-h-11 min-w-11 rounded-md ring-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
+        >
+          <span aria-hidden="true">👎</span>
         </button>
 
         <button
@@ -143,13 +178,20 @@ export class LookCard {
   readonly missingPieces = input<readonly MissingPiece[]>([]);
   readonly message = input('');
   readonly swappingItemId = input<string | null>(null);
-  readonly saving = input(false);
+  // One flag for all three controls, because the store takes one write at a
+  // time: a save and a rating cannot be in flight together, so two inputs
+  // would always carry the same value under two names.
+  readonly busy = input(false);
 
   readonly tryAgain = output<void>();
   readonly swap = output<Item>();
   // No payload: the card renders one look and the page already holds it. The
   // heart says "this one changed", not which one.
   readonly save = output<void>();
+  // This one does carry a payload, and it is the value to *write* rather than
+  // the button that was pressed: pressing the thumb a look already carries
+  // clears it, so the same button emits 1 on one press and null on the next.
+  readonly rated = output<Feedback | null>();
 
   // Sorted by layer then category, then cut into runs — which is the whole of
   // the grouping, because a run can only break where the layer changes once
@@ -182,6 +224,13 @@ export class LookCard {
   // other garment in a look has a role. AUDITS.md O-25, DECISIONS.md 175.
   protected isSwappable(item: Item): boolean {
     return roleOf(item.category) !== undefined;
+  }
+
+  // Pressing the thumb that is already on clears the rating rather than
+  // rewriting it. The alternative — a rating that can only be replaced, never
+  // withdrawn — makes a mis-tap permanent in what 3.5 tells the stylist.
+  protected rate(value: Feedback): void {
+    this.rated.emit(this.look().feedback === value ? null : value);
   }
 
   // The badge's accessible name has to say which garment it replaces: six ↻

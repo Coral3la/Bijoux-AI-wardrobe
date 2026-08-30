@@ -35,6 +35,11 @@ export interface MissingPiece {
   readonly reason: string;
 }
 
+// The two the column admits, mirroring `Literal[-1, 1]` on the server and
+// `ck_looks_feedback_values` under that. `null` is the third state and the one
+// every look starts in: unrated, which 3.5 counts against.
+export type Feedback = 1 | -1;
+
 // One shape for a look wherever it comes from: POST /looks/suggest,
 // GET /looks and PATCH /looks/{id} all answer with this. The server renamed
 // SuggestedLook to LookResponse at 3.2 for the same reason — a second
@@ -48,16 +53,19 @@ export interface Look {
   readonly reasoning: string;
   readonly weather_note: string;
   readonly is_saved: boolean;
+  readonly feedback: Feedback | null;
 }
 
-// PATCH /looks/{id}. Both keys are optional to *omit* and neither may be sent
-// as null: the endpoint refuses a cleared field rather than nulling a column,
-// so `undefined` here means "leave it alone" and there is no way to say
-// "erase it". `feedback` is 3.3's and the schema rejects it today, which is
-// why it is absent rather than optional.
+// PATCH /looks/{id}. Every key is optional to *omit* — `undefined` means
+// "leave it alone" — and only `feedback` may be sent as `null`, which clears
+// it. A null `is_saved` or `title` is a 422: neither column has an empty state
+// a screen can render.
 export interface LookUpdate {
   readonly is_saved?: boolean;
   readonly title?: string;
+  // Optional to omit *and* nullable to send: unlike the other two, `null` here
+  // is a documented write rather than a 422. It un-rates the look.
+  readonly feedback?: Feedback | null;
 }
 
 export interface LookListResponse {

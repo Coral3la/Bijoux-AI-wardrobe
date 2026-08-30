@@ -438,11 +438,16 @@ which is the direction 2.7 and 2.9 read, so no third index is warranted.
 unrated look is `NULL`: "nobody has rated this" and "somebody rated it
 neutrally" cannot be the same value, and 3.5 counts rated looks without having
 to exclude one. The two numbers live in `app/models/look.py` as `FEEDBACK_UP`
-and `FEEDBACK_DOWN`, the `CheckConstraint` is built from them, and 3.3's
-`Literal[FEEDBACK_UP, FEEDBACK_DOWN]` imports them — the `height_cm` shape from
-`CONVENTIONS.md`, one definition honoured in three places with the compiler
-between them. They are **not** `MIN`/`MAX`: this is set membership, and there is
-nothing between `-1` and `1` to admit.
+and `FEEDBACK_DOWN`, and the `CheckConstraint` is built from them. **The schema
+transcribes them rather than importing them**: `LookUpdate.feedback` is
+`Literal[-1, 1]`, because `Literal[FEEDBACK_UP, FEEDBACK_DOWN]` does not
+type-check — PEP 586 admits literal values only and `Final` does not exempt a
+name. This paragraph promised the compiler would hold the three together; what
+holds the schema to the constants is `tests/unit/test_look_schemas.py`, which
+compares `get_args` against them. Corrected at 3.3; `DECISIONS.md` 183.
+
+They are **not** `MIN`/`MAX`: this is set membership, and there is nothing
+between `-1` and `1` to admit.
 
 **`look_items.role` is still `NULL` on every row.** The vocabulary above is
 adopted and enforced on the wire, but nothing writes the column: 2.7 declined

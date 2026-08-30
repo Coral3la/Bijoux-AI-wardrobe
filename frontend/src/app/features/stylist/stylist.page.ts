@@ -16,7 +16,7 @@ import { StylistStore } from '../../core/state/stylist.store';
 import { WardrobeStore } from '../../core/state/wardrobe.store';
 import { roleOf } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
-import { Look, SuggestRequest } from '../../shared/models/look.model';
+import { Feedback, Look, SuggestRequest } from '../../shared/models/look.model';
 import { LookCard } from './look-card';
 import { LookDraft, LookRequestForm, todayInLocalTime } from './look-request-form';
 
@@ -78,10 +78,14 @@ function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
           <p class="text-sm" role="status" aria-live="polite">{{ i18n.t(statusKey()) }}</p>
         </section>
       } @else if (look(); as look) {
-        <!-- Above the card, and only a swap can put it there: the card is on
-             screen, so the error is about the piece that did not change rather
-             than about a look that never arrived. -->
-        @if (store.error(); as key) {
+        <!-- Above the card, and only a swap, a save or a rating can put it
+             there: the card is on screen, so the error is about the thing that
+             did not change rather than about a look that never arrived.
+
+             Both stores are read. Until 3.3 this line read StylistStore alone,
+             which meant a failed heart tap rolled the control back and said
+             nothing at all — found by the rollback test one task later. -->
+        @if (cardError(); as key) {
           <p class="text-sm font-medium text-danger">{{ i18n.t(key) }}</p>
         }
 
@@ -90,10 +94,11 @@ function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
           [missingPieces]="missingPieces()"
           [message]="message()"
           [swappingItemId]="store.swappingItemId()"
-          [saving]="looksStore.updatingId() === look.id"
+          [busy]="looksStore.updatingId() === look.id"
           (tryAgain)="startOver()"
           (swap)="swapItem($event)"
           (save)="toggleSaved(look)"
+          (rated)="rate(look, $event)"
         />
       } @else {
         @if (store.error(); as key) {
@@ -178,6 +183,12 @@ export class StylistPage {
     }
     return suggested;
   });
+  // Whichever store failed. At most one is ever set: each clears its own at the
+  // start of a request, and the two paths that do not — a swap or a new
+  // suggestion, which cannot clear an error they know nothing about — call
+  // `looksStore.clearError()` themselves. So the order here decides nothing,
+  // which is the point: with both live it would be picking on no principle.
+  protected readonly cardError = computed(() => this.store.error() ?? this.looksStore.error());
   protected readonly message = computed(() => this.store.result()?.message ?? '');
   protected readonly missingPieces = computed(() => this.store.result()?.missing_pieces ?? []);
 
@@ -206,7 +217,13 @@ export class StylistPage {
   // than a fixed `true`, because the same button unsaves — and it reads that
   // from `look`, which is the merged value above and not `result()`.
   protected toggleSaved(look: Look): void {
-    this.looksStore.update(look.id, { is_saved: !look.is_saved });
+    this.looksStore.update(look, { is_saved: !look.is_saved });
+  }
+
+  // The card decided whether this is a rating or a withdrawal; the page only
+  // has to name the look it belongs to.
+  protected rate(look: Look, feedback: Feedback | null): void {
+    this.looksStore.update(look, { feedback });
   }
 
   // One method sets the state and refreshes the forecast, in that order, so
@@ -223,6 +240,7 @@ export class StylistPage {
 
   protected suggest(): void {
     this.excluded.set([]);
+    this.looksStore.clearError();
     this.store.suggest(toRequest(this.draft(), this.anchor()));
   }
 
@@ -238,6 +256,7 @@ export class StylistPage {
   // and on the anchored tile itself the two fields would contradict: rule 7
   // requires the item and rule 8 forbids it, which is a 502 by construction.
   protected swapItem(item: Item): void {
+    this.looksStore.clearError();
     const look = this.look();
     const role = roleOf(item.category);
     if (look === null || role === undefined) {

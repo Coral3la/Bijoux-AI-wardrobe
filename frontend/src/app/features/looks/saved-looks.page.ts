@@ -100,6 +100,6 @@ export class SavedLooksPage {
   }
 
   protected toggleSaved(look: Look): void {
-    this.store.update(look.id, { is_saved: !look.is_saved });
+    this.store.update(look, { is_saved: !look.is_saved });
   }
 }

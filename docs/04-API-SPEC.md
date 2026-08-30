@@ -337,7 +337,7 @@ ever got. `look_items.position` records the model's own ordering; `role` is left
 ```json
 ← 200 { "looks": [ { "id": "uuid", "occasion": "work", "title": "Morning meetings",
                      "items": [ { … } ], "reasoning": "…", "weather_note": "…",
-                     "is_saved": true } ],
+                     "is_saved": true, "feedback": 1 } ],
         "total": 12 }
 ```
 
@@ -368,24 +368,29 @@ lists whole looks and there is no look-detail route.
 
 ### `PATCH /looks/{id}` *(Stage 3)*
 ```json
-→ { "is_saved": true, "title": "Client meeting" }
+→ { "is_saved": true, "feedback": 1, "title": "Client meeting" }
 ← 200 { look }
 ```
 
 Merges over the stored row: a key left out is a field left alone. Answers the
-whole look, hydrated, so the client that tapped the heart can render the row it
+whole look, hydrated, so the client that tapped a control can render the row it
 just changed without a second request.
 
-**`feedback` is task 3.3's and is refused until then.** The body above printed
-it from Stage 0 and 3.2 ships the other two; the schema is `extra="forbid"`, so
-sending it now is a `422` rather than a key accepted and dropped — which would
-be a `200` reporting a look as rated while the column stayed `NULL`.
+**All three keys are accepted from task 3.3.** 3.2 shipped `is_saved` and
+`title` and refused `feedback` with a `422`; that refusal is gone and so is the
+test that pinned it.
 
-**Neither field can be cleared.** `null` on either is a `422`, not a write:
-`is_saved` is `NOT NULL`, so an accepted `null` reaches Postgres as an
-`IntegrityError` and a `500` with no `code`, and a cleared `title` leaves the
-card with an empty heading. `title` is stripped and must be non-empty. This is
-the opposite of `PATCH /items/{id}`, where `null` clears a tag on purpose.
+`feedback` is `1` or `-1` and nothing else — the two `ck_looks_feedback_values`
+admits. `0` is a `422` from the schema before the column ever sees it.
+
+**One of the three can be cleared and two cannot.** `feedback: null` **un-rates
+the look** and is a documented write: `NULL` is the state every look starts in
+and the one task 3.5 counts against, so a mis-tapped thumb has to be
+withdrawable or it permanently changes what the stylist is told about this user.
+`null` on `is_saved` or `title` stays a `422`: `is_saved` is `NOT NULL`, so an
+accepted `null` reaches Postgres as an `IntegrityError` and a `500` with no
+`code`, and a cleared `title` leaves the card with an empty heading. `title` is
+stripped and must be non-empty.
 
 `422` with `code: "validation_error"` on an empty body. `404` with
 `code: "not_found"` for a look belonging to another account — the same code and

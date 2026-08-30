@@ -357,6 +357,11 @@ def _persist(
                 # would be a second copy of `0002`'s DEFAULT with nothing
                 # comparing them.
                 is_saved=row.is_saved,
+                # Always None here — no INSERT writes it and the column has no
+                # default — and read off the row anyway, for `is_saved`'s
+                # reason. 3.5 counts unrated looks, so this is a value rather
+                # than an absence.
+                feedback=row.feedback,
             )
         )
 
@@ -477,6 +482,7 @@ def _hydrate(db: Session, rows: Sequence[Look]) -> list[LookResponse]:
             reasoning=row.reasoning,
             weather_note=row.weather_note,
             is_saved=row.is_saved,
+            feedback=row.feedback,
         )
         for row in rows
     ]

@@ -310,6 +310,8 @@
   "stylist.error.validation": "We couldn't ask for that look. Check the occasion and the date, then try again.",
   "stylist.error.general": "We couldn't put a look together. Please try again.",
   "stylist.look.save": "Save this look",
+  "stylist.look.thumbUp": "Good look",
+  "stylist.look.thumbDown": "Not for me",
   "saved.title": "Saved looks",
   "saved.back": "\u2190 Wardrobe",
   "saved.loading": "Loading your saved looks\u2026",

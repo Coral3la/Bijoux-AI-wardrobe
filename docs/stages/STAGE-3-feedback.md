@@ -36,8 +36,11 @@ second would renumber `0005_trips`; `02-DATA-MODEL.md` prints both before the
 migration builds them, which was O-25's own condition. And the `feedback` CHECK
 is written as raw DDL, because `op.create_check_constraint` applies the naming
 convention a second time and emits `ck_looks_ck_looks_feedback_values`.
-`FEEDBACK_UP` and `FEEDBACK_DOWN` live in `app/models/look.py`; **3.3 imports
-them** rather than spelling `Literal[-1, 1]`. `DECISIONS.md` 181.
+`FEEDBACK_UP` and `FEEDBACK_DOWN` live in `app/models/look.py`. This line said
+**3.3 imports them** rather than spelling `Literal[-1, 1]`, and 3.3 found that
+it cannot: `Literal[FEEDBACK_UP, FEEDBACK_DOWN]` runs under Pydantic and fails
+`mypy`, because PEP 586 admits literal values and not names. The schema
+transcribes the two numbers and a test compares them. `DECISIONS.md` 181, 183.
 
 ### 3.2 Save a look
 `PATCH /looks/{id}` accepting `is_saved` and `title`. `GET /looks?is_saved=true`. A heart button on the look card and a saved-looks list screen.
@@ -55,6 +58,16 @@ undocumented and unbuilt: **O-30**. `DECISIONS.md` 182.
 
 ### 3.3 Feedback
 `PATCH /looks/{id}` accepting `feedback` as `1` or `-1`. Thumbs up and down on the look card. Optimistic UI update.
+
+**Built, with three things this line did not name.** `feedback: null` **clears**
+a rating — pressing the thumb already on withdraws it — because `NULL` is the
+unrated state 3.5 counts against and a mis-tap would otherwise be permanent.
+The optimistic update is **one path for every control**, so the heart became
+optimistic too and `DECISIONS.md` 182 is superseded on that point. And the
+`Literal[FEEDBACK_UP, FEEDBACK_DOWN]` that 3.1 promised does not type-check;
+the schema transcribes `Literal[-1, 1]` and a test compares them. Thumbs are on
+the **look card only** — `/saved` is deliberately out of scope. `DECISIONS.md`
+183.
 
 ### 3.4 Wear tracking
 `POST /looks/{id}/wear` with a date. In a single transaction: set `looks.worn_at`, increment `wear_count`, and update `last_worn_at` on every item in the look.
