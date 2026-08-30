@@ -91,16 +91,15 @@ the application that is not optimistic**, a deliberate exception to
 Extend the stylist user message with a preferences block assembled from the user's history:
 
 ```
-USER PREFERENCES (learned from saved and liked looks):
-- Frequently chosen together: light_blue jeans + white shirts
-- Liked: relaxed and oversized tops
-- Disliked: bodycon fits
+USER PREFERENCES (learned from rated looks):
+- Liked: relaxed tops, oversized tops
+- Disliked: bodycon dresses
 - Recently worn (avoid repeating): A3F9K2, 7BX1QM
 ```
 
-Derived with plain SQL aggregation over `looks` joined to `look_items` — attribute frequency across looks with `feedback = 1`, and items worn in the last 3 days. No embeddings, no model training.
+Derived with plain SQL aggregation over `looks` joined to `look_items` — fit frequency by category across liked and disliked looks, and styleable items worn on the requested day or either of the two calendar days before it. A fit signal appears only after it occurs in at least two qualifying looks; each sentiment is capped at three signals. Archived garments are excluded from both halves. No embeddings, no model training. `DECISIONS.md` 185.
 
-Guard: only include this block once there are at least 3 rated looks. Below that the signal is noise.
+Guard: only include this block once there are at least 3 rated looks. Both thumbs-up and thumbs-down count as ratings; below that the signal is noise.
 
 ### 3.6 Wardrobe insights
 Extend `GET /items/stats` with `never_worn`, `most_worn`, and cost-per-wear placeholders. A small insights panel on the wardrobe screen: *"34 items you have never worn."*
@@ -114,7 +113,7 @@ Cheap to build, and it is the moment the app tells the user something about them
 - [ ] Saving a look persists it and it appears in the saved list
 - [ ] Thumbs up/down persists and survives a reload
 - [ ] "I wore this" increments `wear_count` on every item in the look, exactly once per date
-- [ ] After 3 liked looks, the preferences block appears in the prompt — assert it in an integration test against the assembled message string
+- [ ] After 3 rated looks, the preferences block appears in the prompt — assert it in an integration test against the assembled message string
 - [ ] Recently worn items are named in the prompt as items to avoid
 - [ ] The insights panel shows a correct never-worn count
 

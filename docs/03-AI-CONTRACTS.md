@@ -320,9 +320,32 @@ WARDROBE ({n} items):
 USER PROFILE:
 Height: 165 cm. Preferences: prefer high-rise, avoid crop tops.
 
+USER PREFERENCES (learned from rated looks):
+- Liked: relaxed tops
+- Disliked: bodycon dresses
+- Recently worn (avoid repeating): A3F9K2, 7BX1QM
+
 REQUEST:
 {one of the two blocks below}
 ```
+
+The preferences block arrives at task 3.5. It is omitted until the user has
+at least three rated looks — a rating is either thumbs-up or thumbs-down, while
+an unrated look is `feedback = NULL`. Its fit signals are counted by category
+across the items in liked and disliked looks; only a signal repeated in at
+least two looks is included, and **archived garments are excluded from both
+halves**, because a preference learned from one can only describe outfits the
+stylist is no longer able to build.
+
+**Recently worn is measured from the day being dressed for, not from the
+server's today.** The window is the requested date and the two calendar days
+before it, closed at both ends, over the styleable wardrobe. A request made on
+Wednesday for Saturday asks what will be stale *on Saturday*; and `worn_at`
+accepts a future date (`DECISIONS.md` 184), so an open-ended window would report
+a garment worn next week as already repeated. `DECISIONS.md` 185.
+
+The block is derived in the suggest route and passed as text to the pure
+stylist service.
 
 Single day:
 ```

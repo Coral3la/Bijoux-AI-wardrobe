@@ -26,8 +26,10 @@ from sqlalchemy.orm import Session
 from app.api.v1.routes import looks as looks_route
 from app.enums import Category, Condition, ItemStatus, Layer
 from app.models.item import Item
-from app.models.look import Look, LookItem
+from app.models.look import FEEDBACK_DOWN, FEEDBACK_UP, Look, LookItem
 from app.models.user import User
+from app.schemas.item import ItemResponse
+from app.services import stylist as stylist_service
 from app.services.stylist import Look as StylistLook
 from app.services.stylist import MissingPiece, StylistResponse
 from app.services.weather import Forecast
@@ -160,6 +162,180 @@ def suggest(
     return client.post(
         "/api/v1/looks/suggest", json=request_body(**overrides), headers=authorization(user)
     )
+
+
+def _rated_look(db: Session, user: User, items: list[Item], feedback: int) -> None:
+    look = Look(user_id=user.id, feedback=feedback)
+    db.add(look)
+    db.flush()
+    db.add_all([LookItem(look_id=look.id, item_id=item.id) for item in items])
+    db.commit()
+
+
+def test_every_category_has_a_name_for_the_preferences_block() -> None:
+    # Two copies of one vocabulary with nothing comparing them, which is the
+    # shape `CONVENTIONS.md`'s "limits and units" section collects. `_CATEGORY_NAMES`
+    # was written with seven of the nine members — `swimwear` and `sleepwear`
+    # were appended at 2.6a — and the lookup that reads it is a `KeyError` and
+    # an unhandled 500 for anything missing. Reading could not catch that; this
+    # does.
+    assert set(looks_route._CATEGORY_NAMES) == set(Category.values())
+
+
+def test_rated_history_reaches_the_assembled_preferences_message(
+    client: TestClient,
+    db: Session,
+    user: User,
+    wardrobe: list[Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+    cloudinary_configured: None,
+) -> None:
+    shoes, top, bottom, dress = wardrobe[:4]
+    top.fit = "relaxed"
+    dress.fit = "bodycon"
+    # Relative to `WHEN`, the day the look is *for*, which is what the recency
+    # window is measured back from. This read `date.today()` while the request
+    # asked for 2026-03-14, so it passed only because the window was anchored
+    # on the server's calendar instead. `DECISIONS.md` 185.
+    bottom.last_worn_at = WHEN - timedelta(days=1)
+    db.commit()
+
+    _rated_look(db, user, [shoes, top, bottom], FEEDBACK_UP)
+    _rated_look(db, user, [shoes, top, bottom], FEEDBACK_UP)
+    _rated_look(db, user, [shoes, dress], FEEDBACK_DOWN)
+    _rated_look(db, user, [shoes, dress], FEEDBACK_DOWN)
+
+    fake = stylist(answer(shoes.short_id, top.short_id, bottom.short_id))
+
+    response = suggest(client, user, authorization)
+
+    assert response.status_code == 200
+    message = stylist_service._user_message(
+        [ItemResponse.model_validate(item) for item in wardrobe], fake.contexts[0]
+    )
+    assert (
+        "USER PREFERENCES (learned from rated looks):\n"
+        "- Liked: relaxed tops\n"
+        "- Disliked: bodycon dresses\n"
+        f"- Recently worn (avoid repeating): {bottom.short_id}"
+    ) in message
+
+
+def test_recency_is_measured_from_the_requested_day_not_the_server_s(
+    client: TestClient,
+    db: Session,
+    user: User,
+    wardrobe: list[Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+    cloudinary_configured: None,
+) -> None:
+    # Worn today, and the look is for `WHEN` — months away. Under a window
+    # anchored on the server's calendar this garment is "recently worn"; under
+    # one anchored on the requested day it is not, and the day being dressed
+    # for is the only day the question means anything about.
+    shoes, top, bottom = wardrobe[:3]
+    bottom.last_worn_at = date.today()
+    db.commit()
+
+    _rated_look(db, user, [shoes, top, bottom], FEEDBACK_UP)
+    _rated_look(db, user, [shoes, top, bottom], FEEDBACK_UP)
+    _rated_look(db, user, [shoes, top, bottom], FEEDBACK_DOWN)
+
+    fake = stylist(answer(shoes.short_id, top.short_id, bottom.short_id))
+
+    assert suggest(client, user, authorization).status_code == 200
+    assert "Recently worn" not in (fake.contexts[0].preferences or "")
+
+
+def test_a_garment_worn_after_the_requested_day_is_not_recently_worn(
+    client: TestClient,
+    db: Session,
+    user: User,
+    wardrobe: list[Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+    cloudinary_configured: None,
+) -> None:
+    # The window is closed at the top as well as the bottom. `POST
+    # /looks/{id}/wear` accepts a future date on purpose (`DECISIONS.md` 184),
+    # so without an upper bound a garment worn after the requested day would be
+    # reported as already stale for it.
+    shoes, top, bottom = wardrobe[:3]
+    bottom.last_worn_at = WHEN + timedelta(days=1)
+    db.commit()
+
+    _rated_look(db, user, [shoes, top, bottom], FEEDBACK_UP)
+    _rated_look(db, user, [shoes, top, bottom], FEEDBACK_UP)
+    _rated_look(db, user, [shoes, top, bottom], FEEDBACK_DOWN)
+
+    fake = stylist(answer(shoes.short_id, top.short_id, bottom.short_id))
+
+    assert suggest(client, user, authorization).status_code == 200
+    assert "Recently worn" not in (fake.contexts[0].preferences or "")
+
+
+def test_an_archived_garment_teaches_the_stylist_nothing(
+    client: TestClient,
+    db: Session,
+    user: User,
+    wardrobe: list[Item],
+    make_item: Callable[..., Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+    cloudinary_configured: None,
+) -> None:
+    # A preference learned from an archived garment can only describe outfits
+    # the stylist is no longer able to build — `_wardrobe` will never show it
+    # the row again.
+    #
+    # Planted beside the wardrobe rather than archiving one of its six: the
+    # fixture holds exactly `MIN_WARDROBE_ITEMS`, so archiving a member answers
+    # `wardrobe_too_small` and the test would prove nothing about preferences.
+    shoes, top, bottom = wardrobe[:3]
+    gone = make_item(
+        user_id=user.id,
+        status=ItemStatus.READY,
+        category=Category.DRESS,
+        layer=Layer.STANDALONE,
+        fit="bodycon",
+        is_archived=True,
+    )
+
+    _rated_look(db, user, [shoes, gone], FEEDBACK_DOWN)
+    _rated_look(db, user, [shoes, gone], FEEDBACK_DOWN)
+    _rated_look(db, user, [shoes, top, bottom], FEEDBACK_UP)
+
+    fake = stylist(answer(shoes.short_id, top.short_id, bottom.short_id))
+
+    assert suggest(client, user, authorization).status_code == 200
+    assert "bodycon" not in (fake.contexts[0].preferences or "")
+
+
+def test_fewer_than_three_rated_looks_omit_the_preferences_block(
+    client: TestClient,
+    db: Session,
+    user: User,
+    wardrobe: list[Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+    cloudinary_configured: None,
+) -> None:
+    shoes, top, bottom = wardrobe[:3]
+    _rated_look(db, user, [shoes, top, bottom], FEEDBACK_UP)
+    _rated_look(db, user, [shoes, top, bottom], FEEDBACK_DOWN)
+    fake = stylist(answer(shoes.short_id, top.short_id, bottom.short_id))
+
+    response = suggest(client, user, authorization)
+
+    assert response.status_code == 200
+    assert fake.contexts[0].preferences is None
 
 
 def test_a_suggestion_comes_back_with_its_items_hydrated(

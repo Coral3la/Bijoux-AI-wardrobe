@@ -271,6 +271,32 @@ def test_the_profile_block_keeps_the_half_that_is_present() -> None:
     assert "Height" not in notes_only
 
 
+def test_the_preferences_block_is_inserted_before_the_request() -> None:
+    message = stylist._user_message(
+        WARDROBE,
+        _context(
+            preferences=(
+                "USER PREFERENCES (learned from rated looks):\n"
+                "- Liked: relaxed tops\n"
+                "- Disliked: bodycon dresses\n"
+                "- Recently worn (avoid repeating): 7BX1QM"
+            )
+        ),
+    )
+
+    assert (
+        "USER PREFERENCES (learned from rated looks):\n"
+        "- Liked: relaxed tops\n"
+        "- Disliked: bodycon dresses\n"
+        "- Recently worn (avoid repeating): 7BX1QM\n\n"
+        "REQUEST:"
+    ) in message
+
+
+def test_the_preferences_block_is_omitted_when_the_context_has_none() -> None:
+    assert "USER PREFERENCES" not in stylist._user_message(WARDROBE, _context())
+
+
 def test_the_request_block_is_the_documented_one() -> None:
     # Transcribed from `03-AI-CONTRACTS.md`'s single-day block.
     assert stylist._user_message(WARDROBE, _context()).endswith(

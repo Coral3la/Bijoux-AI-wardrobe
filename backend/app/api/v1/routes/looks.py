@@ -28,6 +28,7 @@ import time
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import date as date_type
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
@@ -40,7 +41,7 @@ from app.core.deps import get_current_user, get_db
 from app.core.errors import ApiError
 from app.enums import ItemStatus
 from app.models.item import Item
-from app.models.look import Look, LookItem
+from app.models.look import FEEDBACK_DOWN, FEEDBACK_UP, Look, LookItem
 from app.models.user import User
 from app.schemas.item import ItemResponse
 from app.schemas.look import (
@@ -78,6 +79,28 @@ logger = logging.getLogger(__name__)
 # make an outfit, so counting them would answer `502` where `400` is the truth.
 # `DECISIONS.md` 172.
 MIN_WARDROBE_ITEMS = 6
+MIN_RATED_LOOKS = 3
+PREFERENCE_LIMIT = 3
+RECENT_WEAR_DAYS = 3
+
+# Every member of `Category`, which is nine since 2.6a appended the last two.
+# The block prints these to the model rather than the raw enum values, so a
+# category missing here is a `KeyError` and a 500 rather than an ugly line —
+# and `Item.fit IS NOT NULL` below selects precisely the six categories that
+# carry a fit, two of which are the ones 2.6a added. `test_looks_suggest.py`
+# pins this dictionary against the vocabulary, because nothing else compares
+# them. The three mass nouns keep their singular form.
+_CATEGORY_NAMES = {
+    "top": "tops",
+    "bottom": "bottoms",
+    "dress": "dresses",
+    "outerwear": "outerwear",
+    "shoes": "shoes",
+    "bag": "bags",
+    "accessory": "accessories",
+    "swimwear": "swimwear",
+    "sleepwear": "sleepwear",
+}
 
 
 def _stylist_failed() -> ApiError:
@@ -194,9 +217,94 @@ def _excluded(request: LookSuggestRequest, wardrobe: Sequence[ItemResponse]) -> 
     )
 
 
+def _preference_attributes(db: Session, user: User, feedback: int) -> list[str]:
+    frequency = func.count(func.distinct(Look.id))
+    rows = db.execute(
+        select(Item.category, Item.fit)
+        .select_from(Look)
+        .join(LookItem, LookItem.look_id == Look.id)
+        .join(Item, Item.id == LookItem.item_id)
+        .where(
+            Look.user_id == user.id,
+            Look.feedback == feedback,
+            Item.fit.is_not(None),
+            # An archived garment cannot be recommended, so a preference
+            # learned from it can only describe outfits the stylist is unable
+            # to build. `DELETE /items/{id}` is an archive, which makes this
+            # the same filter `_wardrobe` applies, one table along.
+            Item.is_archived.is_(False),
+        )
+        .group_by(Item.category, Item.fit)
+        .having(frequency >= 2)
+        .order_by(frequency.desc(), Item.category, Item.fit)
+        .limit(PREFERENCE_LIMIT)
+    ).all()
+    return [f"{fit} {_CATEGORY_NAMES[category]}" for category, fit in rows]
+
+
+def _preferences(
+    db: Session, user: User, wardrobe: Sequence[ItemResponse], for_date: date_type
+) -> str | None:
+    """The learned-preferences block, or `None` while the signal is still noise.
+
+    **Both thumbs count toward the threshold.** `STAGE-3` 3.5 said "3 liked
+    looks" and the guard is three *rated* ones: a thumbs-down is as much a
+    statement about this wardrobe as a thumbs-up, it is half of what the block
+    prints, and `NULL` is the only value that means nothing was said.
+    `DECISIONS.md` 185.
+
+    `for_date` rather than the server's today, which is what the recency window
+    is measured back from — see the query below.
+    """
+    rated_looks = (
+        db.scalar(
+            select(func.count())
+            .select_from(Look)
+            .where(Look.user_id == user.id, Look.feedback.is_not(None))
+        )
+        or 0
+    )
+    if rated_looks < MIN_RATED_LOOKS:
+        return None
+
+    lines = ["USER PREFERENCES (learned from rated looks):"]
+    liked = _preference_attributes(db, user, FEEDBACK_UP)
+    if liked:
+        lines.append(f"- Liked: {', '.join(liked)}")
+    disliked = _preference_attributes(db, user, FEEDBACK_DOWN)
+    if disliked:
+        lines.append(f"- Disliked: {', '.join(disliked)}")
+
+    # Measured back from the day being dressed for, not from the server's
+    # today. Two reasons, and the second is the one that bites: asking on
+    # Wednesday for Saturday's outfit is asking what will be stale *on
+    # Saturday*, and `date.today()` here is the server's calendar day, which
+    # `DECISIONS.md` 184 established is not reliably the user's. The window is
+    # closed at both ends — `worn_at` accepts a future date (184 again), so
+    # without an upper bound a garment worn next week would be reported as
+    # recently worn for a look built today. `DECISIONS.md` 185.
+    wardrobe_ids = {item.id for item in wardrobe}
+    recent_since = for_date - timedelta(days=RECENT_WEAR_DAYS - 1)
+    recently_worn = db.scalars(
+        select(Item.short_id)
+        .where(
+            Item.id.in_(wardrobe_ids),
+            Item.last_worn_at >= recent_since,
+            Item.last_worn_at <= for_date,
+        )
+        .order_by(Item.last_worn_at.desc(), Item.short_id)
+    ).all()
+    if recently_worn:
+        lines.append(f"- Recently worn (avoid repeating): {', '.join(recently_worn)}")
+
+    return "\n".join(lines)
+
+
 async def _context(
+    db: Session,
     request: LookSuggestRequest,
     user: User,
+    wardrobe: Sequence[ItemResponse],
     anchor: ItemResponse | None,
     locked: Sequence[ItemResponse],
     excluded_ids: tuple[str, ...],
@@ -243,6 +351,7 @@ async def _context(
         replace_role=request.replace_role,
         height_cm=user.height_cm,
         style_notes=user.style_notes,
+        preferences=_preferences(db, user, wardrobe, request.date),
     )
 
 
@@ -421,8 +530,10 @@ async def suggest_look(
     # answerable from rows already in hand, so a request that cannot be served
     # costs neither the forecast nor the model.
     context = await _context(
+        db,
         request,
         current_user,
+        wardrobe,
         _anchor(request, wardrobe),
         _locked(request, wardrobe),
         _excluded(request, wardrobe),

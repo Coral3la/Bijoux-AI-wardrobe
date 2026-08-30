@@ -70,7 +70,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Save a look — `GET /looks`, `PATCH /looks/{id}`, the heart, `/saved`
 - [x] Thumbs up/down — and the heart became optimistic with them
 - [x] Wear tracking — and the one control that is deliberately not optimistic
-- [ ] Preferences fed into the prompt
+- [x] Preferences fed into the prompt
 - [ ] Wardrobe insights
 
 ## Stage 4 — Trip Packing  *(signature feature — do not cut)*

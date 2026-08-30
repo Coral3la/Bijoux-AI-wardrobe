@@ -210,6 +210,7 @@ class StylistContext:
     replace_role: str | None = None
     height_cm: int | None = None
     style_notes: str | None = None
+    preferences: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -282,6 +283,12 @@ def _profile_block(context: StylistContext) -> str:
     return "USER PROFILE:\n" + " ".join(sentences) + "\n\n"
 
 
+def _preferences_block(context: StylistContext) -> str:
+    if context.preferences is None:
+        return ""
+    return context.preferences + "\n\n"
+
+
 def _outerwear_line(include_outerwear: bool | None) -> str:
     if include_outerwear is None:
         return ""
@@ -331,6 +338,7 @@ def _user_message(wardrobe: Sequence[ItemResponse], context: StylistContext) -> 
         f"WARDROBE ({len(wardrobe)} items):\n"
         f"{serialize_wardrobe(wardrobe)}\n\n"
         f"{_profile_block(context)}"
+        f"{_preferences_block(context)}"
         f"{request}"
     )
 
