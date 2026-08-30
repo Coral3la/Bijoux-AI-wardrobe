@@ -28,6 +28,7 @@ from app.schemas.item import (
     ItemStatsResponse,
     ItemUpdate,
     ItemUploadResponse,
+    MostWornItem,
 )
 from app.services.storage import (
     SIGNATURE_BYTES,
@@ -280,6 +281,22 @@ def item_stats(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ItemStatsResponse:
+    """Wardrobe counts, and from task 3.6 the three wear numbers.
+
+    The three wear numbers are scoped one filter narrower than the
+    counts above them: `ready` as well as unarchived, because a row
+    still being tagged is unworn trivially and has no name to put
+    on a panel. `worn` and `never_worn` partition that population
+    and sum to it — **and that sum is not `total`**, which counts
+    every status. So `total` minus `never_worn` is still not the
+    number of garments the user has worn; `worn` is, and that is
+    why it is here.
+
+    Ties on `most_worn` break on `short_id` ascending, the
+    tiebreaker `GET /items` already uses, so two garments worn the
+    same number of times resolve to the same one on every call.
+    `null` rather than an arbitrary row when nothing has been worn.
+    """
     # Archived rows are excluded, matching GET /items. A dashboard
     # that kept counting deleted garments would make DELETE look
     # like it did nothing.
@@ -298,14 +315,40 @@ def item_stats(
     # and `total` comes from the sum rather than a fourth query.
     by_status = _counts(Item.status)
 
+    # Copied rather than appended to: `_counts` closes over
+    # `filters`, so adding the status in place would rescope
+    # by_category and by_color to `ready` without saying so.
+    worn_filters = [*filters, Item.status == ItemStatus.READY]
+
+    # One statement rather than two counts, so the pair is a
+    # partition of one population by construction: at READ
+    # COMMITTED two separate queries can straddle a concurrent
+    # wearing and fail to sum to the rows they were counted over.
+    worn, never_worn = db.execute(
+        select(
+            func.count().filter(Item.wear_count > 0),
+            func.count().filter(Item.wear_count == 0),
+        )
+        .select_from(Item)
+        .where(*worn_filters)
+    ).one()
+
+    most_worn = db.scalar(
+        select(Item)
+        .where(*worn_filters, Item.wear_count > 0)
+        .order_by(Item.wear_count.desc(), Item.short_id)
+        .limit(1)
+    )
+
     return ItemStatsResponse(
         total=sum(by_status.values()),
         by_category=_counts(Item.category),
         by_color=_counts(Item.color_primary),
         processing=by_status.get(ItemStatus.PROCESSING, 0),
         failed=by_status.get(ItemStatus.FAILED, 0),
-        never_worn=0,
-        most_worn=[],
+        worn=worn,
+        never_worn=never_worn,
+        most_worn=MostWornItem.model_validate(most_worn) if most_worn is not None else None,
     )
 
 

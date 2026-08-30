@@ -104,19 +104,86 @@ def test_stats_counts_only_the_callers_items(
     assert body["total"] == 1
 
 
-def test_the_wear_numbers_are_zero_until_stage_3(
+def test_never_worn_counts_ready_items_that_have_never_been_worn(
     client: TestClient,
     make_item: Callable[..., Item],
     make_user: Callable[..., User],
     authorization: Callable[[User], dict[str, str]],
 ) -> None:
-    # The columns exist from migration 0004 and this endpoint does not read
-    # them until 3.6. Reporting `never_worn = total` would be true today and
-    # would silently change meaning when 3.6 starts counting.
+    # The `processing` row is the point of the `ready` filter: it has never
+    # been worn and never could have been, and counting it would put a tile
+    # with no name on it into "items you have never worn".
     user = make_user()
+    make_item(user_id=user.id, category="top", wear_count=3, **READY)
     make_item(user_id=user.id, category="top", **READY)
+    make_item(user_id=user.id, category="top", **READY)
+    make_item(user_id=user.id, category="top")
 
     body = client.get(STATS_URL, headers=authorization(user)).json()
 
-    assert body["never_worn"] == 0
-    assert body["most_worn"] == []
+    assert body["never_worn"] == 2
+
+
+def test_worn_counts_ready_items_that_have_been_worn(
+    client: TestClient,
+    make_item: Callable[..., Item],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # The same wardrobe as the test above, deliberately: 1 and 2 against three
+    # `ready` rows is the partition, and the `processing` row is in neither.
+    user = make_user()
+    make_item(user_id=user.id, category="top", wear_count=3, **READY)
+    make_item(user_id=user.id, category="top", **READY)
+    make_item(user_id=user.id, category="top", **READY)
+    make_item(user_id=user.id, category="top")
+
+    body = client.get(STATS_URL, headers=authorization(user)).json()
+
+    assert body["worn"] == 1
+
+
+def test_most_worn_is_the_single_item_with_the_highest_wear_count(
+    client: TestClient,
+    make_item: Callable[..., Item],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # The whole object is asserted rather than its id, because the three keys
+    # are the contract: `04-API-SPEC.md` printed a full item here until 3.6
+    # and nothing pinned the narrowing.
+    user = make_user()
+    make_item(user_id=user.id, category="top", display_name="worn twice", wear_count=2, **READY)
+    favourite = make_item(
+        user_id=user.id, category="top", display_name="worn five times", wear_count=5, **READY
+    )
+    make_item(user_id=user.id, category="top", display_name="never worn", **READY)
+
+    body = client.get(STATS_URL, headers=authorization(user)).json()
+
+    assert body["most_worn"] == {
+        "id": str(favourite.id),
+        "display_name": "worn five times",
+        "wear_count": 5,
+    }
+
+
+def test_the_wear_numbers_exclude_archived_rows(
+    client: TestClient,
+    make_item: Callable[..., Item],
+    make_user: Callable[..., User],
+    authorization: Callable[[User], dict[str, str]],
+) -> None:
+    # The only worn garment in this wardrobe is archived, so `most_worn` is
+    # null for a reason the fixture states rather than because nothing was
+    # ever planted.
+    user = make_user()
+    make_item(user_id=user.id, category="top", **READY)
+    make_item(user_id=user.id, category="top", wear_count=9, is_archived=True, **READY)
+    make_item(user_id=user.id, category="top", is_archived=True, **READY)
+
+    body = client.get(STATS_URL, headers=authorization(user)).json()
+
+    assert body["worn"] == 0
+    assert body["never_worn"] == 1
+    assert body["most_worn"] is None

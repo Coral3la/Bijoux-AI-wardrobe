@@ -115,18 +115,41 @@ class ItemUpdate(BaseModel):
     )
 
 
+class MostWornItem(BaseModel):
+    """The most-worn garment, cut to what an insights panel draws.
+
+    Deliberately not an `ItemResponse`. The panel renders one
+    line and a link, and the twenty-odd tag columns behind that
+    line would be wire weight with no reader — `04-API-SPEC.md`
+    printed the full item here from Stage 0 and no client was
+    ever written against it. `id` is what `/wardrobe/:id` routes
+    on, which is why it is the id and not the `short_id`.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    # Nullable to match `ItemResponse`, though a `ready` row
+    # always has one: `display_name` is in `REQUIRED_TAG_FIELDS`.
+    # Typing it `str` buys nothing and turns a row edited by hand
+    # into a 500.
+    display_name: str | None
+    wear_count: int
+
+
 class ItemStatsResponse(BaseModel):
     total: int
     by_category: dict[str, int]
     by_color: dict[str, int]
     processing: int
     failed: int
-    # Both wait for task 3.6 now, not for the migration: 0004
-    # added `wear_count` and `last_worn_at` and this endpoint
-    # still does not read them. Zero rather than `total`, which
-    # is what "nothing has been worn yet" would honestly report:
-    # that number would change meaning when 3.6 starts counting,
-    # and nothing would catch it. `04-API-SPEC.md` prints the
-    # zeros.
+    # A partition, not two independent numbers: they are counted
+    # in one statement over one population and sum to it. What
+    # they do not sum to is `total`, which counts every status.
+    worn: int
     never_worn: int
-    most_worn: list[ItemResponse]
+    # `None`, not an empty list, and the difference is the whole
+    # reason this field is not `list[ItemResponse]` any more:
+    # there is exactly one most-worn garment or there is nothing
+    # worn at all, and a list of one made the caller ask which.
+    most_worn: MostWornItem | None

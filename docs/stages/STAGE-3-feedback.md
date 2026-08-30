@@ -102,9 +102,30 @@ Derived with plain SQL aggregation over `looks` joined to `look_items` — fit f
 Guard: only include this block once there are at least 3 rated looks. Both thumbs-up and thumbs-down count as ratings; below that the signal is noise.
 
 ### 3.6 Wardrobe insights
-Extend `GET /items/stats` with `never_worn`, `most_worn`, and cost-per-wear placeholders. A small insights panel on the wardrobe screen: *"34 items you have never worn."*
+Extend `GET /items/stats` with `worn`, `never_worn` and `most_worn`. A small insights panel on the wardrobe screen: *"34 items you have never worn."*
 
 Cheap to build, and it is the moment the app tells the user something about themselves they did not already know.
+
+**Cost-per-wear is struck from this line rather than deferred.** It asked for a
+third field the project has nowhere to get: there is no price column,
+`02-DATA-MODEL.md` lists purchase price as a future `attributes` key that
+nothing writes, and a placeholder would put a fabricated number on a dashboard
+whose whole purpose is to tell the user something true about themselves.
+`04-API-SPEC.md` never carried it, so the contract loses nothing here.
+
+**The backend half is built and the panel is not** — this task ships in two
+commits, and the second one is a separate task. `GET /items/stats` reads
+`items.wear_count` now; `most_worn` narrowed from the array `04-API-SPEC.md`
+had printed since Stage 0 to one object of three fields, or `null` when nothing
+has been worn. **`worn` is a third field this line did not ask for**, added
+because *"34 items you have never worn"* invites *of how many?* and no number
+already in the response answers it: all three are scoped to `ready` rows, one
+filter narrower than the counts beside them, so **`total` minus `never_worn` is
+not the number of items worn** — `worn` is, and it partitions that population
+with `never_worn` in one statement. Swimwear and sleepwear are counted, because
+the stylist's exclusion is not the dashboard's. Ties break on `short_id`. The
+endpoint is still consumed by no screen — `AUDITS.md` **O-16** holds until the
+panel lands. `DECISIONS.md` 186.
 
 ---
 
@@ -119,4 +140,7 @@ Cheap to build, and it is the moment the app tells the user something about them
 
 ## Commit checkpoints
 
-`feat(db): feedback and wear columns` · `feat(api): save and rate looks` · `feat(api): wear tracking` · `feat(ai): preference block in prompt` · `feat(web): saved looks screen` · `feat(web): wardrobe insights`
+`feat(db): feedback and wear columns` · `feat(api): save and rate looks` · `feat(api): wear tracking` · `feat(ai): preference block in prompt` · `feat(web): saved looks screen` · `feat(api): wardrobe insights` · `feat(web): wardrobe insights`
+
+Seven checkpoints for six tasks: **3.6 is two commits**, because the endpoint
+and the panel are separate pieces of work and this list had one line for both.

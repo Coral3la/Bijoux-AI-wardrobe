@@ -202,10 +202,51 @@ Re-runs vision tagging. `409` with `code: "item_edited"` if `user_edited` is tru
   "total": 138, "by_category": { "top": 41, … },
   "by_color": { "black": 22, … },
   "processing": 0, "failed": 2,
-  "never_worn": 34, "most_worn": [ { item } ]
+  "worn": 102, "never_worn": 34,
+  "most_worn": { "id": "uuid", "display_name": "light blue mom jeans",
+                 "wear_count": 12 }
 }
 ```
-Drives the wardrobe dashboard. `never_worn` and `most_worn` return zeros until Stage 3 — `wear_count` and `last_worn_at` arrive with migration `0004`. Zero rather than the arithmetic truth: with no wear data at all, *every* item is unworn, and reporting `never_worn = total` would be correct today and would silently change meaning when the columns land.
+Drives the wardrobe dashboard.
+
+**The wear numbers are real from task 3.6.** Until then this block printed two
+placeholders — `never_worn` answered `0` and `most_worn` answered `[]` — and
+the zero was deliberate rather than lazy: with no wear data at all *every* item
+is unworn, so `never_worn = total` would have been correct on the day and would
+have changed meaning silently once `0004`'s columns filled.
+
+**`worn` was added beside `never_worn` in the same task**, because a standalone
+*"34 items you have never worn"* invites *of how many?* and every number in this
+body that a reader would reach for answers it wrongly. The two are counted in
+one statement over one population and **partition it**: `worn + never_worn` is
+the number of `ready`, unarchived garments.
+
+**`most_worn` is one object or `null`**, narrowed from the array this document
+printed from Stage 0 until 3.6. There is exactly one most-worn garment or
+nothing has been worn at all, and a list of one made every caller ask which of
+those it was reading. It carries three fields rather than a whole item — `id`,
+because `/wardrobe/:id` routes on it, plus `display_name` and `wear_count` —
+which is what the insights panel draws and no more; nothing had ever been
+written against the wide shape. **Ties break on `short_id` ascending**, the
+tiebreaker `GET /items` already uses, so two garments worn the same number of
+times resolve to the same one on every call.
+
+**All three wear numbers are scoped one filter narrower than the counts above
+them** — `ready` as well as unarchived — because a row still being tagged is
+unworn trivially and has no name to put on a panel. Their denominator is
+therefore **not `total`**, which counts every status: in the body above, 138
+total is 136 `ready` rows plus 2 `failed`, and it is the 136 that `worn` and
+`never_worn` split. So **`total` minus `never_worn` is not the number of items
+the user has worn** — `worn` is. Swimwear and sleepwear *are* counted:
+`STYLIST_EXCLUDED_CATEGORIES` is a rule about what the stylist may recommend,
+not about what the wardrobe holds, and `total` and `by_category` in this same
+body already count them.
+
+**Cost-per-wear is not here and is not coming.** `STAGE-3` §3.6 asked for it
+and there is nowhere to get it: no price column exists, `02-DATA-MODEL.md`
+lists purchase price as a future `attributes` key that nothing writes, and a
+placeholder computed from a price the application never collects would render a
+fabricated number as a fact. `DECISIONS.md` 186.
 
 Counts exclude archived rows, matching `GET /items`, so a dashboard cannot keep counting deleted garments. `total` is every non-archived row including `processing` and `failed`; `by_category` and `by_color` omit rows whose tag is still `null`, so their values do not sum to `total` and a category with no items is absent rather than zero.
 
