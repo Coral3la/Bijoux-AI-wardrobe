@@ -34,6 +34,26 @@ describe('ItemsApi', () => {
     request.flush({ items: [], total: 0 });
   });
 
+  // Its own path segment rather than a query parameter on /items, and the
+  // server declares it above GET /{item_id} so that `stats` is not read as a
+  // UUID. A trailing slash here would redirect for the same reason as above.
+  it('reads the stats from /items/stats', () => {
+    api.stats().subscribe();
+
+    const request = mock.expectOne((candidate) => candidate.method === 'GET');
+    expect(request.request.url).toBe(`${environment.apiUrl}/items/stats`);
+    request.flush({
+      total: 0,
+      by_category: {},
+      by_color: {},
+      processing: 0,
+      failed: 0,
+      worn: 0,
+      never_worn: 0,
+      most_worn: null,
+    });
+  });
+
   it('sends the limit it was given as a query parameter', () => {
     api.list(200).subscribe();
 

@@ -104,6 +104,24 @@ function uploadRequest() {
   return mock.expectOne(`${environment.apiUrl}/items/upload`);
 }
 
+// The insights panel fetches for itself the moment this page renders, so every
+// fixture in this file has a second request outstanding and afterEach verifies
+// there is none. Answered with a wardrobe nothing has been worn in, which is
+// the one shape that renders no panel: every test below is about the page, and
+// the panel's own states are wardrobe-insights.spec.ts's.
+function flushStats(): void {
+  mock.expectOne(`${environment.apiUrl}/items/stats`).flush({
+    total: 0,
+    by_category: {},
+    by_color: {},
+    processing: 0,
+    failed: 0,
+    worn: 0,
+    never_worn: 0,
+    most_worn: null,
+  });
+}
+
 function sheet(): HTMLElement | null {
   return (fixture.nativeElement as HTMLElement).querySelector('app-upload-sheet');
 }
@@ -171,6 +189,7 @@ async function pickFromGallery(files: File[]): Promise<void> {
 function create(): void {
   fixture = TestBed.createComponent(WardrobePage);
   fixture.detectChanges();
+  flushStats();
 }
 
 async function render(items: readonly Item[], total = items.length): Promise<void> {
@@ -232,6 +251,21 @@ describe('WardrobePage', () => {
     );
     expect(link?.getAttribute('href')).toBe('/stylist');
     expect(page.querySelector('app-weather-strip')).not.toBeNull();
+  });
+
+  // The panel is context about the wardrobe like the strip above it, and the
+  // pending strip below it is feedback about an upload in progress — which is
+  // the whole of why it sits between them rather than beside either.
+  it('puts the insights panel under the weather strip and above the pending strip', async () => {
+    await render([item()]);
+
+    const order = [...(fixture.nativeElement as HTMLElement).querySelectorAll('main > *')].map(
+      (child) => child.tagName.toLowerCase(),
+    );
+    expect(order.indexOf('app-wardrobe-insights')).toBeGreaterThan(
+      order.indexOf('app-weather-strip'),
+    );
+    expect(order.indexOf('app-wardrobe-insights')).toBeLessThan(order.indexOf('app-pending-strip'));
   });
 
   it('loads the wardrobe on arrival with an explicit limit', async () => {

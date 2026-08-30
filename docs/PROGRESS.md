@@ -1,9 +1,9 @@
 # Progress
 
 **Current stage:** Stage 3 — Saving, Feedback and Wear Tracking
-**Status:** Stage 3 — **3.1, 3.2, 3.3 and 3.4 are built**; 3.5 and 3.6 are not started. Stage 2 is built end to end from 2.1 to 2.12 and its acceptance criteria are still the developer's to run: the suites, the demo wardrobe timings and the five-out-of-five anchor check are unmeasured here. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below). **Stage 3 is the designated cut line** and has not been cut.
+**Status:** Stage 3 — **all six tasks are built**, 3.1 to 3.6, the last of them in the two commits its own stage file specifies. Its acceptance criteria are the developer's to run and five of the six are unticked; **the sixth is ticked from tests rather than from a run** — the never-worn count is asserted by `wardrobe-insights.spec.ts` against a mocked response and by the endpoint's own integration tests, and nobody has yet seen the panel in a browser. Stage 2 is built end to end from 2.1 to 2.12 and its acceptance criteria are still the developer's to run: the suites, the demo wardrobe timings and the five-out-of-five anchor check are unmeasured here. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below). **Stage 3 is the designated cut line** and has not been cut.
 
-The header is moved with the task this time rather than four tasks later, which is the drift both paragraphs below record.
+*"The header is moved with the task this time rather than four tasks later"* — that stood here from 2.11 until Stage 3 falsified it. This header still said *3.1, 3.2, 3.3 and 3.4 are built; 3.5 and 3.6 are not started* through the whole of 3.5 and through 3.6's endpoint commit, and it is corrected here at 3.6's second — **one task late rather than four**, which is a smaller drift and not a fixed one. The log below has no entries for 3.5 or for the endpoint half of 3.6 either, and this line does not invent them; their record is `DECISIONS.md` 185 and 186 and the annotations in `stages/STAGE-3-feedback.md`.
 
 This header and the Stage 2 checklist below had not moved since 2.7, while 2.8, 2.9, 2.10 and 2.10a shipped — the same drift the paragraph below records at 2.2, four tasks wide again. Both are corrected here at 2.11; the log itself still has no entries for those four tasks, and this line does not invent them. Their record is `DECISIONS.md` 174 and the annotations in `stages/STAGE-2-stylist.md`.
 
@@ -71,7 +71,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Thumbs up/down — and the heart became optimistic with them
 - [x] Wear tracking — and the one control that is deliberately not optimistic
 - [x] Preferences fed into the prompt
-- [ ] Wardrobe insights
+- [x] Wardrobe insights
 
 ## Stage 4 — Trip Packing  *(signature feature — do not cut)*
 `stages/STAGE-4-packing.md` · target 5 days
@@ -565,3 +565,14 @@ The task was decided by three things the documents did not agree on, and by one 
 - **One control in this application is not optimistic, and it says so.** `DECISIONS.md` 183 made every control on the look card optimistic; none of its three premises holds for a wearing — not a toggle, counts the client cannot derive, no previous state to restore. This is the second documented exception this project has taken to a rule one task old, and it is written in the store, in `05-FRONTEND-SPEC.md` §6a and in 184.
 - **A mutation harness left a mutation behind, which is the trap `06-TESTING-STRATEGY.md` names.** The first frontend run wrote its backup outside the mirror, so the restore silently failed and mutations two and three ran stacked on mutation one — the control came back red and read as a broken deliverable. Re-run from a verified-clean tree: five mutations, all caught, control green at both ends. The numbers quoted above are the second run's.
 - **`item.wear.placeholder` and the test that pinned it are deleted, purpose expired** — the same marker `test_feedback_is_refused_until_task_3_3` was at 3.3.
+
+---
+
+**2026-08-30 — task 3.6, the wardrobe insights panel.** **475 frontend tests pass (467 before, 8 added)**, the full suite in the scratchpad mirror; `ng build`, `ng lint` and `prettier` are clean, and **four mutations were caught with the control green at both ends** — the hide-when-nothing-worn guard, the denominator, the all-worn branch and the panel's position on the page. Backend untouched and not run: 3.6's endpoint shipped in the previous commit. New: `frontend/src/app/features/wardrobe/wardrobe-insights.ts` and its spec (6). Changed: `frontend/src/app/shared/models/item.model.ts`, `core/api/items.api.ts` and its spec, `features/wardrobe/wardrobe.page.ts` and its spec, `public/i18n/en.json`, and four documents besides this one. One entry, `DECISIONS.md` 188. **`AUDITS.md` O-16's `/items/stats` half closed**, its seven-query-parameter half still open. No migration, no backend change, no new store.
+
+- **The panel holds no store, and that was the task's open question.** `WardrobeStore` is `providedIn: 'root'` and outlives the page while the poll mutates its collection, so a `ready`-scoped count kept beside `total` in it would be a second count of one wardrobe with nobody to reconcile the two. The component fetches for itself once on construction, which is `WeatherStrip`'s shape (180) and its third instance.
+- **The required line counts against `worn + never_worn`, never `total`.** The wear numbers are `ready`-scoped and the header three rows above states `total`, so a line reading *"34 of 138"* under a header reading *"138 items"* — two counts of different row sets sharing one number — was the failure to avoid; the copy names its population — *tagged* — which is the word the grid already uses for it. `worn` was added at the endpoint for exactly this and now has a caller.
+- **None of the three states 3.6 had to answer prints a number, on purpose.** Nothing worn hides the panel entirely, because *"you have never worn any of your 40 items"* is about the application not having been told rather than about the wardrobe; nothing unworn is softened to a sentence rather than a zero presented as a boast; a failed request removes the panel and says nothing.
+- **The panel's numbers are a snapshot, and an archive within one visit can outrun them.** Angular re-creates the component on every entry to `/wardrobe`, so a wearing recorded on `/stylist` is picked up on the way back — a garment archived on the item screen and returned from is not. Refetching on every change of `items()` would fire a request per poll tick.
+- **Thirty-eight existing page fixtures now answer a second request**, through one `flushStats()` in `create()`, and it flushes the one shape that renders no panel — so `wardrobe.page.spec.ts` still tests the page and the panel's states live in one file.
+- **`05-FRONTEND-SPEC.md`'s "never worn" filter toggle is annotated rather than built.** It was assigned to Stage 3 as a stage and to no task in it, and Stage 3 closes without it: recorded as deferred and unowned, a candidate for Stage 5 polish, with no owner invented for it here.

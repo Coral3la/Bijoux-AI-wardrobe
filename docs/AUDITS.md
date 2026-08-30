@@ -714,10 +714,16 @@ sends these cannot notice that `?colour_primary=navy` filters nothing.
 Same class as **O-10** and **O-15**: named by a document, built or not built by
 nobody, and found only because a task walked past it.
 
-`GET /items/stats` is in the same condition one level up — implemented at 1.4,
-tested by six integration tests, and consumed by no screen. 1.8 was its first
-possible caller and chose not to be one (`DECISIONS.md` 112), so it stays
-unowned until Stage 3 extends it. It is first on `STAGE-1`'s cut list.
+`GET /items/stats` was in the same condition one level up — implemented at 1.4,
+tested by six integration tests, and consumed by no screen, with 1.8 its first
+possible caller and declining to be one (`DECISIONS.md` 112). **That half is
+closed at task 3.6**, which extended the endpoint with the three wear numbers
+and then built the wardrobe insights panel against them: the endpoint has a
+reader, and it is no longer on anybody's cut list. `DECISIONS.md` 186, 188.
+
+**The seven parameters above are untouched by that close.** The panel calls
+`/items/stats` and sends nothing to `/items`, so O-16 stays open on exactly what
+its heading says and its two live questions — 5.2 and 5.4 — are unchanged.
 
 
 #### O-17 · Acceptance criterion 3 has no owner, and nothing in Stage 1 can produce the row it asks for — task 5.3, or a decision to cut it

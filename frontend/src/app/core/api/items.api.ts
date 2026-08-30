@@ -7,6 +7,7 @@ import { ItemStatus } from '../../shared/models/enums';
 import {
   Item,
   ItemListResponse,
+  ItemStatsResponse,
   ItemUpdate,
   ItemUploadResponse,
 } from '../../shared/models/item.model';
@@ -28,6 +29,14 @@ export class ItemsApi {
       params['status'] = status;
     }
     return this.http.get<ItemListResponse>(`${environment.apiUrl}/items`, { params });
+  }
+
+  // A GET on a fixed path that could be read as an id, which is why the route
+  // is declared above GET /{item_id} on the server — below it, `stats` is
+  // parsed as a UUID and answers 422. Nothing here can go wrong on the client
+  // side of that: there is no parameter to get wrong and no trailing slash.
+  stats(): Observable<ItemStatsResponse> {
+    return this.http.get<ItemStatsResponse>(`${environment.apiUrl}/items/stats`);
   }
 
   // Every file goes under the field name `files`, which is the route's

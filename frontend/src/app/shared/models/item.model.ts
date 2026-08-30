@@ -60,6 +60,37 @@ export interface ItemUploadResponse {
   readonly items: readonly Item[];
 }
 
+// One object or null, never a list of one: there is exactly one most-worn
+// garment or nothing has been worn at all, and 04-API-SPEC.md narrowed the
+// field to say which without being asked. Three fields rather than a whole
+// item because the panel draws a line and a link — `id` is what /wardrobe/:id
+// routes on. `display_name` is nullable to match `Item`, though a `ready` row
+// always carries one. DECISIONS.md 186.
+export interface MostWornItem {
+  readonly id: string;
+  readonly display_name: string | null;
+  readonly wear_count: number;
+}
+
+// Mirrors ItemStatsResponse in backend/app/schemas/item.py field for field,
+// including the five counts the insights panel does not read: 059's rule is
+// about the wire shape, not about this client's appetite.
+//
+// `worn` and `never_worn` partition the `ready`, unarchived population and sum
+// to it. They do not sum to `total`, which counts every status — so `total`
+// minus `never_worn` is not the number of garments worn, and the panel's
+// denominator is the pair's own sum. DECISIONS.md 186, 188.
+export interface ItemStatsResponse {
+  readonly total: number;
+  readonly by_category: Readonly<Record<string, number>>;
+  readonly by_color: Readonly<Record<string, number>>;
+  readonly processing: number;
+  readonly failed: number;
+  readonly worn: number;
+  readonly never_worn: number;
+  readonly most_worn: MostWornItem | null;
+}
+
 // The PATCH body. Mirrors `ItemUpdate` in backend/app/schemas/item.py, which
 // types every field permissively on purpose: shape is Pydantic's and meaning is
 // the vocabulary's. `null` is a value here rather than an omission — the server

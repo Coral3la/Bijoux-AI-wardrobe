@@ -17,6 +17,7 @@ import { FilterBar } from './filter-bar';
 import { ItemCard } from './item-card';
 import { PendingStrip } from './pending-strip';
 import { UploadSheet } from './upload-sheet';
+import { WardrobeInsights } from './wardrobe-insights';
 import { WeatherStrip } from './weather-strip';
 
 // A URL is user input. A value outside the closed vocabulary is dropped rather
@@ -43,7 +44,15 @@ function scale(value: string | null): number | undefined {
 @Component({
   selector: 'app-wardrobe-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilterBar, ItemCard, PendingStrip, RouterLink, UploadSheet, WeatherStrip],
+  imports: [
+    FilterBar,
+    ItemCard,
+    PendingStrip,
+    RouterLink,
+    UploadSheet,
+    WardrobeInsights,
+    WeatherStrip,
+  ],
   template: `
     <main class="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
       <header class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -95,6 +104,14 @@ function scale(value: string | null): number | undefined {
            this screen can be in, and none of them is a reason to lose the way
            to the stylist. §2.12. -->
       <app-weather-strip />
+
+      <!-- Under the strip and above the pending strip, because both of those
+           are standing context about the wardrobe while the pending strip is
+           transient feedback that belongs beside the grid it changes. Outside
+           the branch chain below like the filter bar, and it needs nothing
+           from that chain: it fetches for itself and renders nothing at all
+           when there is no true sentence to print. DECISIONS.md 188. -->
+      <app-wardrobe-insights />
 
       <!-- Above the whole chain below, deliberately. The grid lives in the
            final @else, and on a first-ever upload isEmpty() is still true

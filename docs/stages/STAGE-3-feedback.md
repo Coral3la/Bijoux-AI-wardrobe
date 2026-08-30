@@ -127,6 +127,20 @@ the stylist's exclusion is not the dashboard's. Ties break on `short_id`. The
 endpoint is still consumed by no screen — `AUDITS.md` **O-16** holds until the
 panel lands. `DECISIONS.md` 186.
 
+**The panel landed, and the paragraph above stops being true with it.** The
+second commit is `features/wardrobe/wardrobe-insights.ts`, between the weather
+strip and the pending strip, reading `GET /items/stats` through a new
+`ItemsApi.stats()` and holding no store — it fetches for itself once on
+construction, the way the weather strip does. **`worn` is what the required
+line counts against**: the copy is *"34 of your 136 tagged items have never been
+worn"*, where 136 is `worn + never_worn` and never `total`, because the wear
+numbers are `ready`-scoped and a header saying *138 items* sits three rows
+above it. **Three states print no count at all**: with
+nothing worn the panel does not render at all, with nothing unworn it says so in
+a sentence rather than printing a zero, and a failed request removes it
+silently. **`AUDITS.md` O-16's `/items/stats` half is closed** — the endpoint has
+a reader — and its seven-query-parameter half is untouched. `DECISIONS.md` 188.
+
 ---
 
 ## Acceptance criteria
@@ -136,7 +150,7 @@ panel lands. `DECISIONS.md` 186.
 - [ ] "I wore this" increments `wear_count` on every item in the look, exactly once per date
 - [ ] After 3 rated looks, the preferences block appears in the prompt — assert it in an integration test against the assembled message string
 - [ ] Recently worn items are named in the prompt as items to avoid
-- [ ] The insights panel shows a correct never-worn count
+- [x] The insights panel shows a correct never-worn count
 
 ## Commit checkpoints
 
