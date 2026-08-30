@@ -45,10 +45,11 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/profile/profile.page').then((m) => m.ProfilePage),
   },
-  // Above the wildcard, and with nothing linking to it — the third screen in
-  // this project built without an entry point, after /profile and /stylist
-  // before 2.12. STAGE-3 3.2 specifies the screen and not the way in, and a
-  // nav bar is nobody's task yet. AUDITS.md O-29.
+  // Reached from the wardrobe's account row, beside /profile. It
+  // shipped at 3.2 with nothing linking to it — the third screen in this
+  // project built without an entry point, after /profile and /stylist before
+  // 2.12 — and the link that fixed that is the fifth bespoke one, not the nav
+  // bar AUDITS.md O-29 asks for. That item is still open.
   {
     path: 'saved',
     canActivate: [authGuard],

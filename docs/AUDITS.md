@@ -1410,7 +1410,19 @@ bill of health (`CONVENTIONS.md`).
 `/saved` is built, guarded, above the wildcard, and reachable only by typing
 the URL. It is the **third** time this has happened: `app.routes.ts` carries a
 comment saying the same of `/profile` at 2.10a and said it of `/stylist` at 2.8
-until 2.12 built the weather strip. `/profile` is still in that state.
+until 2.12 built the weather strip.
+
+*Corrected: this paragraph ended "`/profile` is still in that state" and that
+was already false when it was written.* 2.10a built the profile screen **and**
+the account-row link into it in **one commit** — `2b13140`; the anchor is in
+`wardrobe.page.ts` and `app.routes.ts`'s comment was falsified by its own
+commit's second hunk. So the comment is stale, not the screen orphaned.
+Checked against the tree at `5ce9189`, the commit this item was opened by:
+`/profile` had the account-row anchor and `/stylist` had the weather strip's
+**Style me**, which makes **`/saved` the only screen with no way in at 3.2** —
+one, not the three in the heading above. What was genuinely going up is the
+count of **bespoke controls**, which is what the recommendation below is about
+and is unaffected by this correction.
 
 Each was correct in isolation. `STAGE-2` 2.10a specified the profile screen
 without saying how it is reached, 2.8 the same for the stylist, and `STAGE-3`
@@ -1440,6 +1452,24 @@ treatment used a third time, which is the cheapest possible version of the wrong
 answer. **The recommendation does not change, and the deadline is now past.**
 Whoever opens `05-FRONTEND-SPEC.md` §2 next builds the navigation and deletes
 these four — by then there will be at least a trip screen too.
+
+**A fifth was shipped anyway, after 3.6, and `05-FRONTEND-SPEC.md` §2 was
+opened to do it.** `/saved` gained a **Saved** link in the wardrobe's account
+row, beside **Profile**, and §2 now draws that row — which is precisely the
+section this item reserved for the navigation, edited for the fifth bespoke
+control instead. That was a deliberate choice and not an oversight:
+`STAGE-3` is the designated cut line, no stage file owns a navigation
+component, and a saved-looks screen reachable only by typing a URL makes
+saving, rating and wearing invisible to anyone who did not build them. The
+reasoning is `DECISIONS.md` 187.
+
+**This item stays open, and closing it was considered and refused.** Every
+screen is now reachable from `/wardrobe`, so the entry-point symptom is gone —
+but the defect this item names is the *count going up*, and five links is that
+count, not its resolution. Closing the half that looks finished would record
+five bespoke controls as the answer to an item opened because there were three.
+What is still owed is unchanged: one navigation component in §2, deleting all
+five, before `STAGE-5` 5.3's eleven journeys have to reach every screen.
 
 #### O-30 · `GET /looks/{id}` and `DELETE /looks/{id}` are headings with nothing under them — opened at task 3.2
 

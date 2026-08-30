@@ -61,7 +61,7 @@ function scale(value: string | null): number | undefined {
         }
         <!-- The only way into /profile, and it sits in the account row rather
              than beside the item count because that is what the row is: who is
-             signed in, and the two things they can do about it. inline-flex
+             signed in, and the three things they can do about it. inline-flex
              because min-height does not apply to an inline element, so the
              anchor would miss the 44px target the button beside it keeps. -->
         <a
@@ -69,6 +69,16 @@ function scale(value: string | null): number | undefined {
           class="inline-flex min-h-11 items-center rounded-md px-3 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           {{ i18n.t('wardrobe.profile') }}
+        </a>
+        <!-- The only way into /saved, built to match the anchor above rather
+             than as the navigation AUDITS.md O-29 asks for: that item is open
+             and this is its fifth instance, not its resolution. DECISIONS.md
+             187. -->
+        <a
+          routerLink="/saved"
+          class="inline-flex min-h-11 items-center rounded-md px-3 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {{ i18n.t('wardrobe.saved') }}
         </a>
         <button
           type="button"

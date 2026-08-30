@@ -87,6 +87,8 @@ The home screen and the most-used surface.
 ```
 ┌────────────────────────────────┐
 │ Wardrobe            138 items  │
+│ Signed in as Coral             │
+│ Profile  Saved      Sign out   │  ← account row: → /profile, → /saved
 │ 🌤 18°C Tel Aviv    [Style me] │  ← weather strip, → stylist (see 2.12)
 ├────────────────────────────────┤
 │ [All][Tops][Bottoms][Shoes]…   │  ← horizontal scroll, category chips
@@ -104,6 +106,21 @@ The home screen and the most-used surface.
 ```
 
 **Built at task 2.12, and two details of the strip above are not what this legend drew.** **The strip is not itself the tap target**: it carries a labelled **Style me** link instead, because the degraded state — no home location, so the temperature is replaced by a prompt linking to `/profile` — would otherwise put an anchor inside an anchor. The link is present in all three states (a forecast, no home city, a home city whose forecast did not arrive), which is what makes this the entry point `STAGE-2` §2.12 requires rather than a decoration that disappears with the weather. **And there is no glyph**: 🌤 above is one icon for eight conditions, and a sun printed over a line reading *Rain* is worse than no icon, so the line is temperature, condition and city in the body face (`DECISIONS.md` 071, which names this strip). `DECISIONS.md` 180.
+
+**The account row is drawn here for the first time**, and both its links were
+built before this section named either. It is one line — who is signed in, and
+the three things they can do about it: **Profile** (task 2.10a), **Saved**
+(added with the entry-point fix after 3.6) and **Sign out**. Both links are
+anchors with `inline-flex min-h-11`, because `min-height` does not apply to an
+inline element and the anchors would otherwise miss the 44px target the button
+beside them keeps.
+
+**Neither link is what `AUDITS.md` O-29 asks for.** That item wants a
+navigation component in this section, and it is open: five bespoke controls
+across five tasks, each invented by the task that needed it. The Saved link is
+the fifth instance, shipped because Stage 3 is the designated cut line and a
+saved-looks screen nobody can reach makes the whole stage invisible — not
+because the debt was paid. `DECISIONS.md` 187.
 
 **Empty state is important.** A first-time user sees: a one-line explanation and a large **Add your first items** button. Do not ship a blank grid.
 

@@ -191,6 +191,7 @@ describe('WardrobePage', () => {
           // its filters from the URL once, on construction.
           { path: 'wardrobe', children: [] },
           { path: 'profile', children: [] },
+          { path: 'saved', children: [] },
           { path: 'stylist', children: [] },
         ]),
       ],
@@ -264,12 +265,21 @@ describe('WardrobePage', () => {
   });
 
   // 2.10a shipped /profile with nothing linking to it, reachable only by typing
-  // the URL. This is that link, and it is the only one.
+  // the URL. This is that link, and 3.2 shipped /saved the same way — so there
+  // are two of them now, and AUDITS.md O-29 is the count going up rather than
+  // down.
   it('links to the profile screen', async () => {
     await render([item()]);
 
     const link = (fixture.nativeElement as HTMLElement).querySelector('a[href="/profile"]');
     expect(link?.textContent?.trim()).toBe('Profile');
+  });
+
+  it('links to the saved-looks screen', async () => {
+    await render([item()]);
+
+    const link = (fixture.nativeElement as HTMLElement).querySelector('a[href="/saved"]');
+    expect(link?.textContent?.trim()).toBe('Saved');
   });
 
   it('offers the empty state and its call to action when nothing is stored', async () => {

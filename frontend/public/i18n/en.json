@@ -27,6 +27,7 @@
   "wardrobe.title": "Wardrobe",
   "wardrobe.signedInAs": "Signed in as {{name}}",
   "wardrobe.profile": "Profile",
+  "wardrobe.saved": "Saved",
   "wardrobe.weather.region": "Today's weather",
   "wardrobe.weather.line": "{{temp}}°C · {{condition}} in {{city}}",
   "wardrobe.weather.setHome": "Set your home city to see the weather",
