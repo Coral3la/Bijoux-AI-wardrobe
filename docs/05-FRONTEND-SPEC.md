@@ -343,6 +343,44 @@ own work, as `/stylist`'s was at 2.12.
 
 **Form:** destination (autocomplete via `/me/locations/search`), date range, then one occasion chip row per day, defaulting to `casual`.
 
+**Built at task 4.5, and the line above is one field short.** `STAGE-4` 4.5 asks
+for *"an optional notes field"* and this section never drew one. The form has it,
+and it is **unbounded** — `TripPackRequest.notes` is stripped and not
+length-checked, so a counter or a cap here would be a refusal the API does not
+make. Five more things the sentence above does not say, each settled at 4.5's
+orientation:
+
+- **The destination is *picked*, never typed.** The wire takes one string and
+  the endpoint geocodes it again for itself (`DECISIONS.md` 202), so the picker's
+  coordinates are dropped and only the provider's own `name` is sent — a string
+  the geocoder returned is one it will match. The chip prints `name, country` to
+  tell the two Berlins apart, and the country is display text that never leaves
+  the browser, which is `DECISIONS.md` 153 biting a third time: both Berlins send
+  `"Berlin"`. The submit button is disabled until a place has been chosen.
+- **The dates are capped at `today + 14` and floored at nothing.** The cap is
+  `DECISIONS.md` 190's, and the missing floor is 201's: a lower bound on the
+  server's calendar day is a refusal a browser east of UTC earns by its timezone,
+  so the form does not enforce one either. The client refuses an inverted range
+  and a trip longer than fourteen days before spending a round trip; the server
+  answers `trip_too_long` for both.
+- **The chip rows are sized by the dates and keep what was chosen.** Changing
+  either date resizes the list — padding with `casual`, truncating from the end —
+  so a day already set to *work* survives extending the trip. The rows are built
+  in day order because the request schema requires the numbers to arrive as
+  `1..n` *in* order rather than as a permutation of them.
+- **The wait is four cycling status lines and no skeleton.** The stylist draws
+  the outline of the look card because its form *becomes* one; this form becomes
+  a sentence, and a skeleton of a sentence is a grey bar pretending to be
+  progress. The lines name the four steps the server takes — geocode, forecast,
+  wardrobe, assemble — and **none of them names a duration**, because nobody has
+  measured this call.
+- **Success is a confirmation panel, not a navigation.** `/trips/:id` is 4.6's
+  and does not exist, so 4.5 ends at *"Berlin is packed. 8 items · 4 looks"*,
+  built from `packing_list.reuse_summary` — which is this section's own header
+  line, word for word. Task 4.6 replaces the panel with a `router.navigate` and
+  the counts move up to the header they were written for. The destination is
+  rendered in the **body face**, per `DECISIONS.md` 071, which names this screen.
+
 **Result — packing view:**
 
 ```

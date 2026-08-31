@@ -54,6 +54,13 @@ describe('routes', () => {
     expect(await navigate('/profile')).toBe('/profile');
   });
 
+  // The one that matters most if it slips below the wildcard: nothing links to
+  // /trips at all, so the URL is the only way in and a redirect would make the
+  // screen unreachable by any means whatsoever.
+  it('resolves the trip form rather than falling through to the wildcard', async () => {
+    expect(await navigate('/trips')).toBe('/trips');
+  });
+
   it('guards the profile route', async () => {
     TestBed.configureTestingModule({
       providers: [
@@ -76,6 +83,19 @@ describe('routes', () => {
     });
     const router = TestBed.inject(Router);
     await router.navigateByUrl('/stylist');
+
+    expect(router.url).toBe('/login');
+  });
+
+  it('guards the trips route', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter(routes),
+        { provide: AuthService, useValue: { isAuthenticated: () => false } },
+      ],
+    });
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/trips');
 
     expect(router.url).toBe('/login');
   });

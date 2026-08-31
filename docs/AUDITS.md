@@ -1543,6 +1543,24 @@ five bespoke controls as the answer to an item opened because there were three.
 What is still owed is unchanged: one navigation component in §2, deleting all
 five, before `STAGE-5` 5.3's eleven journeys have to reach every screen.
 
+**A sixth was *not* shipped, at task 4.5, and the symptom is back instead.**
+`/trips` is built, guarded and above the wildcard, and **nothing links to it** —
+so `/wardrobe` reaches four screens and the fifth is reachable only by typing
+the URL, which is exactly the state `/saved` was in when this item was opened.
+The count of bespoke controls is still five, and that is the number this item
+keeps; what moved is the other half. Refusing the sixth link was deliberate:
+`STAGE-4` 4.5 says nothing about how the screen is reached, `05-FRONTEND-SPEC.md`
+§7 draws no entry point, and this item's written recommendation is that whoever
+builds the next one builds the navigation instead — which is not a task 4.5 has.
+`DECISIONS.md` 205 records the choice.
+
+**So the deadline is now past twice and the cost has changed shape.** Between
+4.5 and whoever claims §2, the signature feature of this project is a screen a
+user cannot get to. That is a worse state than a sixth link and a better one
+than a sixth precedent, and it is stated here rather than resolved because
+resolving it is one piece of work that belongs to one task. `STAGE-5` 5.3 still
+cannot run through the address bar.
+
 #### O-30 · `GET /looks/{id}` and `DELETE /looks/{id}` are headings with nothing under them — opened at task 3.2
 
 `04-API-SPEC.md` gives both a heading and no body: no request, no response, no

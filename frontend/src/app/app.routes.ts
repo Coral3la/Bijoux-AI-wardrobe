@@ -55,6 +55,16 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/looks/saved-looks.page').then((m) => m.SavedLooksPage),
   },
+  // Above the wildcard like the four before it. It ships with nothing linking
+  // to it, which AUDITS.md O-29 has been counting since 3.2 — its written
+  // recommendation is that the next entry point be the navigation bar rather
+  // than a sixth bespoke link, and building that is not this task's. The screen
+  // is reached by typing the URL until something claims O-29.
+  {
+    path: 'trips',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/trips/trips.page').then((m) => m.TripsPage),
+  },
   { path: '', pathMatch: 'full', redirectTo: 'wardrobe' },
   { path: '**', redirectTo: 'wardrobe' },
 ];
