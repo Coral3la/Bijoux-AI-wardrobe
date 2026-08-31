@@ -6,13 +6,11 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Params, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Params, Router } from '@angular/router';
 
-import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { ItemFilters, WardrobeStore } from '../../core/state/wardrobe.store';
 import { CATEGORIES, COLORS } from '../../shared/models/enums';
-import { userLabel } from '../../shared/models/user.model';
 import { FilterBar } from './filter-bar';
 import { ItemCard } from './item-card';
 import { PendingStrip } from './pending-strip';
@@ -44,15 +42,7 @@ function scale(value: string | null): number | undefined {
 @Component({
   selector: 'app-wardrobe-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    FilterBar,
-    ItemCard,
-    PendingStrip,
-    RouterLink,
-    UploadSheet,
-    WardrobeInsights,
-    WeatherStrip,
-  ],
+  imports: [FilterBar, ItemCard, PendingStrip, UploadSheet, WardrobeInsights, WeatherStrip],
   template: `
     <main class="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
       <header class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -62,47 +52,13 @@ function scale(value: string | null): number | undefined {
         }
       </header>
 
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <!-- Body face, deliberately: display_name is user-entered and may be
-             non-Latin, which Fraunces does not cover. DECISIONS.md 071. -->
-        @if (auth.currentUser(); as user) {
-          <p class="text-sm">{{ i18n.t('wardrobe.signedInAs', { name: label(user) }) }}</p>
-        }
-        <!-- The only way into /profile, and it sits in the account row rather
-             than beside the item count because that is what the row is: who is
-             signed in, and the three things they can do about it. inline-flex
-             because min-height does not apply to an inline element, so the
-             anchor would miss the 44px target the button beside it keeps. -->
-        <a
-          routerLink="/profile"
-          class="inline-flex min-h-11 items-center rounded-md px-3 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          {{ i18n.t('wardrobe.profile') }}
-        </a>
-        <!-- The only way into /saved, built to match the anchor above rather
-             than as the navigation AUDITS.md O-29 asks for: that item is open
-             and this is its fifth instance, not its resolution. DECISIONS.md
-             187. -->
-        <a
-          routerLink="/saved"
-          class="inline-flex min-h-11 items-center rounded-md px-3 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          {{ i18n.t('wardrobe.saved') }}
-        </a>
-        <button
-          type="button"
-          (click)="signOut()"
-          class="min-h-11 rounded-md px-3 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          {{ i18n.t('wardrobe.signOut') }}
-        </button>
-      </div>
-
-      <!-- The only route into /stylist in the whole application, which is why
-           it sits above every branch below rather than inside one: an empty
-           wardrobe, a failed load and a filter with no matches are all states
-           this screen can be in, and none of them is a reason to lose the way
-           to the stylist. §2.12. -->
+      <!-- Above every branch below rather than inside one: an empty wardrobe, a
+           failed load and a filter with no matches are all states this screen
+           can be in, and none of them is a reason to lose the way to the
+           stylist. It stopped being the *only* route there at 4.9 — the
+           navigation bar carries one too — and it stays because Style me is an
+           action on today's forecast rather than navigation, which §2.12
+           requires in all three of the strip's states. -->
       <app-weather-strip />
 
       <!-- Under the strip and above the pending strip, because both of those
@@ -222,12 +178,10 @@ function scale(value: string | null): number | undefined {
 })
 export class WardrobePage {
   protected readonly i18n = inject(I18nService);
-  protected readonly auth = inject(AuthService);
   protected readonly store = inject(WardrobeStore);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
-  protected readonly label = userLabel;
   protected readonly sheetOpen = signal(false);
 
   // There is nothing to filter while the wardrobe is loading, broken or empty,
@@ -308,12 +262,6 @@ export class WardrobePage {
 
   protected closeSheet(): void {
     this.sheetOpen.set(false);
-  }
-
-  // No guard re-runs on a route that is already active. DECISIONS.md 068.
-  protected signOut(): void {
-    this.auth.logout();
-    void this.router.navigateByUrl('/login');
   }
 
   private filtersFromUrl(): ItemFilters {

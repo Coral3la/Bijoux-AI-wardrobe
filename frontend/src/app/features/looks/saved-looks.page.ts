@@ -20,13 +20,7 @@ import { ItemCard } from '../wardrobe/item-card';
   imports: [ItemCard, RouterLink],
   template: `
     <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
-      <header class="flex items-center gap-3">
-        <a
-          routerLink="/wardrobe"
-          class="min-h-11 rounded-md py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          {{ i18n.t('saved.back') }}
-        </a>
+      <header>
         <h1 class="font-display text-3xl">{{ i18n.t('saved.title') }}</h1>
       </header>
 

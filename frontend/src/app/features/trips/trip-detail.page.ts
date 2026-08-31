@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import { TripsApi } from '../../core/api/trips.api';
 import { I18nService } from '../../core/i18n/i18n.service';
@@ -50,21 +50,9 @@ export function tripLoadErrorKey(error: unknown): string {
 @Component({
   selector: 'app-trip-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ItemCard, PackingList, RouterLink],
+  imports: [ItemCard, PackingList],
   template: `
     <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
-      <!-- Outside every branch below, which is what the error states need: a
-           trip that does not load leaves this screen with nothing on it, and a
-           back link inside the loaded branch would strand the user on the
-           message. It is the fifth bespoke navigation control in this project
-           and AUDITS.md O-29 counts it. -->
-      <a
-        routerLink="/wardrobe"
-        class="inline-flex min-h-11 items-center self-start text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
-        {{ i18n.t('trip.back') }}
-      </a>
-
       @if (detail(); as loaded) {
         <header class="flex flex-col gap-1">
           <!-- Body face, not font-display. The destination is a place name off

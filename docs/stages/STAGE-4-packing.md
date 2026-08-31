@@ -163,6 +163,38 @@ no trips list and `/trips` is the form.
 ### 4.7 Export
 A share or copy button producing the packing list as plain text. Trivial to build, and it is the thing a user would actually use on the morning of a trip.
 
+### 4.9 Global navigation
+
+The bar every screen in this project has done without. **This task is the one
+`AUDITS.md` O-29 asked for**, added after the list at the foot of this file was
+written and after five separate tasks each shipped the bespoke link that item
+told them not to — the same shape as 4.6b, one item further down the file.
+
+The immediate need is that `/trips` is reachable only by typing the URL, which
+makes the signature feature of this project invisible. The real work is larger:
+one navigation surface serving every top-level screen, replacing the controls
+that stood in for it. **Numbered 4.9 rather than 4.8**, which is left unused,
+and placed after 4.7 in the file although 4.7 is not built — this is chrome
+rather than a step in the packing feature, and nothing in it blocks the export.
+
+**Delete what it replaces.** The point of the task is the count coming down, so
+the back links and account-row anchors go in the same commit as the bar. A
+contextual action that happens to navigate is not navigation and stays where it
+is; the line between the two has to be drawn explicitly and defended in a spec.
+
+**Read O-29's history before writing anything.** That item kept its count in
+prose across eleven weeks and five instances, and the number is wrong.
+
+**Acceptance criteria — 4.9's own**, for the same reason 4.6a and 4.6b have theirs:
+
+- [x] Every top-level screen is reachable from every other one, with no address bar
+- [x] The bar renders for a signed-in user and never on `/login` or `/register`
+- [x] The active item survives a query-parameter change and a child route
+- [x] Every back link and account-row anchor the bar replaces is deleted, with its keys
+- [x] `AUDITS.md` O-29 is closed on a count taken from the tree rather than from its own prose
+
+`DECISIONS.md` 208, `AUDITS.md` O-29.
+
 ---
 
 ## Acceptance criteria
@@ -178,7 +210,7 @@ A share or copy button producing the packing list as plain text. Trivial to buil
 
 ## Commit checkpoints
 
-`feat(db): trips schema` · `feat(weather): multi-day forecast` · `feat(ai): trip packing orchestration` · `feat(api): trip endpoints` · `feat(web): trip form` · `feat(web): packing view` · `feat(web): swap an item on a trip look` · `feat(web): packing list export`
+`feat(db): trips schema` · `feat(weather): multi-day forecast` · `feat(ai): trip packing orchestration` · `feat(api): trip endpoints` · `feat(web): trip form` · `feat(web): packing view` · `feat(web): swap an item on a trip look` · `feat(web): packing list export` · `feat(web): global navigation`
 
 ## Prompt tuning note
 

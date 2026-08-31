@@ -7,7 +7,6 @@ import {
   signal,
 } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
 import { MeApi } from '../../core/api/me.api';
@@ -49,16 +48,9 @@ function toWire(value: string): string | null {
 @Component({
   selector: 'app-profile-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule],
   template: `
     <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
-      <a
-        routerLink="/wardrobe"
-        class="min-h-11 self-start text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
-        {{ i18n.t('profile.back') }}
-      </a>
-
       <h1 class="font-display text-3xl">{{ i18n.t('profile.title') }}</h1>
 
       <form [formGroup]="form" (ngSubmit)="submit()" novalidate class="flex flex-col gap-6">

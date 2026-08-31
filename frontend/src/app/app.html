@@ -1,1 +1,10 @@
+<!-- Gated on the user rather than on the token: isAuthenticated() reads the
+     signal GET /auth/me fills, so a restore in flight renders no bar and a
+     rejected token never renders one. /login and /register are guest-guarded
+     and reach this branch with a null user, which is what keeps the navigation
+     off them without naming a route here. -->
+@if (auth.isAuthenticated()) {
+  <app-nav-bar />
+}
+
 <router-outlet />

@@ -503,16 +503,18 @@ describe('TripDetailPage', () => {
     expect(text()).not.toContain(RAW_DETAIL);
   });
 
-  // The link is outside every branch, which is what the error states need: a
-  // trip that does not load leaves this screen with nothing else on it.
-  it('keeps the way back on screen in every state', async () => {
+  // The way out of a trip that does not load is the navigation bar, which the
+  // shell renders above this component in every state including this one. What
+  // this screen must not do is build its own — the sixth time that happened is
+  // what closed AUDITS.md O-29.
+  it('carries no navigation of its own, loaded or not', async () => {
     await render();
-    expect(element().querySelector('a[href="/wardrobe"]')).not.toBeNull();
+    expect(element().querySelector('a[href="/wardrobe"]')).toBeNull();
 
     tripRequest().flush({ code: 'not_found' }, { status: 404, statusText: 'Not Found' });
     fixture.detectChanges();
 
-    expect(element().querySelector('a[href="/wardrobe"]')).not.toBeNull();
+    expect(element().querySelector('a[href="/wardrobe"]')).toBeNull();
   });
   // 4.6b. AUDITS.md O-33: both endpoints were built, tested and reachable by
   // nobody until these two controls.

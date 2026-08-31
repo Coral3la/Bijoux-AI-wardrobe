@@ -25,12 +25,13 @@ src/app/
 │   ├── auth/            login.page.ts, register.page.ts
 │   ├── wardrobe/        wardrobe.page.ts, upload-sheet.ts, item-card.ts,
 │   │                    item-detail.page.ts, tag-editor.ts, filter-bar.ts
-│   │                    (all built; shared/ui/ below is still empty)
 │   ├── stylist/         stylist.page.ts, look-request-form.ts, look-card.ts
 │   ├── trips/           trips.page.ts, trip-form.ts, packing-view.ts, day-strip.ts
 │   └── profile/         profile.page.ts
 ├── shared/
-│   ├── ui/              button, chip, sheet, skeleton, empty-state, spinner, toast
+│   ├── ui/              nav-bar.ts (task 4.9, the only one built)
+│   │                    button, chip, sheet, skeleton, empty-state, spinner,
+│   │                    toast — the seven are AUDITS.md O-15 and none exists
 │   ├── models/          user.model.ts, item.model.ts, look.model.ts,
 │   │                    trip.model.ts, enums.ts
 │   └── pipes/           cloudinary-url.pipe.ts (built at 1.9), enum-label.pipe.ts
@@ -67,6 +68,56 @@ export class WardrobeStore {
 `canStyle` is used to disable the stylist entry point with a clear explanation rather than letting a request fail server-side.
 
 **The sketch above is the finished shape, not the shape at any one task.** Task 1.5 ships `items`, `total`, `isLoading`, `loadError`, `isEmpty`, `processing`, `retrying` and `retagErrors`, plus `load()` and `retag()`. `filters` and `visible` arrive with the filter bar at 1.8 — **`byCategory` does not, and was corrected out of that list at 1.8 rather than built**: it groups `visible()`, the wardrobe grid is flat, and the header carries the only count on the screen, so it would be a computed with no consumer of exactly the kind this sentence refuses on 1.5's behalf (`DECISIONS.md` 112), and `canStyle` with the stylist at Stage 2 — building them at 1.5 would be four computeds with no consumer, and `canStyle` in particular is the stylist gate, which `STAGE-1` puts out of scope for the whole stage. `total` and the two retag collections are not in the sketch at all: `total` counts the filter rather than the page and is the only truthful count above 200 items (`DECISIONS.md` 094), and the retag pair is keyed by item id so a spinner and a failure land on the tile that owns them (`DECISIONS.md` 093).
+
+---
+
+## Navigation
+
+**Built at task 4.9, and it is the first chrome in this project that belongs to
+no screen.** `shared/ui/nav-bar.ts`, rendered by `app.html` above the router
+outlet, so it is a sibling of every screen rather than part of one.
+
+```
+┌────────────────────────────────┐
+│ Wardrobe Stylist Trips Saved … │  ← sticky, scrolls horizontally at 390px
+├────────────────────────────────┤
+│ (the screen)                   │
+└────────────────────────────────┘
+```
+
+**Five items, one per top-level screen**, in `NAV_ITEMS`: Wardrobe, Stylist,
+Trips, Saved, Profile — plus **Sign out**, last and pushed to the end, which is
+the one control here that does not navigate. `/wardrobe/:id` and `/trips/:id`
+get no item of their own: they are children of items that exist.
+
+**It renders only for a signed-in user**, gated in the shell on
+`auth.isAuthenticated()`. That signal is the *user*, not the token, so a
+restore still in flight renders no bar and a rejected token never renders one —
+and `/login` and `/register` get none without either being named. A screen
+added to `app.routes.ts` cannot acquire a bar by existing.
+
+**The active item is `routerLinkActive` at its default, non-exact matching**,
+with `ariaCurrentWhenActive="page"`. Non-exact compares path segments as a
+prefix and query parameters as a **subset**, and these links carry no query
+parameters at all — so the Wardrobe item stays lit under `?category=tops`,
+which the grid writes on every filter change, and on `/wardrobe/:id`; the Trips
+item stays lit on `/trips/:id`. `{ exact: true }` compares query parameters
+exactly and would switch the Wardrobe item off the first time anybody filtered.
+`DECISIONS.md` 208.
+
+**It is one bar at every width**, not tabs on a phone and a bar on a desktop:
+the wardrobe's **Add items** FAB is `fixed bottom-6 end-6`, so a bottom tab bar
+would sit underneath it. At 390px the row scrolls horizontally rather than
+wrapping, on the category chip row's precedent — a sticky bar that grows to two
+lines costs vertical space on every screen.
+
+**What it replaced.** Six back links and two account-row anchors, deleted at
+4.9 with eight i18n keys. Three navigation-shaped controls survive because they
+are contextual actions rather than navigation: the weather strip's **Style me**
+and **Set your home city** (§2.12, unedited by this task), and `/saved`'s empty
+state offering **Ask for a look**. `item.back` on `/wardrobe/:id` survives too,
+as a hierarchical *up* from a child screen. `AUDITS.md` O-29 carries the census
+of what was there before.
 
 ---
 
@@ -108,20 +159,21 @@ The home screen and the most-used surface.
 
 **Built at task 2.12, and two details of the strip above are not what this legend drew.** **The strip is not itself the tap target**: it carries a labelled **Style me** link instead, because the degraded state — no home location, so the temperature is replaced by a prompt linking to `/profile` — would otherwise put an anchor inside an anchor. The link is present in all three states (a forecast, no home city, a home city whose forecast did not arrive), which is what makes this the entry point `STAGE-2` §2.12 requires rather than a decoration that disappears with the weather. **And there is no glyph**: 🌤 above is one icon for eight conditions, and a sun printed over a line reading *Rain* is worse than no icon, so the line is temperature, condition and city in the body face (`DECISIONS.md` 071, which names this strip). `DECISIONS.md` 180.
 
-**The account row is drawn here for the first time**, and both its links were
-built before this section named either. It is one line — who is signed in, and
-the three things they can do about it: **Profile** (task 2.10a), **Saved**
-(added with the entry-point fix after 3.6) and **Sign out**. Both links are
-anchors with `inline-flex min-h-11`, because `min-height` does not apply to an
-inline element and the anchors would otherwise miss the 44px target the button
-beside them keeps.
+**The account row was drawn here and is gone.** It held **Profile** (task
+2.10a), **Saved** (after 3.6), **Sign out** and a *Signed in as …* line, and
+**task 4.9 deleted all four**: the two anchors and the sign-out are in the
+navigation bar now, and the identity line is nowhere — `/profile` is the screen
+about who you are, and no other screen ever announced it. The mockup above is
+drawn without the row. The bar is not in that mockup either, because it is not
+this screen's: it is the shell's, it sits above every screen, and it is
+specified under **Navigation** above rather than here. `AUDITS.md` O-29 is
+**closed** and `DECISIONS.md` 208 is the entry.
 
-**Neither link is what `AUDITS.md` O-29 asks for.** That item wants a
-navigation component in this section, and it is open: five bespoke controls
-across five tasks, each invented by the task that needed it. The Saved link is
-the fifth instance, shipped because Stage 3 is the designated cut line and a
-saved-looks screen nobody can reach makes the whole stage invisible — not
-because the debt was paid. `DECISIONS.md` 187.
+**This section is where O-29 said the navigation belonged, and that is the one
+part of its recommendation not taken.** A bar rendered by `app.html` cannot be
+specified inside the wardrobe's section without describing it as something the
+wardrobe owns — which is the mistake that produced the account row in the first
+place.
 
 **The insights panel is built at task 3.6, and it is the first screen in the application to read `GET /items/stats`.** One `<section>` between the weather strip and the pending strip: both of those are standing context about the wardrobe, where the pending strip is transient feedback that belongs beside the grid it changes. It prints how many garments have never been worn, and beneath that the most-worn garment as a link to its detail screen. It **fetches for itself**, once, on construction, and holds no store — `WeatherStrip`'s shape and `WeatherStrip`'s reasoning (`DECISIONS.md` 180): `WardrobeStore` is `providedIn: 'root'`, outlives this page and holds the collection the poll mutates, so a `ready`-scoped count kept beside `total` in it would be a second count of one wardrobe with nobody to reconcile the two.
 
@@ -228,8 +280,13 @@ link inside it would disappear for the four to eight seconds of the wait and
 again for as long as the card is up, which is most of the time anybody spends
 here. A real anchor, not a history call — `/wardrobe` is a place, and the browser
 back button on a screen reached from the weather strip goes somewhere else.
-It is the fourth hand-placed navigation control in the application; `AUDITS.md`
-**O-29** counts it.
+*This paragraph described a **Back to wardrobe** link and called it "the fourth
+hand-placed navigation control in the application". **Task 4.9 deleted it** along
+with the four other peer-level back links, and the count it quoted was wrong as
+well as stale — the tree held ten such controls, not four, and `AUDITS.md`
+O-29's closing note is the census. What the paragraph argues is still true of
+the navigation that replaced it: the way out of the stylist has to sit outside
+the three-way branch, and the bar does, one level further out than this screen.*
 
 ### 6. Look card — the visual payoff
 
@@ -290,7 +347,7 @@ list it feeds was specified nowhere.
 
 ```
 ┌────────────────────────────────┐
-│  ← Wardrobe   Saved looks      │
+│  Saved looks                   │
 │  ┌──────────────────────────┐  │
 │  │ Morning meetings      ♥  │  │
 │  │ 18°C — the blazer is …   │  │
@@ -488,8 +545,11 @@ orientation.
   pack request. This does **not** add to `AUDITS.md` **O-29**'s count: that
   item counts bespoke controls a user can see and press, and this is a
   redirect after an action, the same shape `item-detail.page.ts` has had since
-  1.9 and which was never counted either. The screen's own **Back to wardrobe**
-  link is the fifth control and remains the only one on it.
+  1.9 and which was never counted either. *The last sentence here said the
+  screen's own **Back to wardrobe** link "is the fifth control and remains the
+  only one on it"; task 4.9 deleted that link, and it was the tenth control
+  rather than the fifth — see `AUDITS.md` O-29's closing census. The redirect
+  described above is unaffected and still uncounted.*
 
 ### 8. Profile — `/profile`
 

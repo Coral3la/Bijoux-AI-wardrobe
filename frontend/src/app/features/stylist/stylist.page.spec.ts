@@ -376,22 +376,21 @@ describe('StylistPage', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  // Asserted in two states, because one state proves nothing here: the link is
-  // correct only if it sits outside the branch that swaps the form for the
-  // skeleton and then for the card. Moving it inside the header would still
-  // pass the first expectation and fail the last.
-  it('offers a way back to the wardrobe from every state', async () => {
+  // The three states this asserted the back link across are now the navigation
+  // bar's, which is outside this component and outside its branch chain by
+  // construction — `app.spec.ts` proves it renders and `nav-bar.spec.ts` proves
+  // where it goes. What survives here is that the screen builds none of its own.
+  it('carries no navigation of its own out of the stylist', async () => {
     await render();
-
-    expect(backLink()?.textContent?.trim()).toBe(en['stylist.back']);
+    expect(backLink()).toBeNull();
 
     await submit();
-    expect(backLink()).not.toBeNull();
+    expect(backLink()).toBeNull();
 
     suggestRequest().flush(response());
     await fixture.whenStable();
 
-    expect(backLink()).not.toBeNull();
+    expect(backLink()).toBeNull();
   });
 
   it('renders the look it was given', async () => {

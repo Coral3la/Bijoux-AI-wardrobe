@@ -1477,7 +1477,7 @@ bill of health (`CONVENTIONS.md`).
   unaudited document and the one most likely to describe tests that no longer
   match the suite. That is the obvious scope for audit 2.
 
-#### O-29 · Three screens now exist with nothing linking to them — opened at task 3.2
+#### O-29 · ~~Three screens now exist with nothing linking to them~~ — **closed at task 4.9**
 
 `/saved` is built, guarded, above the wildcard, and reachable only by typing
 the URL. It is the **third** time this has happened: `app.routes.ts` carries a
@@ -1513,13 +1513,19 @@ screen and cannot do it through the address bar. **Do not let a fourth screen
 ship with a bespoke link.** This item is not a defect in any of the three
 tasks; it is the cost of specifying screens one at a time.
 
-**A fifth was shipped at task 4.6**, and it is an exit like the fourth: the
+**A sixth was shipped at task 4.6**, and it is an exit like the fourth: the
 packing view carries its own **Back to wardrobe**. The screen is the first in
 this project that arrives with an entry point already built — `/trips`
 navigates into it the instant a pack succeeds — so what it needed was the way
 *out*, and a navigation the user cannot undo is a worse dead end than one they
-typed. The count is now five bespoke controls across five tasks, and the
-recommendation below is unchanged and still unclaimed.
+typed. The recommendation below is unchanged and still unclaimed.
+
+*Corrected at task 4.9: this paragraph called itself the fifth and put the
+count at "five across five tasks", and both halves were already taken — the
+Saved link two paragraphs down is this item's fifth, and it was shipped at 3.6,
+before this. Two paragraphs of this item claimed the same ordinal for eleven
+weeks. The count was also wrong in a second way that neither paragraph could
+see; the census under the closing note below is what the tree actually holds.*
 
 **A fourth was shipped anyway, after task 3.3.** `/stylist` gained a **Back to
 wardrobe** link, and the count this item keeps is now four bespoke controls
@@ -1551,12 +1557,15 @@ five bespoke controls as the answer to an item opened because there were three.
 What is still owed is unchanged: one navigation component in §2, deleting all
 five, before `STAGE-5` 5.3's eleven journeys have to reach every screen.
 
-**A sixth was *not* shipped, at task 4.5, and the symptom is back instead.**
+**No *entry point* was shipped at task 4.5, and the symptom is back instead.**
 `/trips` is built, guarded and above the wildcard, and **nothing links to it** —
 so `/wardrobe` reaches four screens and the fifth is reachable only by typing
 the URL, which is exactly the state `/saved` was in when this item was opened.
-The count of bespoke controls is still five, and that is the number this item
-keeps; what moved is the other half. Refusing the sixth link was deliberate:
+The count of bespoke controls is still five by the reckoning this item was
+keeping, and *that reckoning was wrong in the same commit it was written in*:
+`89e3a88` shipped `/trips`'s own **Back to wardrobe** alongside the form, so 4.5
+refused an entry and built an exit, and this item counted only the refusal.
+What moved is the other half. Refusing the sixth link was deliberate:
 `STAGE-4` 4.5 says nothing about how the screen is reached, `05-FRONTEND-SPEC.md`
 §7 draws no entry point, and this item's written recommendation is that whoever
 builds the next one builds the navigation instead — which is not a task 4.5 has.
@@ -1568,6 +1577,78 @@ user cannot get to. That is a worse state than a sixth link and a better one
 than a sixth precedent, and it is stated here rather than resolved because
 resolving it is one piece of work that belongs to one task. `STAGE-5` 5.3 still
 cannot run through the address bar.
+
+**Closed at task 4.9, and the count in every paragraph above was wrong.** The
+navigation exists: `shared/ui/nav-bar.ts`, rendered by the shell above the
+outlet, five items for the five top-level screens, gated on the signed-in user
+so `/login` and `/register` never see it. `/trips` is reachable from every
+screen in the application, which is the immediate thing this task was opened
+for, and it is reachable the same way as everything else rather than by a sixth
+invention.
+
+**What the tree actually held, counted rather than remembered.** This item kept
+a running tally in prose and the tally drifted from the code it was about. Every
+control below was found by reading the templates at `8e21c2a` and dated with
+`git log -S`:
+
+| Control | Screen → target | Commit | Kind |
+|---|---|---|---|
+| `item.back` | `/wardrobe/:id` → `/wardrobe` | `bf7b8d5` 1.9 | exit |
+| `wardrobe.profile` | `/wardrobe` → `/profile` | `2b13140` 2.10a | entry |
+| `profile.back` | `/profile` → `/wardrobe` | `2b13140` 2.10a | exit |
+| `wardrobe.weather.styleMe` | `/wardrobe` → `/stylist` | `d52fe90` 2.12 | entry |
+| `wardrobe.weather.setHome` | `/wardrobe` → `/profile` | `d52fe90` 2.12 | entry, degraded state only |
+| `saved.back` | `/saved` → `/wardrobe` | `5ce9189` 3.2 | exit |
+| `stylist.back` | `/stylist` → `/wardrobe` | `64dfecd` 3.3+ | exit |
+| `wardrobe.saved` | `/wardrobe` → `/saved` | `2111428` 3.6+ | entry |
+| `trip.back` | `/trips` → `/wardrobe` | `89e3a88` 4.5 | exit |
+| `trip.back` | `/trips/:id` → `/wardrobe` | `282c7df` 4.6 | exit |
+
+**Ten controls across nine commits, six of them the same back link.** Not five.
+The five this item counted were the instances it happened to notice at the
+moment it was edited, and its own definition does not survive the list: the
+paragraph on the stylist's back link names `item.back` and `profile.back` as
+prior art *while numbering the control it describes fourth*, which cannot be
+true of a tally that counts either of them. The three ways it went wrong are
+worth separating, because they are three different failure modes of a count kept
+in prose. It **double-booked an ordinal** — two paragraphs called themselves the
+fifth. It **missed a control shipped by a task it was writing about**, 4.5's
+exit, in the same paragraph that recorded 4.5's refusal. And it **never counted
+the back links that predated it**, which is defensible as a scope but was never
+stated as one, so the number read as a census and was not.
+
+**This matters more than the arithmetic.** The recommendation this item repeated
+five times — *do not let another screen ship with a bespoke link* — was measured
+against a number that was too small, in a file whose whole purpose is to be the
+thing you can trust when the code and your memory disagree. Closing it on "five"
+would have recorded the wrong figure permanently and made the fix look cheaper
+than it was: the work was deleting **six** controls and their keys, not five.
+The strings went too — `profile.back`, `stylist.back`, `saved.back`, `trip.back`,
+`wardrobe.profile`, `wardrobe.saved`, `wardrobe.signOut` and
+`wardrobe.signedInAs`, eight keys for seven controls, because `trip.back` served
+two screens.
+
+**Four controls survive, and three of them are deliberate.** `item.back` stays:
+`/wardrobe/:id` is a child of `/wardrobe`, so its link is a hierarchical *up*
+rather than navigation between peers, and a nav item for a detail screen is not
+a thing this application has. The weather strip keeps **Style me** and **Set
+your home city** because they are contextual actions on today's forecast rather
+than ways around the application — `05-FRONTEND-SPEC.md` §2.12 requires the
+first in all three states and it stands unedited. The fourth is `/saved`'s empty
+state offering **Ask for a look**, which is a call to action on an empty screen.
+The line this task drew is between *navigation* and *an action that happens to
+navigate*, and it is drawn in `wardrobe.page.spec.ts`: the wardrobe is asserted
+to have no `/saved` link at all and exactly one `/profile` link, required to be
+the strip's degraded prompt.
+
+**What this does not close.** **O-15** is untouched — `shared/ui/` now has one
+component in it and that item is about seven others, none of which is a
+navigation bar. `STAGE-5` 5.3's eleven journeys can now reach every screen
+without the address bar, which is the thing this item said they could not do,
+but no E2E asserts it yet and 5.3 still owns them. And the navigation is **not**
+in the mockup in `05-FRONTEND-SPEC.md` §2 the way this item imagined it: §2
+draws the wardrobe, the bar is the shell's, and it is drawn in a section of its
+own above the screens rather than inside the first one.
 
 #### O-30 · `GET /looks/{id}` and `DELETE /looks/{id}` are headings with nothing under them — opened at task 3.2
 

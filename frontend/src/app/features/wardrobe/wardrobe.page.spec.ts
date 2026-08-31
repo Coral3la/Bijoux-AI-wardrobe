@@ -298,22 +298,27 @@ describe('WardrobePage', () => {
     expect(text()).not.toContain('1 items');
   });
 
-  // 2.10a shipped /profile with nothing linking to it, reachable only by typing
-  // the URL. This is that link, and 3.2 shipped /saved the same way — so there
-  // are two of them now, and AUDITS.md O-29 is the count going up rather than
-  // down.
-  it('links to the profile screen', async () => {
+  // Both account-row anchors and the sign-out button left at 4.9;
+  // `shared/ui/nav-bar.spec.ts` owns those journeys now. Asserted as an absence,
+  // because the wardrobe growing its own way to another screen is the habit
+  // AUDITS.md O-29 was closed over.
+  //
+  // The two links that remain are the weather strip's, and they are the line
+  // this task drew: a contextual action on today's forecast stays where it is,
+  // and only navigation moved. So the /profile anchor is required to be the
+  // strip's degraded prompt and nothing else, and /saved — which had no
+  // contextual reason to be here — is required to be gone outright.
+  it('carries no navigation of its own to another top-level screen', async () => {
     await render([item()]);
 
-    const link = (fixture.nativeElement as HTMLElement).querySelector('a[href="/profile"]');
-    expect(link?.textContent?.trim()).toBe('Profile');
-  });
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('a[href="/saved"]')).toBeNull();
 
-  it('links to the saved-looks screen', async () => {
-    await render([item()]);
-
-    const link = (fixture.nativeElement as HTMLElement).querySelector('a[href="/saved"]');
-    expect(link?.textContent?.trim()).toBe('Saved');
+    const toProfile = [...page.querySelectorAll('a[href="/profile"]')];
+    expect(toProfile.map((link) => link.textContent?.trim())).toEqual([
+      en['wardrobe.weather.setHome'],
+    ]);
+    expect(toProfile[0].closest('app-weather-strip')).not.toBeNull();
   });
 
   it('offers the empty state and its call to action when nothing is stored', async () => {
