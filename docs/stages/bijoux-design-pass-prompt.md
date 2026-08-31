@@ -84,35 +84,51 @@ That is the whole task. Do not touch component files. Do not touch `styles.scss`
 ## DR.2 — Shared UI kit
 
 **Files (all new):**
-- `frontend/src/app/shared/ui/button.ts`
-- `frontend/src/app/shared/ui/chip.ts`
-- `frontend/src/app/shared/ui/skeleton.ts`
-- `frontend/src/app/shared/ui/empty-state.ts`
-- one spec per component, only smoke tests (renders, honours its inputs, click emits) — no exhaustive coverage.
+- `frontend/src/app/shared/ui/button.ts` — attribute directive, selector `[appButton]`
+- `frontend/src/app/shared/ui/chip.ts` — attribute directive, selector `[appChip]`
+- `frontend/src/app/shared/ui/skeleton.ts` — standalone component, selector `app-skeleton`
+- `frontend/src/app/shared/ui/empty-state.ts` — standalone component, selector `app-empty-state`
+- one spec per file, only smoke tests (renders / honours its inputs / for Button, the caller's click reaches through). No exhaustive coverage.
 
-Standalone Angular components, `OnPush`, `inject()`, named exports, no `any`. Every user-facing string that appears in a caller comes from the caller as an input, not hardcoded here.
+All `OnPush`, `inject()`, named exports, no `any`. Every user-facing string that appears in a caller comes from the caller as content or an input, not hardcoded here.
 
-### `Button`
+**Why directives for Button and Chip and components for Skeleton and EmptyState.** Button and Chip decorate an already-interactive native element — `<button>` or `<a>` — that ships with focus, keyboard, `type`, `disabled` and every aria attribute a caller will need. A wrapper component (`<app-button>` + `<ng-content>`) reinvents that surface as a list of passthrough inputs and gets it wrong quietly. As directives they cost the caller one attribute, leave the native element alone, and let `<a appButton>` and `<button appButton>` share the same visual without a new element. Skeleton and EmptyState are the opposite — nothing exists to decorate, they *are* the element — so they stay components.
 
-Variants as an input: `primary | secondary | ghost | danger`. Sizes: `md | sm` (44px and 36px min height). Ships with the accessible defaults (type="button" unless overridden, focus-visible ring using accent). Content projected via `<ng-content>`. Emits `click` events natively — do not wrap.
+### `Button` (directive)
 
-Visual specs:
-- **primary**: `bg-accent text-white hover:bg-accent-hover rounded-md`
-- **secondary**: `bg-surface text-ink border border-line-strong hover:bg-surface-elevated rounded-md`
+Selector: `[appButton]`. Inputs: `variant: 'primary' | 'secondary' | 'ghost' | 'danger'` (default `'primary'`). No `size` input — every button is `min-h-11` (44px floor per 05-FRONTEND-SPEC line 652). Compact-feeling buttons come from the ghost variant or from caller-added padding, not from a shorter height.
+
+Applies its variant as host classes; leaves `type`, `disabled`, `aria-*` and click semantics to the native element. Shared base host classes: `min-h-11 inline-flex items-center justify-center rounded-md px-5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`.
+
+Variant classes on top of the base:
+- **primary**: `bg-accent text-surface hover:bg-accent-hover`
+- **secondary**: `bg-surface text-ink border border-line-strong hover:bg-surface-elevated`
 - **ghost**: `bg-transparent text-ink underline underline-offset-4 hover:text-ink-muted`
-- **danger**: `bg-transparent text-danger border border-danger hover:bg-danger hover:text-white rounded-md`
+- **danger**: `bg-transparent text-danger border border-danger hover:bg-danger hover:text-surface`
 
-### `Chip`
+### `Chip` (directive)
 
-Inputs: `active: boolean`, `variant?: 'default' | 'accent'` (default = surface + line-strong border; accent = accent-wash + accent-soft border). 36px pill (`rounded-full h-9 px-4 text-sm font-medium`). Active state is `bg-ink text-white` (default variant) or `bg-accent text-white` (accent variant). Content projected.
+Selector: `[appChip]`. Inputs: `active: boolean` (default `false`), `variant: 'default' | 'accent'` (default `'default'`). Applies its variant + active state as host classes AND — this is the honest a11y move — sets `[attr.aria-pressed]` from `active()` as a host binding, so a caller who styles a toggle cannot forget to announce one. Callers pass their content between the tags of their own `<button>`.
 
-### `Skeleton`
+Shared base host classes: `min-h-11 inline-flex items-center rounded-full px-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`.
 
-A shimmering placeholder. Inputs: `shape?: 'rect' | 'circle'` (default rect), `radius?: string` (default `rounded-lg`). Uses `animate-pulse bg-surface-elevated`. Callers set width/height with classes on the host.
+Variant × active matrix:
+- **default, inactive**: `bg-surface text-ink border border-line-strong`
+- **default, active**: `bg-ink text-surface`
+- **accent, inactive**: `bg-surface text-ink-muted border border-line`
+- **accent, active**: `bg-accent-wash text-accent border border-accent-soft`
 
-### `EmptyState`
+### `Skeleton` (component)
 
-Inputs: `icon?: string` (inline SVG path `d` value only, single-path 24×24 stroke icon), `title: string`, `description?: string`. Content projected below the description (for the CTA). Layout: centered `flex flex-col gap-4 items-center text-center py-12 px-6 bg-surface-elevated border border-dashed border-line-strong rounded-xl`.
+Selector: `app-skeleton`. A shimmering placeholder. Inputs: `shape?: 'rect' | 'circle'` (default `'rect'`), `radius?: string` (default `'rounded-lg'`; ignored when `shape === 'circle'`, which wins). Host classes: `block animate-pulse bg-surface-elevated` (the `block` matters — a custom element is inline by default, so caller-added `h-24 w-full` wouldn't bite without it). Host attribute: `aria-hidden="true"` — a pulsing empty box has nothing to announce, and callers that need a wait announcement keep their existing `role="status" aria-live="polite"` line beside the skeleton.
+
+### `EmptyState` (component)
+
+Selector: `app-empty-state`. Inputs: `icon?: string` (inline SVG path `d` value only, single-path 24×24 stroke icon; bound as `<path [attr.d]="icon()">`, an attribute binding — no sanitiser question), `title: string`, `description?: string`. Content projected below the description (for the CTA). Title renders as `<h2 class="font-display text-2xl leading-tight">`. Layout: `flex flex-col gap-4 items-center text-center py-12 px-6 bg-surface-elevated border border-dashed border-line-strong rounded-xl`. (The dashed border stays — it is a placeholder-signal border, not a card border; 05 line 650 governs cards.)
+
+### Spec smoke tests, per file
+
+Each of the four specs has three assertions. For directives: renders, applies its variant classes to the host, and — the one load-bearing spec assertion in DR.2 — **a caller-supplied class on the same element survives beside the directive's own** (a template class binding wins per Angular's styling precedence; every screen in DR.3–DR.6 leans on this, and the alternative to testing it is discovering it silently in a later task). For components: renders, honours its inputs, projected content appears.
 
 **Do not** build sheet, spinner, or toast in this task. They are three of O-15's seven and will earn their place when a second caller exists.
 
@@ -146,19 +162,21 @@ Inputs: `icon?: string` (inline SVG path `d` value only, single-path 24×24 stro
 
 **Insights panel:** the two numbers (34 and 136) render in `font-display text-lg font-medium` inline within the sentence.
 
-**Category chips row:** replace inline chip markup with the new `Chip` component. Active chip uses default variant.
+**Category chips row:** apply the new `[appChip]` directive to the existing chip `<button>` elements. Active chip uses default variant. **Remove `filter-bar.ts`'s inline `[attr.aria-pressed]` bindings on those chips** — a template binding wins over a directive host binding, so leaving both would let them diverge silently. The Chip directive now owns that announcement. The colour swatches in the same file are **not** chips under this plan — they stay swatches with their existing markup.
 
-**Filter bar:** the `[Filters ▾]` button uses the new `Button` (secondary, size sm) with an inline filter SVG on the leading side.
+**Filter bar:** the `[Filters ▾]` button uses the new `[appButton]` directive with `variant="secondary"` and an inline filter SVG on the leading side.
 
 **Item grid:** tiles get `rounded-xl` (from whatever they had). The name below the tile is `text-xs text-ink-muted`. Processing overlay: keep the dim-photo pattern; add an uppercase "Tagging…" label positioned `inset-block-end` in `text-[10px] font-medium tracking-widest uppercase text-ink-muted`.
 
-**Empty state:** replace the inline empty state with the new `EmptyState` component. Existing wardrobe empty-state copy and its "Add your first items" button move to slots.
+**Empty state:** replace the inline empty state with the new `app-empty-state`. Existing wardrobe empty-state copy and its "Add your first items" button move to inputs and projected content. Note the visual shift: the wardrobe empty's current `<h2 class="font-display text-2xl">` becomes EmptyState's own `font-display text-2xl leading-tight` (essentially the same). The saved-looks empty state (DR.6) will pick up the same treatment — this is deliberate, empty states get one identity.
 
-**FAB:** becomes `bg-ink text-white rounded-full h-14 px-6 shadow-md`. Icon (inline SVG plus sign) on the leading side.
+**No-match state:** the wardrobe's no-match branch (filter yields zero results) also converts to `app-empty-state`, with its own copy and a "Clear filters" ghost `[appButton]` as its projected CTA. The rule from `DECISIONS.md` 111 holds — a wardrobe with items in it and nothing visible must **not** offer the empty wardrobe's "Add your first items" call to action, so its inputs and slot content are different from the empty-wardrobe case.
+
+**FAB:** becomes `bg-ink text-surface rounded-full h-14 px-6 shadow-md`. Icon (inline SVG plus sign) on the leading side.
 
 **Item detail page (`/wardrobe/:id`):** the back link at the top stays (it is hierarchical up-navigation, per the nav-bar comment). Layout becomes: back link, then a hero image occupying the full content width with `rounded-2xl aspect-square max-w-md mx-auto`, then the item name as `font-display text-3xl leading-tight` beneath it, then meta list (category / colours / warmth / formality / etc.) rendered as `text-sm text-ink-muted` pairs stacked with `gap-2`. Primary action row uses the new `Button` component: **Style around this** as primary, **Edit tags** as secondary, **Delete** as danger. Wrap the action row in `flex flex-wrap gap-3`. The "processing" and "failed" states keep their existing behaviour, just re-skinned to use `bg-surface-elevated rounded-xl p-4` (no card border; the surface-elevated colour is the distinction).
 
-**Tag editor:** wrap the form in `bg-surface rounded-2xl p-5 shadow-sm`. Each dimension (category, layer, colours, formality, warmth, condition, etc.) becomes a labelled section separated by `border-block-start border-line pt-5` (first section has no border). Section label is `text-xs font-medium tracking-widest uppercase text-ink-soft`. All single-select and multi-select controls use the new `Chip` component — accent variant for multi-select dimensions (colours), default variant for single-select. Save is primary `Button`, Cancel is ghost `Button`.
+**Tag editor:** wrap the form in `bg-surface rounded-2xl p-5 shadow-sm`. Each dimension (category, layer, colours, formality, warmth, condition, etc.) becomes a labelled section separated by `border-block-start border-line pt-5` (first section has no border). Section label is `text-xs font-medium tracking-widest uppercase text-ink-soft`. **Keep the ten native `<select>` elements as selects** — a select-to-chip-group conversion is a real UX change (native OS picker, keyboard, screen-reader semantics all shift) and belongs in its own task, not a visual pass. Re-skin the selects: `bg-surface border border-line-strong rounded-md min-h-11 px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`. Save is primary `Button`, Cancel is ghost `Button`.
 
 **Commit:** `refactor(web): wardrobe visual refresh`
 
@@ -211,11 +229,11 @@ Inputs: `icon?: string` (inline SVG path `d` value only, single-path 24×24 stro
 
 **Reuse sentence:** wrap in `bg-surface-elevated border-inline-start-4 border-accent rounded-md p-3 pl-4`. `text-sm text-ink leading-relaxed`.
 
-**Day strip:** each day pill is a 68px min-width flex-column card. Inactive: `bg-surface border border-line-strong rounded-lg` with weekday label uppercase `text-[10px] tracking-widest text-ink-soft`, day number `font-display text-lg font-medium`, temperature `text-[10px] text-ink-muted`. Active: `bg-accent text-white` with the same three lines, opacity 0.8 on the labels.
+**Day strip:** each day pill is a 68px min-width flex-column card. Inactive: `bg-surface border border-line-strong rounded-lg` with weekday label uppercase `text-[10px] tracking-widest text-ink-soft`, day number `font-display text-lg font-medium`, temperature `text-[10px] text-ink-muted`. Active: `bg-accent text-surface` with the same three lines, opacity 0.8 on the labels.
 
 **Selected day header:** `font-display text-xl font-medium` day name, with an uppercase caption below showing occasion and temperature.
 
-**Trip look:** the tile grid inside a day mirrors the stylist look card's 2+3 layout — wrap in `bg-surface rounded-2xl p-4 shadow-sm`. The swap button ↻ becomes a `Button` (secondary, size sm) with an inline refresh SVG.
+**Trip look:** the tile grid inside a day mirrors the stylist look card's 2+3 layout — wrap in `bg-surface rounded-2xl p-4 shadow-sm`. The swap button ↻ becomes a `<button appButton variant="secondary" [attr.aria-label]="…">` with an inline refresh SVG and compact caller-added padding (`px-3`) — height stays min-h-11 per the 44px floor.
 
 **Packing list:** wrap in `bg-surface rounded-xl overflow-hidden shadow-sm`. No card border — 05 line 650; the shadow carries it. Each row: 12px vertical padding, 14px horizontal, `border-block-end border-line` (last row has no border-block-end) — the row divider IS a line (that is edge definition inside the card, not a card border). 32px thumbnail (`rounded-md`), item name `text-sm`, reuse count on the right in `text-xs text-ink-soft tabular-nums`.
 
