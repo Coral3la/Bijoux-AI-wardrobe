@@ -1,13 +1,15 @@
 # Progress
 
 **Current stage:** Stage 4 — Trip Packing
-**Status:** Stage 4 — **4.1, 4.2 and 4.3 are built** (migration `0005`, `get_daily_forecast`, and `pack_trip` with the trip half of the AI contract). 4.3 landed in three commits: its contract in the documents, a refactor sharing the stylist's wardrobe filter and retry loop between two routes, and the orchestration itself. **Nothing calls `pack_trip` yet** — `POST /trips/pack` is 4.4's, so the service is complete, unit-tested and unreachable from the API. Stage 3 — **all six tasks are built**, 3.1 to 3.6, the last of them in the two commits its own stage file specifies. Its acceptance criteria are the developer's to run and five of the six are unticked; **the sixth is ticked from tests rather than from a run** — the never-worn count is asserted by `wardrobe-insights.spec.ts` against a mocked response and by the endpoint's own integration tests, and nobody has yet seen the panel in a browser. Stage 2 is built end to end from 2.1 to 2.12 and its acceptance criteria are still the developer's to run: the suites, the demo wardrobe timings and the five-out-of-five anchor check are unmeasured here. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below). **Stage 3 is the designated cut line** and has not been cut.
+**Status:** Stage 4 — **4.1, 4.2, 4.3 and 4.4 are built** (migration `0005`, `get_daily_forecast`, `pack_trip`, and the five `/trips` routes). 4.3 landed in three commits: its contract in the documents, a refactor sharing the stylist's wardrobe filter and retry loop between two routes, and the orchestration itself. **The backend half of the signature feature is complete and reachable**: `POST /trips/pack` calls `pack_trip` and writes the trip, its looks and their items in one transaction, and `AUDITS.md` **O-32** — the last open item on this stage — is closed. **Nothing in the frontend calls any of it yet**; 4.5 is the form and 4.6 the packing view, so the five endpoints are built, tested and unreachable from a browser. `GET /trips` is built and has no planned caller at all, which `04-API-SPEC.md` records deliberately. Stage 3 — **all six tasks are built**, 3.1 to 3.6, the last of them in the two commits its own stage file specifies. Its acceptance criteria are the developer's to run and five of the six are unticked; **the sixth is ticked from tests rather than from a run** — the never-worn count is asserted by `wardrobe-insights.spec.ts` against a mocked response and by the endpoint's own integration tests, and nobody has yet seen the panel in a browser. Stage 2 is built end to end from 2.1 to 2.12 and its acceptance criteria are still the developer's to run: the suites, the demo wardrobe timings and the five-out-of-five anchor check are unmeasured here. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below). **Stage 3 is the designated cut line** and has not been cut.
 
 *"The header is moved with the task this time rather than four tasks later"* — that stood here from 2.11 until Stage 3 falsified it. This header still said *3.1, 3.2, 3.3 and 3.4 are built; 3.5 and 3.6 are not started* through the whole of 3.5 and through 3.6's endpoint commit, and it is corrected here at 3.6's second — **one task late rather than four**, which is a smaller drift and not a fixed one. The log below has no entries for 3.5 or for the endpoint half of 3.6 either, and this line does not invent them; their record is `DECISIONS.md` 185 and 186 and the annotations in `stages/STAGE-3-feedback.md`.
 
 This header and the Stage 2 checklist below had not moved since 2.7, while 2.8, 2.9, 2.10 and 2.10a shipped — the same drift the paragraph below records at 2.2, four tasks wide again. Both are corrected here at 2.11; the log itself still has no entries for those four tasks, and this line does not invent them. Their record is `DECISIONS.md` 174 and the annotations in `stages/STAGE-2-stylist.md`.
 
 This header said "Stage 1 in progress — 1.1 … 1.8 complete" until task 2.2, four tasks after 1.9 shipped and one after the log below recorded Stage 1 as closed. A tracker that contradicts its own log is worse than a stale one, because the log reads as the correction and the header is what anybody looks at first.
+
+**The header is moved with the task at 4.4**, which is the first time in Stage 4 it has been, and the log below gains its entry in the same commit. The paragraph that follows is 4.3's and is left standing rather than edited: it records a drift that happened.
 
 **The header moved two tasks late, and the log below has no entries for 4.1 or 4.2 — this line does not invent them.** Both tasks were built and committed in sessions this agent was not present for, so their record is the commits themselves, `DECISIONS.md` 189–192, `AUDITS.md` O-31 and the annotations in `stages/STAGE-4-packing.md`. Writing a log entry from a diff would be a reconstruction presented as a record, and the entries below are all first-hand. This is the same restraint applied at 3.6 for 3.5 and for 3.6's own endpoint commit, and it is the fourth time this header has trailed the work — one and two tasks in Stage 3, four twice before that.
 
@@ -81,7 +83,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Migration 0005
 - [x] Multi-day forecast
 - [x] Packing orchestration
-- [ ] Trip endpoints
+- [x] Trip endpoints
 - [ ] Trip form
 - [ ] Packing view
 - [ ] Swap one item on a trip look *(4.6a, added 2026-08-31)*
@@ -118,6 +120,20 @@ single-day call (189), and a trip's dates are bounded on the **last** day,
 ## Log
 
 _Append one line per completed stage: date, what shipped, what changed from the plan._
+
+**2026-08-31 — task 4.4, the trip endpoints.** 1089 backend tests pass (1025 before). New: `app/schemas/trip.py`, `app/api/v1/routes/trips.py`, `tests/integration/test_trips_pack.py`, `tests/integration/test_trips_read.py`. `POST /trips/pack`, `GET /trips`, `GET /trips/{id}`, `DELETE /trips/{id}` and `POST /trips/{id}/repack` are mounted; `pack_trip` has a caller for the first time.
+
+Decided rather than discovered (`DECISIONS.md` 200–204), and the list is in two halves. **The first three were put to the developer at orientation** — six questions, answered before any code was written. **The last two were not**, and that is recorded rather than smoothed over: the helper move was raised obliquely in the orientation and then never actually asked, so it was taken during the build and approved afterwards, and the annotation was a defect found by writing the read path rather than a question anybody could have asked in advance.
+
+- **`AUDITS.md` O-32 is closed**, taking the audit's recommendation in full — `repack` detaches saved, rated or worn looks and deletes the rest; `DELETE` cascades. The addition is an ordering none of its three options mentioned: `pack_trip` runs **first**, so a `502` cannot empty a trip. A mutation that moves the destructive half above the model call is caught by name.
+- **`trip_too_long` turned out to be two bounds.** `start_date` is unbounded below on 184's timezone reasoning, which leaves `end_date <= today + 14` bounding nothing — so the trip's length is checked as well, and that is the bound `STAGE-4`'s own acceptance criterion names.
+- **`destination_not_found` (`400`)** is the nineteenth error code, for a geocoder that answers and matches nothing. Named at orientation and approved before it was written anywhere.
+- **`learned_preferences` moved to `_stylist_shared.py`**, which is 197's module one helper later: it had one caller until this task and 196 gave it a second. One test's import moved with it. This is the one that was decided during the build rather than at orientation; `DECISIONS.md` 204, split out of 203 so that one decision is recorded in one place.
+- **`Trip.forecast`'s annotation was wrong** and is corrected — it said `dict` and has stored a `list` since 4.3. `mypy` could not see it because SQLAlchemy's `__init__` is untyped.
+
+**The mutation run found one survivor**, which is the eighth on this project and the third instance of one shape: a specified `ORDER BY for_date` was deleted and all 1088 tests stayed green, because every trip test wrote its looks in the order it expected them back. `06-TESTING-STRATEGY.md` carries the table and the new test that kills it.
+
+**Not built here, and both are recorded rather than carried quietly.** The rate limit `04-API-SPEC.md` puts on this endpoint is `STAGE-5` § 5.2's (191), so the most expensive call in the project ships unthrottled. And `GET /looks?trip_id=` is still undeclared — `04-API-SPEC.md` said it was "4.4's if anything", and nothing in Stage 4 needs it.
 
 **2026-08-16 — task 0.10, test scaffolding.** 192 backend tests pass (155 before). New: `tests/conftest.py`, `tests/integration/test_auth.py`, `tests/integration/test_items_rows.py`. Both corrections 0.9 recorded are closed — `RegisterRequest.display_name` is required and trimmed, `POST /auth/login`'s `401` carries `WWW-Authenticate: Bearer`.
 

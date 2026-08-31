@@ -77,7 +77,7 @@ class Trip(Base):
     occasions: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, server_default=text("'[]'::jsonb")
     )
-    forecast: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    forecast: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     packing_list: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     notes: Mapped[str | None] = mapped_column(Text)
 

@@ -23,6 +23,7 @@ from openai import APITimeoutError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api.v1.routes import _stylist_shared
 from app.api.v1.routes import looks as looks_route
 from app.enums import Category, Condition, ItemStatus, Layer
 from app.models.item import Item
@@ -182,7 +183,7 @@ def test_every_category_has_a_name_for_the_preferences_block() -> None:
     # were appended at 2.6a — and the lookup that reads it is a `KeyError` and
     # an unhandled 500 for anything missing. Reading could not catch that; this
     # does.
-    assert set(looks_route._CATEGORY_NAMES) == set(Category.values())
+    assert set(_stylist_shared._CATEGORY_NAMES) == set(Category.values())
 
 
 def test_rated_history_reaches_the_assembled_preferences_message(

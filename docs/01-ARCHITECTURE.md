@@ -147,7 +147,8 @@ bijoux/
 │   │   │   ├── router.py
 │   │   │   └── routes/          auth.py, items.py, weather.py, looks.py,
 │   │   │                        trips.py, me.py, and _stylist_shared.py —
-│   │   │                        which wardrobe, and what a failure is worth
+│   │   │                        which wardrobe, what this account has learned,
+│   │   │                        and what a failure is worth
 │   │   ├── services/
 │   │   │   ├── storage.py       Cloudinary upload + transform URLs
 │   │   │   ├── vision.py        image → tags
@@ -214,7 +215,7 @@ Items carry a UUID primary key **and** a 6-character `short_id`. Only `short_id`
 
 `vision.py` and `stylist.py` expose plain functions with typed inputs and outputs. Routes call them. This makes them trivially mockable in tests, which is what allows the entire E2E suite to run without an API key. See `06-TESTING-STRATEGY.md`.
 
-**Two modules were split out of `routes/looks.py` at task 4.3, and the line between them is the direction of that sentence.** `POST /trips/pack` needs the same four helpers `POST /looks/suggest` had grown, so they moved rather than being written twice. `services/stylist_runner.py` holds the call-and-retry loop and is free of HTTP — `packing.py` imports it, and a service importing the API layer would invert *routes call services* one line up. `api/v1/routes/_stylist_shared.py` holds the wardrobe query and the `502` factory, which are the route layer's precisely because they know about `Session` and `ApiError` (`DECISIONS.md` 044). The underscore says it is not a router: `router.py` imports this package's modules by name and mounts a `router` from each, and this one has none. `DECISIONS.md` 197.
+**Two modules were split out of `routes/looks.py` at task 4.3, and the line between them is the direction of that sentence.** `POST /trips/pack` needs the same four helpers `POST /looks/suggest` had grown, so they moved rather than being written twice. `services/stylist_runner.py` holds the call-and-retry loop and is free of HTTP — `packing.py` imports it, and a service importing the API layer would invert *routes call services* one line up. `api/v1/routes/_stylist_shared.py` holds the wardrobe query, the learned-preferences block and the `502` factory, which are the route layer's precisely because they know about `Session` and `ApiError` (`DECISIONS.md` 044). **The preferences block joined them at 4.4** rather than at 4.3: it had one caller until `POST /trips/pack` existed, and `DECISIONS.md` 196 is what gave it a second by deciding that a trip carries the learned block too. The move, the rejected alternatives and the rename are `DECISIONS.md` 204. The underscore says it is not a router: `router.py` imports this package's modules by name and mounts a `router` from each, and this one has none. `DECISIONS.md` 197.
 
 ### Prompts live in `app/prompts/*.md`, not in Python strings
 

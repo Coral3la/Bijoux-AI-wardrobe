@@ -528,6 +528,12 @@ endpoints. So the day carries `look_id` and the client indexes the sibling
 positionally, is an ordering contract nothing enforces and a rendering bug that
 would be invisible until a day was missing.
 
+**`look_id` is nullable**, and that is what the join buys over the positional
+pairing. A day with no look renders as a gap; paired positionally, day 3's look
+would silently slide onto day 2. The route computes the ordinal back from
+`looks.for_date` — `LookResponse` carries no day number and Stage 4 is not a
+reason to widen it — so a look with no `for_date` is placed on no day at all.
+
 **`day` here is `03-AI-CONTRACTS.md`'s ordinal** — 1-based within the trip, day 1
 is `start_date` — and `date` is printed beside it so no client does calendar
 arithmetic to label a tab.
@@ -594,15 +600,36 @@ closing one row of a three-row table from inside 4.4. This is the most expensive
 call in the project and the exposure is recorded with a date and an owner.
 
 Failure codes on this endpoint: `400` `trip_too_long` when `end_date` is beyond
-`today + 14`; `400` `wardrobe_too_small` under 8 `ready` items, checked before
-the geocoder so a request that cannot be served costs nothing; `400`
-`forecast_unavailable` when the range is beyond the provider's horizon and `502`
-`forecast_unavailable` when Open-Meteo does not answer, exactly as `GET /weather`
-splits them; `502` `geocoding_unavailable` when the destination cannot be looked
-up; `502` `stylist_failed` after the model has failed validation twice; `422`
+`today + 14` **or the trip is longer than 14 days**; `400` `wardrobe_too_small`
+under 8 `ready` items, checked before the geocoder so a request that cannot be
+served costs nothing; `400` `destination_not_found` when the geocoder answers and
+nothing matches what the user typed; `400` `forecast_unavailable` when the range
+is beyond the provider's horizon and `502` `forecast_unavailable` when Open-Meteo
+does not answer, exactly as `GET /weather` splits them; `502`
+`geocoding_unavailable` when the geocoder does not answer at all; `502`
+`stylist_failed` after the model has failed validation twice; `422`
 `validation_error` for a malformed body — an `occasions` list whose days are not
 `1..n`, an occasion outside the six, `end_date` before `start_date`; `401`
 `invalid_token`.
+
+**`trip_too_long` is two bounds, and task 4.4 is where the second one had to be
+written.** `DECISIONS.md` 190 moved the bound onto the trip's last day and this
+document carried that alone until 4.4 tried to implement it. **`start_date` is
+not bounded below** — deliberately, on `DECISIONS.md` 184's precedent that the
+server's calendar day is not the user's, and a client east of UTC routinely names
+a day this server would still call yesterday. But `end_date <= today + 14` with
+no lower bound admits a trip that began last March and ends next week: legal by
+that rule, three hundred days long, and three hundred days of forecast asked of a
+provider that answers sixteen. So the **length** is checked as well, and it is
+the check `STAGE-4`'s own acceptance criterion — *a 15-day trip is rejected at
+the API layer* — actually names. One code and one message for both, because both
+are true of *Trips can span at most 14 days from today*. `DECISIONS.md` 201.
+
+**Nothing bounds `start_date` in the past, and a trip therefore ages out rather
+than expiring.** A trip packed today stays readable for ever; the day its
+`end_date` falls outside `today + 14` it stops being **repackable**, answering
+`trip_too_long`. That is the honest consequence of a forecast horizon that rolls
+forward daily, and no seasonal-average fallback is offered to paper over it.
 
 ### `GET /trips`
 ```json
@@ -647,11 +674,18 @@ garment is referenced by every look that ever wore it and by the wear history
 `looks.trip_id` is already declared in migration `0005`, and it reaches
 `look_items` in a second hop through `0002`'s own cascade. `DECISIONS.md` 195.
 
-**What that destroys is the open question `AUDITS.md` O-32 owns**: a trip look
-can have been saved, rated or worn, and `feedback` is what `POST /looks/suggest`'s
-preference block counts from task 3.5. Deleting the trip deletes those rows.
-O-32 carries the three options and belongs to task 4.4; this heading records that
-the cascade is the current behaviour, not that it is the decided one.
+**`AUDITS.md` O-32 is settled here at task 4.4, and this endpoint takes the
+cascade deliberately.** A trip look can have been saved, rated or worn, and
+`feedback` is what `POST /looks/suggest`'s preference block counts from task 3.5
+— so deleting the trip does delete those rows, and that is what the user asked
+for: a delete is a deliberate act on the whole trip, where a repack is an edit to
+a trip they are keeping. The two endpoints therefore answer O-32 differently, and
+the audit recommended exactly that.
+
+**One consequence is stated rather than fixed.** The `items.wear_count` those
+looks incremented is not reversed, because a garment worn in Berlin was worn —
+which leaves a wear count that no screen can reconcile against the number of
+looks it can show. `DECISIONS.md` 200.
 
 `404` with `code: "not_found"` for another account's trip. `401` `invalid_token`.
 
@@ -665,11 +699,30 @@ dates and occasions, and replaces the existing looks. Same body shape as
 `POST /trips/pack`, same failure codes, and the same unthrottled exposure —
 `DECISIONS.md` 191 again, one endpoint along.
 
-**"Replaces the existing looks" is exactly what `AUDITS.md` O-32 is about**, and
-it is not decided here: a repack that deletes a look the user saved, rated or
-marked worn removes signal three separate features read. Task 4.4 owns the
-choice between deleting them all, detaching the marked ones by setting
-`trip_id = NULL`, and refusing the repack while any look is marked.
+**"Replaces the existing looks" is `AUDITS.md` O-32's other half, and task 4.4
+took the audit's option 2.** A look that was saved, rated or marked worn is
+**detached** — `trip_id = NULL` — and the rest are deleted. A tap meant to
+refresh the weather does not empty three days out of `/saved` or switch the
+stylist's learned preferences back off. The cost is a look on `/saved` belonging
+to no trip, whose `weather_note` describes a forecast for a city the row no
+longer names; that is accepted, because the alternative destroys the signal
+outright. Refusing the repack while any look is marked was rejected: it asks the
+user to un-save a look in order to repack, which is damaging the record to get
+past a guard protecting it.
+
+**`pack_trip` runs first, and nothing is destroyed until it has answered.** This
+is not in O-32's recommendation and it is the half that matters most: a repack
+that detached and deleted before calling the model would answer `502
+stylist_failed` having already emptied a trip the user still has. The detach, the
+delete and the new looks are one transaction, downstream of the model call.
+
+**It takes no body, and it re-geocodes.** The destination, the dates, the
+occasions and the notes are the trip's own — a repack that accepted new ones
+would be an edit endpoint this document does not describe. The stored
+`dest_lat`/`dest_lon` are re-derived from the destination string rather than
+reused, because `pack_trip` owns the lookup; so a repack can answer
+`destination_not_found` for a trip that packed cleanly last week, and a trip's
+coordinates can move between two packs. `DECISIONS.md` 200 and 202.
 
 ---
 

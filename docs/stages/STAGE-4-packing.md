@@ -70,6 +70,21 @@ for one endpoint would leave the table reading as implemented while
 `POST /items/upload` and `POST /looks/suggest` stayed exactly as open as they
 have been since 0.7 and 2.7. `DECISIONS.md` 191.
 
+**Built, and four things this line did not say.** `AUDITS.md` **O-32** was this
+task's to settle and it is: `repack` **detaches** a look that was saved, rated or
+worn and deletes the rest, `DELETE` cascades, and — the half none of the audit's
+three options mentioned — **`pack_trip` runs first**, so a `502` from the stylist
+cannot empty a trip. `trip_too_long` gained its producer here and turned out to
+be **two** bounds rather than one: `end_date <= today + 14` stops bounding
+anything once `start_date` is left free, so the trip's **length** is checked as
+well, and that is the check "a 15-day trip is rejected at the API layer" actually
+names. `DestinationNotFoundError` got its wire code — **`destination_not_found`,
+`400`**, the nineteenth — which is a statement about the request rather than
+about a provider, so it does not reuse `geocoding_unavailable`. And **repack
+takes no body and re-geocodes**, which means a trip's coordinates can move
+between two packs and a trip ages out of being repackable the day its `end_date`
+leaves the horizon. `DECISIONS.md` 200–204.
+
 **Dates are bounded on the last day, not the first.** `end_date <= today + 14`.
 The line above and `04-API-SPEC.md`'s "`start_date` no more than 14 days ahead"
 together admit a fourteen-day trip ending on day 27, which no forecast covers;
@@ -134,8 +149,8 @@ A share or copy button producing the packing list as plain text. Trivial to buil
 - [ ] Every packed item appears in at least one look, and every look item appears in the packing list
 - [ ] No two days produce an identical full look
 - [ ] Dates beyond the forecast horizon return `400 forecast_unavailable` with a clear message
-- [ ] A 15-day trip is rejected at the API layer
-- [ ] `repack` refreshes the forecast and replaces the looks
+- [x] A 15-day trip is rejected at the API layer — `test_a_fifteen_day_trip_is_trip_too_long`, and the length half of the bound it measures is `DECISIONS.md` 201's
+- [x] `repack` refreshes the forecast and replaces the looks — `test_repack_refreshes_the_forecast` and `test_repack_replaces_the_looks_and_keeps_the_trip`. **What it replaces is O-32's answer rather than this line's**: a saved, rated or worn look is detached, not deleted
 
 ## Commit checkpoints
 

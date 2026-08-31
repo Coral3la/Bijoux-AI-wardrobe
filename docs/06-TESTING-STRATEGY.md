@@ -120,6 +120,7 @@ What gets covered:
 - **Cross-user isolation:** user A cannot `GET`, `PATCH`, or `DELETE` user B's items. Test every item endpoint.
 - **`user_edited` protection:** `POST /items/{id}/retag` returns `409` after a manual edit, and succeeds with `?force=true`.
 - **`wardrobe_too_small`:** 5 ready items returns `400` before any AI call is attempted.
+- **The trip endpoints.** Task 4.4, split by whether the model has to be faked at all: `tests/integration/test_trips_pack.py` covers `POST /trips/pack` and `POST /trips/{id}/repack` with the geocoder and forecast faked on `services/packing` and the stylist faked on `stylist_runner.suggest_looks` — one module further in, so **`validate_look_response` runs for real** and the trip path's rules 5, 10 and 11 judge every plan the tests assert on. `tests/integration/test_trips_read.py` needs no fake at all and plants rows directly, which is `test_trips_rows.py`'s approach one layer up. Between them: the one-commit write, the day-strip join, the packing list's UUIDs and tie-broken `reuse_summary`, both halves of `trip_too_long`, `wardrobe_too_small` before the geocoder, all five failure codes, `AUDITS.md` O-32's detach and cascade, and cross-user isolation on every endpoint.
 - **Rate limits** return `429` with `Retry-After`.
 
 ### A test that measures a moment cannot assert an event
@@ -745,6 +746,53 @@ PostgreSQL and is not editable from Python.
 Mutation 4 needs no database and is `test_db_naming.py` doing exactly its job.
 Mutations 1 and 2 are the DDL that a column list cannot show.
 
+### The trip endpoints mutation run, task 4.4
+
+Ten mutations, run in the scratchpad mirror from a pristine copy with the
+baseline green at both ends. **One survived, and adding the test that kills it is
+the substantive change this task made to the suite** — so the baseline moves
+inside the run, exactly as it did at 3.1: mutations 1 to 9 were measured against
+1088, mutation 10 against 1088 and then against 1089.
+
+| # | Mutation | Result |
+|---|---|---|
+| 1 | `_MARKED` narrowed to `is_saved` alone | 1 failed |
+| 2 | the trip-length half of `trip_too_long` deleted | 1 failed |
+| 3 | the horizon half of `trip_too_long` deleted | 1 failed |
+| 4 | `_by_day`'s ordinal off by one | 1 failed |
+| 5 | repack writes a second trip instead of updating its own | 1 failed |
+| 6 | `MIN_WARDROBE_ITEMS` back to `POST /looks/suggest`'s six | 1 failed |
+| 7 | the detach and delete moved **above** the model call | 1 failed |
+| 8 | `db.flush()` dropped before the looks are written | 1 failed |
+| 9 | shuffled `occasions` days accepted | 1 failed |
+| 10 | `ORDER BY for_date` dropped from the trip's own look read | **survived** → 1 failed after |
+
+**Mutation 7 is the one this task was run to check.** It moves the detach and the
+delete above `pack_trip`, which is how a reader writes a repack without thinking
+about it and which `AUDITS.md` O-32's three written options all leave open. It is
+caught by `test_a_stylist_failure_leaves_the_existing_looks_alone`, and that test
+exists because the mutation was anticipated rather than the other way round —
+which is the honest order to record, since a test written after a surviving
+mutation and a test written to pin a decision look identical in the file.
+
+**Mutation 10 is the survivor — the eighth on this project, and the third instance of the pattern 1.8 named.**
+Deleting the `ORDER BY` left all 1088 tests green, because every trip test in the
+suite wrote its looks in the order it expected them back — so insertion order and
+date order were the same list and no assertion could tell them apart. It is
+`AUDITS.md`-shaped rather than a bug: `04-API-SPEC.md` specifies the ordering, the
+route implements it, and nothing measured it.
+`test_the_looks_come_back_in_date_order_however_they_were_written` plants day 3,
+then day 1, then day 2, which is the only arrangement that can fail. The pattern
+is 1.5's and 1.8's: **a claim that is only ever exercised in the one arrangement
+where it cannot be wrong.**
+
+Mutations 2 and 3 are the two halves of one code, and they are worth having run
+separately: a single test asserting `trip_too_long` would have been satisfied by
+either half alone, and the two conditions are reached by different requests
+(`DECISIONS.md` 201). Mutation 8 is the fatal control — without the flush the
+trip has no `id` when its looks are written — and it is caught by name rather
+than by a collection error, which is what 1.2a asked of this harness.
+
 ### What mutation testing has actually found on this project
 
 Worth stating plainly, because it is not what the technique is usually sold for: **on this project mutation testing has found more false claims than bugs.**
@@ -766,6 +814,8 @@ Worth stating plainly, because it is not what the technique is usually sold for:
 - 1.6: the third survivor, and the first that was a *test* rather than a binding. `MAX_UPLOAD_BYTES` was mutated from 1024² to 1000² and nothing failed, because every expectation about it was written in terms of it. Same lesson as 1.5 from the opposite direction — there the state was tested and the binding was not, here the behaviour was tested against itself. Both were found in code that was green, linted and type-checked, and neither would have been found by reading.
 
 - 2.2: the sixth and seventh survivors, and the second one is the first **repeat**. A constant was tested against itself — the identical failure 1.6 found in `MAX_UPLOAD_BYTES`, after the rule had been written into this document, into `CONVENTIONS.md` and into `DECISIONS.md` 101, and after 1.7 had applied it correctly to two literals on purpose. The technique caught it a second time in code that was green, linted and type-checked. **A lesson written down is not a lesson enforced**, and nothing in this project can enforce this one except deleting the behaviour and looking.
+
+- 4.4: the eighth survivor, and the third instance of 1.8's shape after 1.5 and 1.8 itself. A specified `ORDER BY` was deleted and 1088 tests stayed green, because every test that could have measured it wrote its rows in the order it expected them back. **The arrangement that would falsify a claim is exactly the arrangement a test author does not reach for**, since the natural way to set a fixture up is the way the answer should come out. Found in code that was green, linted and type-checked, against a line `04-API-SPEC.md` states explicitly.
 
 The lesson generalises: the assertion under test is often a sentence in a document, not a branch in the code. Deleting the behaviour is the only way to find out whether the sentence was ever true.
 
