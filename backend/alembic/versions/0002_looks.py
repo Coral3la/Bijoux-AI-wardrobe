@@ -21,9 +21,14 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     # `02-DATA-MODEL.md`'s DDL minus three columns that belong to later
-    # migrations: `feedback` and `worn_at` to `0003`, `trip_id` to `0004` —
+    # migrations: `feedback` and `worn_at` to `0004`, `trip_id` to `0005` —
     # which is also the migration that creates the table it references. No new
     # enum type and no extension, so `downgrade` is two drops.
+    #
+    # Both numbers read `0003` and `0004` when this file was written, and both
+    # were made wrong by `0003_vocabulary` being inserted ahead of them at task
+    # 2.6a. Corrected at 4.1, which is the task that built `0005` and found the
+    # sentence pointing at the migration that had already shipped without it.
     op.create_table(
         "looks",
         sa.Column(

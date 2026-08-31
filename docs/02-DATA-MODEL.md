@@ -438,6 +438,15 @@ the table. The composite primary key already covers every lookup by `look_id`,
 which is the direction 2.7 and 2.9 read, so no third index is warranted.
 `AUDITS.md` **O-25**, closed at task 3.1.
 
+**A third index on `looks` arrived at 4.1 anyway, and it is O-25's argument
+rather than an exception to it.** `idx_looks_trip_id` is the referencing side of
+migration `0005`'s foreign key, so without it the cascade from `trips` scans
+`looks` — exactly what `idx_look_items_item_id` exists to prevent one table
+over. The sentence above is about the *lookups 2.7 and 2.9 make*, and it is
+still true of those; what it did not anticipate is a second foreign key. Built
+in the migration that creates the key rather than deferred to the stage that
+reads it, because 4.1 and its reader are the same stage.
+
 **`feedback` is `-1` or `1` and never `0`.** The column has no default, so an
 unrated look is `NULL`: "nobody has rated this" and "somebody rated it
 neutrally" cannot be the same value, and 3.5 counts rated looks without having
@@ -504,9 +513,32 @@ CREATE TABLE trips (
 );
 ```
 
+```sql
+CREATE INDEX idx_trips_user_id ON trips (user_id);
+CREATE INDEX idx_looks_trip_id ON looks (trip_id);
+```
+
 The forecast is cached so that reopening a trip does not re-hit the weather API and does not silently change the plan.
 
-Trip length is capped at **14 days** at the API layer.
+Trip length is capped at **14 days** at the API layer, and the bound is on the
+**last** day: `end_date <= today + 14`. `DECISIONS.md` 190 — the `start_date`
+reading `04-API-SPEC.md` carried would admit a fourteen-day trip ending
+thirteen days past any forecast.
+
+**Built at task 4.1**, with the two indexes above. `idx_trips_user_id` is
+`idx_looks_user_id`'s twin and has `GET /trips` for a reader; `idx_looks_trip_id`
+is the referencing side of the new foreign key, which PostgreSQL does not index
+on its own — see the `looks` section above.
+
+**`looks.trip_id` is nullable and stays nullable.** Every look written before
+Stage 4 belongs to no trip and `POST /looks/suggest` goes on writing them that
+way, so `NULL` is the ordinary case rather than a missing value.
+
+**The `CHECK` is named `date_order` in the migration and in the model, not
+`ck_trips_date_order`.** The convention in `app/db/base.py` is
+`ck_%(table_name)s_%(constraint_name)s`, so it expands the short name — and
+feeding it the expanded one produces `ck_trips_ck_trips_date_order`. Measured at
+4.1 by running both spellings; see the correction under *Migrations* below.
 
 ---
 
@@ -520,7 +552,7 @@ One Alembic migration per stage, never a single mega-migration.
 | `0002_looks` | 2 | `looks`, `look_items` |
 | `0003_vocabulary` | 2 | `item_category` gains `swimwear` and `sleepwear` |
 | `0004_feedback` | 3 | `looks.feedback`, `looks.worn_at`, `items.wear_count`, `items.last_worn_at`, and O-25's two indexes |
-| `0005_trips` | 4 | `trips`, `looks.trip_id` |
+| `0005_trips` | 4 | `trips`, `looks.trip_id`, `idx_trips_user_id`, `idx_looks_trip_id` |
 
 **`0003` renumbered the two that follow it**, which is what a migration inserted
 mid-project costs; it was scheduled after `0002_looks` precisely so that the
@@ -534,11 +566,36 @@ the re-upgrade over two surviving labels clean. That both statements run inside
 the transaction `alembic/env.py` opens was **measured on PostgreSQL 18.6 at
 2.6a**, not inferred from the version number.
 
-Stage 3's columns were shown inline in the table definitions above for readability before they existed, and **migration `0004` built them at task 3.1**, so the two now agree. The cut this paragraph anticipated did not happen. Had it, `0004` would indeed never have been written: the one task that survives the cut is 3.2, and both columns it needs — `is_saved` and `title` — are `0002`'s. **`looks.trip_id` is the case this paragraph still describes, one stage further out**, and is named here because the `looks` DDL above shows it as a foreign key to a table that does not exist until Stage 4: migration `0002` creates `looks` **without** it, and `0005` adds it alongside `trips`. Added at the 2026-08-18 audit — the migrations table already said so and this paragraph did not.
+Stage 3's columns were shown inline in the table definitions above for readability before they existed, and **migration `0004` built them at task 3.1**, so the two now agree. The cut this paragraph anticipated did not happen. Had it, `0004` would indeed never have been written: the one task that survives the cut is 3.2, and both columns it needs — `is_saved` and `title` — are `0002`'s. **`looks.trip_id` was the case this paragraph described, one stage further out, and task 4.1 discharged it.** The `looks` DDL above shows it as a foreign key to a table that did not exist until Stage 4: migration `0002` created `looks` **without** it, and `0005` adds it alongside `trips` — one revision, because a `looks.trip_id` pointing at no table is not a schema. Added at the 2026-08-18 audit, when the migrations table already said so and this paragraph did not; closed at 4.1.
 
 Migrations are written by hand from the DDL above, never autogenerated — autogenerate does not faithfully reproduce `CITEXT`, partial indexes or `CHECK` constraints. Alembic reads `DATABASE_URL` from `app.core.config.settings`, never from `alembic.ini`, which is committed to the repository.
 
-Constraint names are spelled out literally in each migration, and the convention pinned in `app/db/base.py` makes the names SQLAlchemy would generate match them. **The migration is the one that matters at runtime.** The live schema is built by `0001`, so the name PostgreSQL reports inside an `IntegrityError` is the migration's literal — and that is the string `DECISIONS.md` 037, 040 and 052 each match on in a narrow `if`, which is what keeps a duplicate email from being reported as a `short_id` collision and a constraint nobody anticipated from being reported as either. The convention has no runtime effect whatever; what it buys is that the model and the database do not describe one constraint under two names.
+Constraint names are spelled out in each migration, and the convention pinned in `app/db/base.py` makes the names SQLAlchemy would generate match them — **in the short form the convention expands, which is not what `0001` wrote and is the one claim in this section that was false.**
+
+**Measured at task 4.1, by running both spellings against the test database.**
+The convention is `ck_%(table_name)s_%(constraint_name)s`, and it is applied to
+a `CHECK` created inside `op.create_table` exactly once. `0001` passed it names
+that were *already* expanded, so the live schema does not hold
+`ck_users_height_cm_range`, `ck_items_formality_range` or
+`ck_items_warmth_range` at all — it holds `ck_users_ck_users_height_cm_range`,
+`ck_items_ck_items_formality_range` and `ck_items_ck_items_warmth_range`. The
+model and the database describe those three constraints under two names each,
+which is precisely the state this paragraph claimed was impossible.
+
+**Nothing detects it and `tests/unit/test_db_naming.py` cannot**, by
+construction: it compares `Base.metadata` against a written list, and both
+halves say the short name. It is not a runtime defect — no route matches on any
+of the three, and `MATCHED_BY_A_ROUTE` covers the two that are matched on, both
+`UNIQUE` rather than `CHECK` — so nothing behaves wrongly today. What it costs
+is that an `IntegrityError` on a height or a formality reports a name that
+appears in no file. `0004` met the same expansion through
+`op.create_check_constraint` and bypassed it with raw DDL; `0005` meets it
+through `op.create_table` and passes the short name instead, which is why its
+`CHECK` is declared as `date_order`. Repairing `0001`'s three is a rename
+migration and is **not** task 4.1's — it is recorded here so the next reader
+finds it deliberately rather than from a puzzling error message.
+
+**The migration is the one that matters at runtime.** The live schema is built by `0001`, so the name PostgreSQL reports inside an `IntegrityError` is what that migration produced — which is the point the paragraph above turns on, and it is why the three wrong names are the database's truth rather than a cosmetic slip. The names `DECISIONS.md` 037, 040 and 052 each match on in a narrow `if` are `uq_users_email` and `uq_items_short_id`, both `UNIQUE`, both unaffected, and that is what keeps a duplicate email from being reported as a `short_id` collision and a constraint nobody anticipated from being reported as either. The convention has no runtime effect whatever; what it buys is that the model and the database do not describe one constraint under two names — **which it delivers for every constraint except `0001`'s three `CHECK`s, where the short name was never passed and the guarantee therefore never applied.**
 
 **None of this is so that `create_all` can reproduce the schema — it cannot**, and this sentence claimed otherwise through task 0.10. `create_type=False` on all three enum objects (024) means `create_all` emits `CREATE TABLE users`, `CREATE TABLE items` and one `CREATE INDEX`, with **no `CREATE TYPE` and no `CREATE EXTENSION`** — so against a virgin database it fails on `CITEXT` before it ever reaches `item_status`. Re-measured against a mock dialect before task 1.1; `DECISIONS.md` 074. The comments in `app/db/base.py` and `app/models/item.py` repeated the same claim and are corrected alongside this line.
 

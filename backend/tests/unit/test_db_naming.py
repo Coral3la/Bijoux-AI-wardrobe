@@ -23,18 +23,18 @@ their route matches on stops being the name the database reports.
 from pathlib import Path
 
 from app.db.base import Base
-from app.models import item, look, user  # noqa: F401  — registers the tables on Base.metadata
+from app.models import item, look, trip, user  # noqa: F401  — registers the tables on Base.metadata
 
 MIGRATION_0001 = Path(__file__).resolve().parents[2] / "alembic" / "versions" / "0001_initial.py"
 
 # Every constraint the migrations create, under the name the convention expands
-# to. `0002`'s five and `0004`'s one are in the same set rather than in sets of
-# their own: the property under test is that one list matches the metadata, and
+# to. `0002`'s five, `0004`'s one and `0005`'s three are in the same set rather
+# than in sets of their own: the property under test is that one list matches the metadata, and
 # splitting it by migration would let a table belong to neither.
 #
 # Indexes are not constraints and are absent here — `Table.constraints` does not
-# hold them — so `idx_items_wardrobe` and `0004`'s two are named in exactly one
-# place each and nothing compares them. That is the same seam this file exists
+# hold them — so `idx_items_wardrobe` and the four `0004` and `0005` build are
+# named in exactly one place each and nothing compares them. That is the same seam this file exists
 # to close for constraints, still open one artefact along.
 EXPECTED_NAMES = {
     "pk_users",
@@ -51,6 +51,10 @@ EXPECTED_NAMES = {
     "fk_look_items_look_id_looks",
     "fk_look_items_item_id_items",
     "ck_looks_feedback_values",
+    "fk_looks_trip_id_trips",
+    "pk_trips",
+    "fk_trips_user_id_users",
+    "ck_trips_date_order",
 }
 
 # The two the write paths match on by name, in a narrow `if` so that a violation

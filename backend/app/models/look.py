@@ -5,11 +5,11 @@ one per call to `POST /looks/suggest` with `is_saved=False`, before the response
 returns. Migration `0004` adds `feedback` and `worn_at` and the two indexes
 `AUDITS.md` O-25 deferred to the stage that reads them.
 
-**One documented column is still deliberately absent.** `02-DATA-MODEL.md`
-prints `trip_id` on `looks` and adds it in migration `0005`, which is also what
-creates the `trips` table it references. A model declaring a column the database
-lacks breaks every query against it — the rule `items.wear_count` established at
-task 0.7 and this migration discharges for the other three.
+Migration `0005` adds `trip_id` and the index over it, in the same revision
+that creates the `trips` table it references — a `looks.trip_id` pointing at
+nothing is not a schema, so the two halves could not be separate migrations.
+The column is **nullable and stays nullable**: every look written before Stage 4
+belongs to no trip, and `POST /looks/suggest` goes on writing them that way.
 
 No `relationship()` anywhere, following `Item`, which names `user_id` and stops.
 2.7 hydrates from the wardrobe it already holds in memory, and the aggregation
@@ -59,6 +59,12 @@ class Look(Base):
     __table_args__ = (
         CheckConstraint(f"feedback IN ({FEEDBACK_DOWN}, {FEEDBACK_UP})", name="feedback_values"),
         Index("idx_looks_user_id", "user_id"),
+        # The referencing side of `0005`'s foreign key, which PostgreSQL does
+        # not index for us — so without it the cascade from `trips` and a
+        # trip's own read of its looks both scan the table. `AUDITS.md` O-25's
+        # argument, taken in the migration that creates the key rather than
+        # deferred to the stage that reads it, because they are the same stage.
+        Index("idx_looks_trip_id", "trip_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -66,6 +72,13 @@ class Look(Base):
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE")
+    )
+    # `ON DELETE CASCADE` for the reason the user key has it: a trip's looks
+    # were built for its days and its forecast, and a trip that is gone leaves
+    # nothing that could render them. A look with no trip is the normal case
+    # and is what `NULL` means here.
+    trip_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE")
     )
 
     title: Mapped[str | None] = mapped_column(Text)

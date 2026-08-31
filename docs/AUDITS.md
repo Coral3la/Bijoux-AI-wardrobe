@@ -98,7 +98,7 @@ contradiction** — a thing no document disagrees about and nobody has looked at
 It was extended at 1.6 rather than duplicated, and **O-15** was opened by the
 same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
-task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, **which task 3.1 closed**, printing both indexes in `02` before migration `0004` built them and finding, on the way, that deleting them failed no test. **O-29 and O-30 were opened at task 3.2**, and they are the two kinds this file has collected most: a cost that only becomes visible on its third instance — three screens with no way into them — and a documented endpoint with nothing under its heading, which is **O-1's shape** found the same way, by the task implementing the section next to it. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had.
+task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, **which task 3.1 closed**, printing both indexes in `02` before migration `0004` built them and finding, on the way, that deleting them failed no test. **O-29 and O-30 were opened at task 3.2**, and they are the two kinds this file has collected most: a cost that only becomes visible on its third instance — three screens with no way into them — and a documented endpoint with nothing under its heading, which is **O-1's shape** found the same way, by the task implementing the section next to it. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had. **O-31 was opened at task 4.1**, and it is the first item here that is a defect in a *shipped* artefact rather than in a document or an unread surface: three constraint names that the live schema has held wrongly since Stage 0, found by the task that was about to add a fourth the same way, and invisible to the one test written to catch exactly it.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -1498,3 +1498,50 @@ the headings — a heading with nothing under it reads as an endpoint somebody
 forgot to document rather than as one nobody decided to build. Task 3.2 marked
 both in `04` rather than removing them, because striking a documented endpoint
 is not a call a task makes on its way past.
+
+#### O-31 · Three of `0001`'s `CHECK` constraints carry doubled names in the live schema — opened at task 4.1
+
+The naming convention in `app/db/base.py` is
+`ck_%(table_name)s_%(constraint_name)s`, and it expands the **short** name.
+Migration `0001` passed it names that were already expanded, so the convention
+ran over them a second time. Three constraints are affected, and the database
+holds the right-hand column rather than the left:
+
+| Intended | Live |
+|---|---|
+| `ck_users_height_cm_range` | `ck_users_ck_users_height_cm_range` |
+| `ck_items_formality_range` | `ck_items_ck_items_formality_range` |
+| `ck_items_warmth_range` | `ck_items_ck_items_warmth_range` |
+
+**Measured at task 4.1 against the test database**, by running both spellings
+through `op.create_table` and reading `pg_constraint` — not inferred from the
+convention. `0004`'s `ck_looks_feedback_values` and `0005`'s
+`ck_trips_date_order` are correct: the first bypassed the expansion with raw
+DDL, the second passes the short name.
+
+**Not a runtime defect.** No route matches on any of the three. The two names
+that *are* matched on in a narrow `if` — `uq_users_email` and
+`uq_items_short_id`, `DECISIONS.md` 037, 040 and 052 — are `UNIQUE` rather than
+`CHECK` and are unaffected, so nothing behaves wrongly today. What it costs is
+that an `IntegrityError` on a height or a formality reports a constraint name
+that appears in no file in the repository.
+
+**Nothing detects it, and `tests/unit/test_db_naming.py` structurally cannot.**
+That file compares `Base.metadata` against a written list, and both halves say
+the short name — so the one test written to close this exact seam is blind to
+the one place it is open. `02-DATA-MODEL.md` claimed the convention made model
+and database agree; that sentence was false for these three from Stage 0 and is
+corrected there at 4.1. `tests/integration/test_trips_rows.py` asks
+`pg_constraint` directly for `0005`'s four names, which is the shape a test that
+could see this would take.
+
+**Recommendation.** A rename migration — three
+`ALTER TABLE … RENAME CONSTRAINT` statements, reversible, touching no data.
+**Deliberately not written at 4.1**: that task owned `0005`, and renaming three
+constraints from inside it would be a ride-along edit to two other migrations'
+output of exactly the kind `DECISIONS.md` 082 refuses. Stage 5 is the natural
+home, beside 5.4's other honest-limitation entries — or `KNOWN-ISSUES.md`, if
+the decision is that a cosmetic name in an error nobody branches on is not
+worth a migration. Whichever is taken, extend `test_db_naming.py` to read
+`pg_constraint` rather than only `Base.metadata`, or the seam stays open behind
+a green test.
