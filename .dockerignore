@@ -1,0 +1,40 @@
+# Git & CI
+.git
+.github
+
+# Docs and samples not needed in the image
+docs
+samples
+e2e
+CLAUDE.md
+AGENTS.md
+README.md
+
+# Editor / tool cruft
+.claude
+.vscode
+.idea
+
+# Python caches & venv
+**/__pycache__
+**/*.pyc
+**/.venv
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
+
+# Node caches & any prior local build
+**/node_modules
+**/.angular
+frontend/dist
+
+# Backend test suite — not run in the image
+backend/tests
+
+# Local env — the image reads Render's env vars, never a committed file
+**/.env
+**/.env.*
+!**/.env.example
+
+# OS junk
+**/.DS_Store
