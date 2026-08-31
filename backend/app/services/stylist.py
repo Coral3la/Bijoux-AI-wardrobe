@@ -6,15 +6,26 @@ to OpenAI.
 into the two messages `03-AI-CONTRACTS.md` specifies, and returns the model's
 answer parsed and **unjudged**.
 
-`validate_look_response` is what judges it — `03`'s validation table, the eight
-of its nine rules that have a field to read at Stage 2, run in the documented
-order against the wardrobe that was actually sent — in seven calls, because
-rule 3 became one slot of rule 9's table at 2.11b. It calls nothing, raises
-nothing and owns no loop: it returns a verdict beside the normalised response,
-and 2.7 decides whether to spend the one retry through `correction=` or to
-answer `502 stylist_failed`. That is 1.2b's split between `tag_item` and
-`validate_tags` with the retry one seam further out, because re-calling the
-stylist takes the whole request rather than one extra argument.
+`validate_look_response` is what judges it — `03`'s validation table, run in the
+documented order against the wardrobe that was actually sent. **The table has
+eleven numbers, ten live rules and two orders**: a single-day call runs 1, 2, 4,
+6, 7, 8, 9 and a trip runs 1, 2, 4, 10, 5, 6, 9, 11, because rules 7 and 8 have
+no fields on `POST /trips/pack` and rules 5, 10 and 11 have nothing to read
+without a packing list and a day number. Rule 3 has been one slot of rule 9's
+table since 2.11b. It calls nothing, raises nothing and owns no loop: it
+returns a verdict beside the normalised response,
+and the caller decides whether to spend the one retry through `correction=` or
+to answer `502 stylist_failed` — which is `services/stylist_runner.py`'s loop
+since 4.3, shared by the suggest route and `pack_trip`. That is 1.2b's split
+between `tag_item` and `validate_tags` with the retry one seam further out,
+because re-calling the stylist takes the whole request rather than one extra
+argument.
+
+**Two contexts, two schemas, one function each way.** `StylistContext` selects
+`outfit_recommendation` and the single-day message; `TripContext` selects
+`trip_packing_plan` and the per-day one. The dispatch is on the context rather
+than on a schema parameter, so a caller cannot pair the trip schema with a
+single-day message — `DECISIONS.md` 189, narrowed by 198.
 
 Pure with respect to the request: it holds no `Session` and reads no `Settings`
 beyond the model pin and the fake flag, so 2.7 can decide *what* wardrobe the
@@ -69,13 +80,23 @@ PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "stylist_system.
 # stylist equivalent: no column, no task.
 SYSTEM_PROMPT: Final = PROMPT_PATH.read_text(encoding="utf-8")
 
+# `occasion` left this dict at task 4.3, closing `AUDITS.md` O-26 by removal.
+# Nothing had read the model's echo since 2.7 put the *request's* occasion into
+# `looks.occasion` and onto the wire, and the trip contract does not give it a
+# reader either: `POST /trips/pack` carries an occasion per day in the request,
+# so the route already knows which belongs to which. `DECISIONS.md` 193.
 _LOOK_PROPERTIES: dict[str, Any] = {
-    "occasion": {"type": "string"},
     "title": {"type": "string"},
     "item_ids": {"type": "array", "items": {"type": "string"}},
     "reasoning": {"type": "string"},
     "weather_note": {"type": "string"},
 }
+
+# The trip look is the single-day look plus its day, from the same dict rather
+# than a second copy — `DECISIONS.md` 189 named this drift as the price of two
+# schemas and this is the mitigation. `day` leads because it is what a reader
+# scans for in a fourteen-element array.
+_TRIP_LOOK_PROPERTIES: dict[str, Any] = {"day": {"type": "integer"}, **_LOOK_PROPERTIES}
 
 # `category` is a plain string rather than the seven `Category` members. It is
 # display text — 2.9 renders the description, nothing branches on it — and the
@@ -129,6 +150,31 @@ STYLIST_SCHEMA: JSONSchema = {
     "schema": _object(
         {
             "looks": {"type": "array", "items": _object(_LOOK_PROPERTIES)},
+            "missing_pieces": {"type": "array", "items": _object(_MISSING_PIECE_PROPERTIES)},
+            "message": {"type": "string"},
+        }
+    ),
+}
+
+# The second schema, sent when the context is a trip. A separate shape rather
+# than three fields added to the one above, because strict mode has no optional
+# property: `packing_list` and `day` on `STYLIST_SCHEMA` would be emitted, and
+# paid for, on every single-day call for the rest of the project — which is the
+# cost `DECISIONS.md` 157 refused when it deferred the packing list in the first
+# place. `DECISIONS.md` 189, 193.
+#
+# `packing_list` holds `item_ids` and nothing else. No `by_category`: strict mode
+# cannot express a free-form category map, and the frontend groups the list from
+# the hydrated `items[].category` it already has. No `reuse_summary` either —
+# `packing.py` computes that from these ids and the looks, because asking a model
+# for arithmetic means checking the arithmetic.
+TRIP_SCHEMA: JSONSchema = {
+    "name": "trip_packing_plan",
+    "strict": True,
+    "schema": _object(
+        {
+            "looks": {"type": "array", "items": _object(_TRIP_LOOK_PROPERTIES)},
+            "packing_list": _object({"item_ids": {"type": "array", "items": {"type": "string"}}}),
             "missing_pieces": {"type": "array", "items": _object(_MISSING_PIECE_PROPERTIES)},
             "message": {"type": "string"},
         }
@@ -214,6 +260,67 @@ class StylistContext:
 
 
 @dataclass(frozen=True, slots=True)
+class TripDay:
+    """One day of a trip: what it is for, and what the sky is doing.
+
+    `day` is a **1-based ordinal within the trip**, not a date component — day 1
+    is the trip's `start_date`. `AUDITS.md` O-24 struck a `day` field at 2.5
+    because the model filled it from the date and nothing read it; it returns
+    here with a reader and with a message that states the numbering.
+
+    `date` is carried beside it and is deliberately **not** sent to the model:
+    the prompt prints `Day 1`, not a calendar date, so the ordinal is the only
+    thing the answer can be keyed to. `packing.py` maps it back to
+    `looks.for_date`, which is the column a look actually has.
+
+    `forecast_summary` and `weather_rule` arrive already computed by
+    `services/weather.py`, exactly as `StylistContext`'s scalars do — this
+    module never sees a temperature.
+    """
+
+    day: int
+    date: date
+    occasion: str
+    forecast_summary: str
+    weather_rule: str
+
+
+@dataclass(frozen=True, slots=True)
+class TripContext:
+    """`StylistContext` with the per-day fields made plural.
+
+    The two are separate types rather than one with optional lists because
+    `suggest_looks` and `validate_look_response` both dispatch on which they
+    were handed — a single type would let a caller pair the trip schema with a
+    single-day message, which is a `400` from the API and a bug no type catches.
+    `DECISIONS.md` 198.
+
+    What is **not** here is as deliberate as what is. No `anchor_id`, no
+    `locked_ids`, no `replace_role`: `POST /trips/pack` takes none of them, so
+    validation rules 7 and 8 do not run on this path. No `include_outerwear`
+    either — the endpoint has no such field, so the weather rule decides every
+    day, which is what makes rule 6 per-day rather than negotiable.
+
+    `reuse_target` is computed by `packing.py` and carried rather than derived
+    here, so the number `STAGE-4`'s prompt-tuning note will move lives in the
+    feature module beside the rest of the packing arithmetic.
+    """
+
+    destination: str
+    days: tuple[TripDay, ...]
+    reuse_target: int
+    notes: str | None = None
+    height_cm: int | None = None
+    style_notes: str | None = None
+    preferences: str | None = None
+
+
+# What every message builder and validator in this module accepts. The two
+# contexts share the profile and preference blocks and nothing else.
+AnyContext = StylistContext | TripContext
+
+
+@dataclass(frozen=True, slots=True)
 class MissingPiece:
     category: str
     description: str
@@ -222,11 +329,22 @@ class MissingPiece:
 
 @dataclass(frozen=True, slots=True)
 class Look:
-    occasion: str
+    """One outfit as the model answered it.
+
+    `day` is `None` on the single-day path and an ordinal on the trip path —
+    one dataclass rather than a parallel `TripLook`, because every shared
+    validation rule would otherwise be generic over a union for no gain. Unlike
+    a *schema* property, an unused field here costs nothing per call, which is
+    the whole difference between this and what `DECISIONS.md` 157 refused.
+
+    `occasion` is gone; see `_LOOK_PROPERTIES` above and `AUDITS.md` O-26.
+    """
+
     title: str
     item_ids: tuple[str, ...]
     reasoning: str
     weather_note: str
+    day: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,6 +361,11 @@ class StylistResponse:
     looks: tuple[Look, ...]
     missing_pieces: tuple[MissingPiece, ...]
     message: str
+    # The deduplicated `short_id`s the model packed, or `None` on the single-day
+    # path, where `outfit_recommendation` has no such field. Flattened from the
+    # schema's one-key object rather than modelled as a nested dataclass: there
+    # is one key, and a wrapper would be a type whose only member is a tuple.
+    packing_list: tuple[str, ...] | None = None
 
 
 @lru_cache(maxsize=1)
@@ -263,7 +386,7 @@ def _client() -> AsyncOpenAI:
     )
 
 
-def _profile_block(context: StylistContext) -> str:
+def _profile_block(context: AnyContext) -> str:
     """`03`'s two-sentence profile line, with either half dropped when the
     column is null.
 
@@ -283,7 +406,7 @@ def _profile_block(context: StylistContext) -> str:
     return "USER PROFILE:\n" + " ".join(sentences) + "\n\n"
 
 
-def _preferences_block(context: StylistContext) -> str:
+def _preferences_block(context: AnyContext) -> str:
     if context.preferences is None:
         return ""
     return context.preferences + "\n\n"
@@ -306,8 +429,8 @@ def _locked_block(context: StylistContext) -> str:
     return block
 
 
-def _user_message(wardrobe: Sequence[ItemResponse], context: StylistContext) -> str:
-    """`03-AI-CONTRACTS.md`'s user message, single-day block.
+def _day_request(context: StylistContext) -> str:
+    """`03-AI-CONTRACTS.md`'s REQUEST block, single-day.
 
     The outerwear preference is printed **after** the weather rule and not
     beside the occasion, because it overrides that rule and a reader — human or
@@ -334,6 +457,61 @@ def _user_message(wardrobe: Sequence[ItemResponse], context: StylistContext) -> 
     # rule 8.
     if context.locked_ids:
         request += "\n\n" + _locked_block(context)
+    return request
+
+
+def _trip_request(context: TripContext) -> str:
+    """`03-AI-CONTRACTS.md`'s REQUEST block, trip.
+
+    One line per day, in the document's order — number, occasion, forecast,
+    rule — and the numbering the answer is keyed to is the `Day N` on the left.
+    The columns are **not** padded to align, unlike the document's illustration:
+    alignment is for a human reading a page, and a space-padded occasion is a
+    different token to a tokeniser for no gain.
+
+    `Notes` is printed here and `03`'s trip block did not show it, which is
+    `DECISIONS.md` 158's finding one endpoint along: `POST /trips/pack` has
+    carried a `notes` field since Stage 0 and a field on the wire with nowhere
+    to go in the only message that reaches the model is a promise the API does
+    not keep. Omitted entirely when null, as the single-day lines are.
+
+    The packing constraint is last because it constrains every line above it.
+    """
+    first = context.days[0].date.isoformat()
+    last = context.days[-1].date.isoformat()
+    lines = [
+        "REQUEST:",
+        f"Destination: {context.destination}",
+        f"Dates: {first} to {last} ({len(context.days)} days)",
+    ]
+    if context.notes:
+        lines.append(f"Notes: {context.notes}")
+    lines.append("")
+    lines += [
+        f"Day {day.day} | {day.occasion} | {day.forecast_summary} | {day.weather_rule}"
+        for day in context.days
+    ]
+    lines += [
+        "",
+        "Build one look per day.",
+        "PACKING CONSTRAINT: minimise the number of distinct items packed. Reuse",
+        "bottoms and outerwear across days. Never repeat an identical full look.",
+        f"Aim for at most {context.reuse_target} distinct items across {len(context.days)} days.",
+        "Then return the deduplicated packing list.",
+    ]
+    return "\n".join(lines)
+
+
+def _user_message(wardrobe: Sequence[ItemResponse], context: AnyContext) -> str:
+    """The whole message: one wardrobe, one profile, one request block.
+
+    The first three sections are shared and the REQUEST is the one that differs,
+    which is `03-AI-CONTRACTS.md`'s own structure — *"one of the two blocks
+    below"*. A trip carries the learned-preferences block for the same reason a
+    single day does: a user whose stylist has learned they dislike bodycon
+    dresses does not stop disliking them in Berlin (`DECISIONS.md` 196).
+    """
+    request = _trip_request(context) if isinstance(context, TripContext) else _day_request(context)
     return (
         f"WARDROBE ({len(wardrobe)} items):\n"
         f"{serialize_wardrobe(wardrobe)}\n\n"
@@ -343,11 +521,29 @@ def _user_message(wardrobe: Sequence[ItemResponse], context: StylistContext) -> 
     )
 
 
-def _first(wardrobe: Sequence[ItemResponse], category: Category) -> ItemResponse | None:
-    return next((item for item in wardrobe if item.category == category), None)
+def _first(
+    wardrobe: Sequence[ItemResponse], category: Category, offset: int = 0
+) -> ItemResponse | None:
+    """The `offset`-th item of a category, wrapping.
+
+    `offset` is the fake's whole answer to validation rule 11. A trip asks for
+    one look per day from one wardrobe, and picking the first of every category
+    every time returns N identical looks, which the rule rejects twice and turns
+    into a `502` — under `USE_FAKE_AI`, on a path built to make E2E journeys
+    deterministic. Rotating by the day index varies them at no cost.
+
+    **Its limit, stated rather than discovered:** a wardrobe holding fewer
+    distinct combinations than the trip has days still repeats, and still fails
+    rule 11. The demo wardrobe's 64 items are far past that; a hand-built
+    three-item fixture is not. `AUDITS.md` O-27's family.
+    """
+    items = [item for item in wardrobe if item.category == category]
+    return items[offset % len(items)] if items else None
 
 
-def _fake_items(wardrobe: Sequence[ItemResponse], context: StylistContext) -> list[ItemResponse]:
+def _fake_items(
+    wardrobe: Sequence[ItemResponse], context: StylistContext, offset: int = 0
+) -> list[ItemResponse]:
     """The placeholder's picks: shoes, then a top and a bottom or a dress.
 
     Four of the request's fields change the answer rather than decorate it, and
@@ -383,19 +579,55 @@ def _fake_items(wardrobe: Sequence[ItemResponse], context: StylistContext) -> li
     if Category.DRESS in committed:
         pair = []
     elif committed & _SEPARATES:
-        pair = [_first(available, Category.TOP), _first(available, Category.BOTTOM)]
+        pair = [
+            _first(available, Category.TOP, offset),
+            _first(available, Category.BOTTOM, offset),
+        ]
     else:
-        top = _first(available, Category.TOP)
-        bottom = _first(available, Category.BOTTOM)
-        pair = [top, bottom] if top and bottom else [_first(available, Category.DRESS)]
+        top = _first(available, Category.TOP, offset)
+        bottom = _first(available, Category.BOTTOM, offset)
+        pair = [top, bottom] if top and bottom else [_first(available, Category.DRESS, offset)]
 
-    chosen = [item for item in [_first(available, Category.SHOES), *pair] if item is not None]
+    # Rule 6, and `AUDITS.md` **O-27 closes here**. The fake never picked
+    # outerwear, so every request below 16°C failed the weather rule twice and
+    # answered `502` — four months of the year on the single-day path, and very
+    # nearly guaranteed on a fourteen-day trip, which is what made a known bug
+    # into a blocker for this task. `include_outerwear is False` still wins,
+    # because rule 6 does not run at all when the user asked for no coat.
+    coat = (
+        _first(available, Category.OUTERWEAR, offset)
+        if context.include_outerwear is not False and requires_outerwear(context.weather_rule)
+        else None
+    )
+
+    chosen = [
+        item
+        for item in [_first(available, Category.SHOES, offset), *pair, coat]
+        if item is not None
+    ]
 
     if anchor is not None:
         chosen = [anchor, *(item for item in chosen if item.category is not anchor.category)]
 
     held = {item.category for item in locked}
     return [*locked, *(item for item in chosen if item.category not in held)]
+
+
+def _day_context(day: TripDay) -> StylistContext:
+    """One day of a trip as the single-day request it is.
+
+    A trip day carries everything `StylistContext`'s pickers read — a date, an
+    occasion, a forecast and a rule — and none of what it does not: no anchor,
+    no locks, no outerwear override, because `POST /trips/pack` accepts none of
+    them. Projecting is what lets the fake build a trip out of the same picker
+    the single-day path uses, rather than a second one that would drift.
+    """
+    return StylistContext(
+        date=day.date,
+        occasion=day.occasion,
+        forecast_summary=day.forecast_summary,
+        weather_rule=day.weather_rule,
+    )
 
 
 def _fake_response(wardrobe: Sequence[ItemResponse], context: StylistContext) -> StylistResponse:
@@ -422,7 +654,6 @@ def _fake_response(wardrobe: Sequence[ItemResponse], context: StylistContext) ->
     return StylistResponse(
         looks=(
             Look(
-                occasion=context.occasion,
                 title="Placeholder look",
                 item_ids=tuple(item.short_id for item in _fake_items(wardrobe, context)),
                 reasoning=(
@@ -434,6 +665,42 @@ def _fake_response(wardrobe: Sequence[ItemResponse], context: StylistContext) ->
         ),
         missing_pieces=(),
         message="Placeholder response from USE_FAKE_AI. No model was called.",
+    )
+
+
+def _fake_trip_response(wardrobe: Sequence[ItemResponse], context: TripContext) -> StylistResponse:
+    """The `USE_FAKE_AI` answer for a trip: one look per day, and a packing list.
+
+    Every rule the trip path runs has to pass here or the flag produces a `502`
+    on the one journey it exists to make deterministic. Rule 4 by building
+    exactly `len(days)` looks, rule 10 by numbering them in order, rule 11 by
+    rotating the picks with the day index, rule 6 by the outerwear `_fake_items`
+    now picks (`AUDITS.md` O-27), and **rule 5 in both directions** by deriving
+    the packing list from the looks rather than composing it separately — a
+    deduplicated union, in first-worn order, which is the same arithmetic
+    `packing.py` will do to the real answer.
+    """
+    looks = tuple(
+        Look(
+            day=day.day,
+            title=f"Placeholder look for day {day.day}",
+            item_ids=tuple(
+                item.short_id for item in _fake_items(wardrobe, _day_context(day), offset=index)
+            ),
+            reasoning=(
+                "Placeholder response: USE_FAKE_AI is on, so no model was called. "
+                "These items were picked by category, not styled."
+            ),
+            weather_note="Placeholder response: the weather rule was not applied.",
+        )
+        for index, day in enumerate(context.days)
+    )
+    packed = dict.fromkeys(item_id for look in looks for item_id in look.item_ids)
+    return StylistResponse(
+        looks=looks,
+        missing_pieces=(),
+        message="Placeholder response from USE_FAKE_AI. No model was called.",
+        packing_list=tuple(packed),
     )
 
 
@@ -472,14 +739,19 @@ def _build(payload: Any) -> StylistResponse:
     is normalising the case of a returned id (`DECISIONS.md` 156).
     """
     try:
+        packing = payload.get("packing_list")
         return StylistResponse(
             looks=tuple(
                 Look(
-                    occasion=look["occasion"],
                     title=look["title"],
                     item_ids=tuple(look["item_ids"]),
                     reasoning=look["reasoning"],
                     weather_note=look["weather_note"],
+                    # Absent on the single-day schema and required on the trip
+                    # one, so `.get` rather than `[...]`: this function's job is
+                    # to tell "not the documented shape" from "the other
+                    # documented shape".
+                    day=look.get("day"),
                 )
                 for look in payload["looks"]
             ),
@@ -492,14 +764,15 @@ def _build(payload: Any) -> StylistResponse:
                 for piece in payload["missing_pieces"]
             ),
             message=payload["message"],
+            packing_list=None if packing is None else tuple(packing["item_ids"]),
         )
-    except (KeyError, TypeError, IndexError) as exc:
+    except (KeyError, TypeError, IndexError, AttributeError) as exc:
         raise ValueError(f"The stylist model's answer was not the documented shape: {exc}") from exc
 
 
 async def suggest_looks(
     wardrobe: Sequence[ItemResponse],
-    context: StylistContext,
+    context: AnyContext,
     correction: str | None = None,
 ) -> StylistResponse:
     """One wardrobe and one request in, one unjudged recommendation out.
@@ -515,6 +788,8 @@ async def suggest_looks(
     side (`DECISIONS.md` 086).
     """
     if settings.USE_FAKE_AI:
+        if isinstance(context, TripContext):
+            return _fake_trip_response(wardrobe, context)
         return _fake_response(wardrobe, context)
 
     content: list[Any] = [{"type": "text", "text": _user_message(wardrobe, context)}]
@@ -526,10 +801,17 @@ async def suggest_looks(
         ChatCompletionUserMessageParam(role="user", content=content),
     ]
 
+    # The context picks the schema, and it picks the message one call up. That
+    # is one seam rather than two: `DECISIONS.md` 189 wrote this as "the schema a
+    # parameter", which would let a caller pair `TRIP_SCHEMA` with a single-day
+    # message — a `400` from the API and a mismatch no type could catch. 198
+    # narrows it.
+    schema = TRIP_SCHEMA if isinstance(context, TripContext) else STYLIST_SCHEMA
+
     completion = await _client().chat.completions.create(
         model=settings.OPENAI_STYLIST_MODEL,
         messages=messages,
-        response_format={"type": "json_schema", "json_schema": STYLIST_SCHEMA},
+        response_format={"type": "json_schema", "json_schema": schema},
     )
 
     # json.JSONDecodeError subclasses ValueError, so a truncated answer and an
@@ -576,32 +858,134 @@ def _normalised(response: StylistResponse) -> StylistResponse:
     )
 
 
-def _unknown_id(looks: tuple[Look, ...], known: Mapping[str, ItemResponse]) -> str | None:
-    for look in looks:
+def _named(position: int, message: str, trip: bool) -> str:
+    """A violation, with the day it happened on when there is more than one.
+
+    **The number is the look's 1-based position in the array, not its returned
+    `day`.** Rules 1 and 2 run *before* rule 10, which is exactly when the
+    returned ordinals are what has not been checked yet: two looks both claiming
+    day 3 would produce two violations naming day 3, and the day nobody dressed
+    would be named in none of them. Position is knowable before any rule has
+    run. `DECISIONS.md` 194.
+
+    Single-day violations are unprefixed, and their wording is untouched from
+    2.5 — a pinned string in `tests/unit/test_look_validation.py` for every one.
+    """
+    return f"day {position + 1}: {message}" if trip else message
+
+
+def _unknown_id(
+    looks: tuple[Look, ...], known: Mapping[str, ItemResponse], trip: bool = False
+) -> str | None:
+    for position, look in enumerate(looks):
         for item_id in look.item_ids:
             if item_id not in known:
-                return f"unknown item id {item_id}; it is not in the wardrobe you were given"
+                return _named(
+                    position,
+                    f"unknown item id {item_id}; it is not in the wardrobe you were given",
+                    trip,
+                )
     return None
 
 
-def _incomplete(looks: tuple[Look, ...], known: Mapping[str, ItemResponse]) -> str | None:
-    for look in looks:
+def _incomplete(
+    looks: tuple[Look, ...], known: Mapping[str, ItemResponse], trip: bool = False
+) -> str | None:
+    for position, look in enumerate(looks):
         categories = {known[item_id].category for item_id in look.item_ids}
         if Category.SHOES not in categories:
-            return "the look has no shoes"
+            return _named(position, "the look has no shoes", trip)
         if Category.DRESS in categories:
             continue
         if not {Category.TOP, Category.BOTTOM} <= categories:
-            return "the look has neither a top and a bottom nor a dress"
+            return _named(position, "the look has neither a top and a bottom nor a dress", trip)
     return None
 
 
-def _wrong_count(looks: tuple[Look, ...]) -> str | None:
-    # `03`'s rule 4 is `len(looks) == expected_days`; a single-day request is a
-    # trip of length one, so the expected count is 1 and is not a parameter until
-    # Stage 4 has a request that can ask for another number.
-    if len(looks) != 1:
-        return f"you returned {len(looks)} looks and exactly 1 was requested"
+def _wrong_count(looks: tuple[Look, ...], expected_days: int) -> str | None:
+    """`03`'s rule 4, with the parameter 2.5 could not supply.
+
+    Hard-coded `1` until task 4.3, because a single-day request is a trip of
+    length one and no caller could ask for another number (`DECISIONS.md` 164).
+    The verb agrees with the count so that the single-day string is byte-identical
+    to the one 2.5's tests pin.
+    """
+    if len(looks) != expected_days:
+        verb = "was" if expected_days == 1 else "were"
+        return f"you returned {len(looks)} looks and exactly {expected_days} {verb} requested"
+    return None
+
+
+def _wrong_days(looks: tuple[Look, ...], expected_days: int) -> str | None:
+    """Rule 10: the days are `1..n`, each exactly once. Trip path only.
+
+    Not rule 4 in different words, which is the whole reason it exists: seven
+    looks numbered 1, 1, 2, 3, 4, 5, 6 satisfy the count exactly, leave day 7
+    undressed and Monday wearing two outfits, and every look in the array looks
+    complete on its own.
+    """
+    for position, look in enumerate(looks):
+        if look.day is None:
+            return _named(position, "this look has no day number, and every look needs one", True)
+
+    numbered = sorted(look.day for look in looks if look.day is not None)
+    if numbered != list(range(1, expected_days + 1)):
+        got = ", ".join(str(day) for day in numbered)
+        return (
+            f"the looks are numbered {got} and must be numbered 1 to {expected_days}, "
+            "each day exactly once"
+        )
+    return None
+
+
+def _duplicate_look(looks: tuple[Look, ...]) -> str | None:
+    """Rule 11: no two looks are the same set of items. Trip path only.
+
+    Set equality rather than order, because the same four garments in a
+    different sequence is the same outfit. The model reaches for a repeat
+    exactly when the reuse instruction bites hardest — the cheapest way to pack
+    twelve items across seven days is to wear Tuesday twice.
+    """
+    seen: dict[frozenset[str], int] = {}
+    for position, look in enumerate(looks):
+        worn = frozenset(look.item_ids)
+        first = seen.get(worn)
+        if first is not None:
+            return _named(
+                position,
+                f"this look wears exactly the same items as day {first + 1}; "
+                "no two days may be dressed identically",
+                True,
+            )
+        seen[worn] = position
+    return None
+
+
+def _packing_mismatch(response: StylistResponse) -> str | None:
+    """Rule 5, both directions. Trip path only.
+
+    `03-AI-CONTRACTS.md` printed only the first half until 4.3 — every packed
+    item is worn — and `STAGE-4`'s acceptance criteria ask for both. The second
+    is the one a user feels: a garment worn on Thursday and missing from the
+    list is a garment left at home.
+    """
+    if response.packing_list is None:
+        return "you returned no packing list, and a trip needs one"
+
+    packed = set(response.packing_list)
+    for position, look in enumerate(response.looks):
+        for item_id in look.item_ids:
+            if item_id not in packed:
+                return _named(
+                    position,
+                    f"this look wears {item_id}, which is not in the packing list",
+                    True,
+                )
+
+    worn = {item_id for look in response.looks for item_id in look.item_ids}
+    for item_id in response.packing_list:
+        if item_id not in worn:
+            return f"the packing list contains {item_id}, which no look wears"
     return None
 
 
@@ -624,6 +1008,47 @@ def _missing_outerwear(
         if not any(known[item_id].category is Category.OUTERWEAR for item_id in look.item_ids):
             return "the weather rule requires outerwear and the look contains none"
     return None
+
+
+def _missing_outerwear_by_day(
+    looks: tuple[Look, ...], known: Mapping[str, ItemResponse], context: TripContext
+) -> str | None:
+    """Rule 6, per day: look *i* against day *i*'s rule.
+
+    A trip carries one rule per day, and judging fourteen looks against one of
+    them would make "the rainy day gets water-resistant outerwear" an average
+    rather than a rule. There is no `include_outerwear` narrowing here, unlike
+    the single-day form: `POST /trips/pack` takes no such field, so the weather
+    rule decides every day.
+
+    **Looks are matched by their own `day`, not by position**, because rule 10
+    admits a complete-but-shuffled array. This runs after rule 10, so every
+    `day` is present and in range by the time it is read.
+    """
+    for position, look in _in_day_order(looks):
+        day = context.days[look.day - 1] if look.day is not None else None
+        if day is None or not requires_outerwear(day.weather_rule):
+            continue
+        if not any(known[item_id].category is Category.OUTERWEAR for item_id in look.item_ids):
+            return _named(
+                position,
+                "the weather rule requires outerwear and the look contains none",
+                True,
+            )
+    return None
+
+
+def _in_day_order(looks: tuple[Look, ...]) -> list[tuple[int, Look]]:
+    """The looks by their day number, each with the position it is reported as.
+
+    Rule 10 checks `sorted(day) == 1..n`, which a **shuffled** array satisfies —
+    day 3 may legitimately arrive first. Every rule that runs after it therefore
+    reads `look.day` to find the day it belongs to, and reports the position it
+    was returned in, so one number identifies a look in the message and another
+    finds its weather. They are the same number whenever the model answers in
+    order, which is every case observed so far. `DECISIONS.md` 194.
+    """
+    return sorted(enumerate(looks), key=lambda pair: pair[1].day or 0)
 
 
 def _missing_anchor(looks: tuple[Look, ...], context: StylistContext) -> str | None:
@@ -700,7 +1125,9 @@ SLOT_RULES: Final[tuple[SlotRule, ...]] = (
 )
 
 
-def _slot_conflict(looks: tuple[Look, ...], known: Mapping[str, ItemResponse]) -> str | None:
+def _slot_conflict(
+    looks: tuple[Look, ...], known: Mapping[str, ItemResponse], trip: bool = False
+) -> str | None:
     """Rule 9: one item per slot, and a dress instead of separates.
 
     Rule 2 says a look is not missing anything; this says it does not wear
@@ -712,14 +1139,16 @@ def _slot_conflict(looks: tuple[Look, ...], known: Mapping[str, ItemResponse]) -
     stays in `03`'s table: eight documents, a test and three code comments name
     it, and renumbering to buy nothing is how a reference becomes wrong.
     """
-    for look in looks:
+    for position, look in enumerate(looks):
         for slot in SLOT_RULES:
             worn = [item_id for item_id in look.item_ids if slot.holds(known[item_id])]
             if len(worn) > slot.limit:
                 named = ", ".join(worn[: slot.limit + 1])
-                return (
+                return _named(
+                    position,
                     f"the look contains {len(worn)} {slot.label} "
-                    f"and may contain at most {slot.limit}: {named}"
+                    f"and may contain at most {slot.limit}: {named}",
+                    trip,
                 )
 
         if any(known[item_id].category is Category.DRESS for item_id in look.item_ids):
@@ -728,15 +1157,17 @@ def _slot_conflict(looks: tuple[Look, ...], known: Mapping[str, ItemResponse]) -
                 None,
             )
             if separate is not None:
-                return (
+                return _named(
+                    position,
                     f"the look contains a dress and the separate item {separate}: "
-                    "a dress is worn instead of a top and a bottom, not beside one"
+                    "a dress is worn instead of a top and a bottom, not beside one",
+                    trip,
                 )
     return None
 
 
 def _violation(
-    response: StylistResponse, wardrobe: Sequence[ItemResponse], context: StylistContext
+    response: StylistResponse, wardrobe: Sequence[ItemResponse], context: AnyContext
 ) -> str | None:
     """`03`'s table, in `03`'s order, stopping at the first failure.
 
@@ -746,19 +1177,41 @@ def _violation(
     than a list because it is a sentence sent back to the model, and one
     concrete instruction is likelier to be obeyed than five.
 
-    Rule 5 is absent: it reads `packing_list.item_ids`, and `STYLIST_SCHEMA`
-    carries no `packing_list` until Stage 4 designs it beside the trip message
-    (`DECISIONS.md` 157). Rule 7 arrived with the anchor at 2.10, rule 8 with
-    the swap at 2.11, and rule 9 at 2.11a, widened at 2.11b. **Rule 3 is not
-    missing** — it is one slot of rule 9 since 2.11b, so the chain is seven
-    calls for eight rules, and rule 9 runs last because it is last in the
-    table, which is the only ordering this function claims.
+    **Two chains, and the difference is which rules have a field to read.** On
+    the single-day path rules 5, 10 and 11 are absent: there is no packing list
+    and no day number in `outfit_recommendation`. On the trip path rules 7 and 8
+    are absent, because `POST /trips/pack` accepts no anchor and no locks. Rule
+    7 arrived with the anchor at 2.10, rule 8 with the swap at 2.11, rule 9 at
+    2.11a widened at 2.11b, and rules 5, 10 and 11 at 4.3 with the schema that
+    gave them fields. **Rule 3 is not missing** — it is one slot of rule 9 since
+    2.11b.
+
+    The trip order is not the numeric one, and the hoist is load-bearing rather
+    than cosmetic: **rule 10 runs before 5 and 6** because rule 6 pairs a look
+    with its own day's weather rule, and that pairing means nothing until the
+    ordinals have been checked. `DECISIONS.md` 194.
     """
     known = {item.short_id: item for item in wardrobe}
+    if isinstance(context, TripContext):
+        # `03`'s trip order: 1, 2, 4, 10, 5, 6, 9, 11. Rules 7 and 8 have no
+        # fields on this path, and **rule 10 is hoisted above 5 and 6** because
+        # rule 6 pairs a look with its day's weather rule and that pairing means
+        # nothing until the ordinals are known good. `DECISIONS.md` 194.
+        return (
+            _unknown_id(response.looks, known, trip=True)
+            or _incomplete(response.looks, known, trip=True)
+            or _wrong_count(response.looks, len(context.days))
+            or _wrong_days(response.looks, len(context.days))
+            or _packing_mismatch(response)
+            or _missing_outerwear_by_day(response.looks, known, context)
+            or _slot_conflict(response.looks, known, trip=True)
+            or _duplicate_look(response.looks)
+        )
+
     return (
         _unknown_id(response.looks, known)
         or _incomplete(response.looks, known)
-        or _wrong_count(response.looks)
+        or _wrong_count(response.looks, 1)
         or _missing_outerwear(response.looks, known, context)
         or _missing_anchor(response.looks, context)
         or _broken_lock(response.looks, context)
@@ -769,7 +1222,7 @@ def _violation(
 def validate_look_response(
     response: StylistResponse,
     wardrobe: Sequence[ItemResponse],
-    context: StylistContext,
+    context: AnyContext,
 ) -> LookValidation:
     """One answer judged against the wardrobe it was built from.
 

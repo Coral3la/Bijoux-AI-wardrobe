@@ -95,7 +95,6 @@ def answer(*item_ids: str, message: str = "A work outfit for a mild day.") -> St
     return StylistResponse(
         looks=(
             StylistLook(
-                occasion="work",
                 title="Morning meetings",
                 item_ids=item_ids,
                 reasoning="The straight jean balances the oversized shirt.",

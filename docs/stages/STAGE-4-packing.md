@@ -31,7 +31,13 @@ Extend `services/weather.py` with `get_daily_forecast(lat, lon, start, end) -> l
 Return `400` with `code: "forecast_unavailable"` when dates fall outside the horizon. Say so plainly rather than guessing from seasonal averages.
 
 ### 4.3 Packing orchestration
-`services/packing.py` → `pack_trip(user, trip_request) -> PackingResult`:
+`services/packing.py` → `pack_trip(user, wardrobe, request, preferences=None) -> PackingResult`:
+
+**The signature is wider than the line above printed**, and it had to be: this
+service holds no `Session`, so the wardrobe and the learned-preferences block —
+both queries — arrive as arguments rather than being fetched. `TripRequest` is a
+frozen dataclass in `packing.py` and not a Pydantic model, because
+`schemas/trip.py` belongs to 4.4. `DECISIONS.md` 196.
 
 1. Geocode the destination
 2. Fetch the daily forecast for the range
@@ -41,6 +47,10 @@ Return `400` with `code: "forecast_unavailable"` when dates fall outside the hor
 6. **One** stylist call for the whole trip
 7. Validate, including `len(looks) == days`
 8. Persist the trip and all looks with `trip_id` set
+
+**Step 8 is not this task's.** `pack_trip` returns an unpersisted `Trip` and its
+looks; `POST /trips/pack` writes them at 4.4, in one transaction it owns. That is
+what keeps the reuse arithmetic testable with no database in reach.
 
 **One call, not one per day.** Per-day calls cannot reuse items intelligently because each is blind to the others' choices, and reuse is the entire point of a packing list. If output quality suffers on long trips, chunk into blocks of 7 days and pass the first block's chosen items into the second block's prompt as already-packed — do not fall back to per-day calls.
 

@@ -13,6 +13,10 @@ direction `01-ARCHITECTURE.md` states in one line. What is left in the route
 layer is `_stylist_shared.py`'s pair — which wardrobe to send, and what a
 failure is worth on the wire. `DECISIONS.md` 197.
 
+Both context types travel through untouched — `AnyContext` since 4.3, when
+`pack_trip` became the second caller. This module never reads a field on either
+one; it counts calls and logs, and the two shapes are `stylist.py`'s business.
+
 `judged` propagates whatever `suggest_looks` raises: a `ValueError` when no
 usable answer arrived, a provider exception when none arrived at all. Both
 callers map those to `502 stylist_failed` themselves, which is 164's split
@@ -26,8 +30,8 @@ from collections.abc import Sequence
 from app.core.config import settings
 from app.schemas.item import ItemResponse
 from app.services.stylist import (
+    AnyContext,
     LookValidation,
-    StylistContext,
     suggest_looks,
     validate_look_response,
 )
@@ -37,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 async def attempt(
     wardrobe: Sequence[ItemResponse],
-    context: StylistContext,
+    context: AnyContext,
     number: int,
     correction: str | None = None,
 ) -> LookValidation:
@@ -81,7 +85,7 @@ async def attempt(
     return validation
 
 
-async def judged(wardrobe: Sequence[ItemResponse], context: StylistContext) -> LookValidation:
+async def judged(wardrobe: Sequence[ItemResponse], context: AnyContext) -> LookValidation:
     """One call, and a second one only when the first broke a named rule.
 
     The retry exists to carry a violation back to the model, so a failure with

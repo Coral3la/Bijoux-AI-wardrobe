@@ -27,6 +27,20 @@ STYLING PRINCIPLES
   contrast.
 - Layering runs base -> mid -> outer, thinnest to thickest.
 
+PACKING A TRIP
+- When the request lists days, build exactly one look per day and give each
+  look the `day` number of the day it dresses. Day numbers are ordinals within
+  the trip: day 1 is the first day of the trip, not a date.
+- The reuse target is a CEILING, not something to aim at from below. Pack at
+  most that many distinct items across the whole trip, and fewer if the wardrobe
+  allows it. Reuse bottoms, outerwear and shoes across days; vary the top.
+- No two days may wear an identical set of items. Changing one piece is enough
+  to make a day different, and reuse is the point — repeating a whole outfit is
+  not.
+- The packing list is the deduplicated union of every item worn on any day:
+  every item in a look appears in it exactly once, and it contains nothing that
+  no look wears.
+
 CONSTRAINTS
 - Obey the weather rule for each day exactly. It is not a suggestion.
 - Where the wardrobe holds nothing that satisfies the weather rule, dress the

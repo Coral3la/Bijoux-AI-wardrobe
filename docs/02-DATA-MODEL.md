@@ -503,7 +503,7 @@ CREATE TABLE trips (
   end_date     DATE NOT NULL,
 
   occasions    JSONB NOT NULL DEFAULT '[]',   -- [{"day":1,"occasion":"work"}, …]
-  forecast     JSONB,                          -- cached Open-Meteo response
+  forecast     JSONB,                          -- the parsed per-day list; see below
   packing_list JSONB,                          -- {"item_ids":[…],"reuse_summary":{…}} — see below
   notes        TEXT,
 
@@ -533,6 +533,19 @@ on its own — see the `looks` section above.
 **`looks.trip_id` is nullable and stays nullable.** Every look written before
 Stage 4 belongs to no trip and `POST /looks/suggest` goes on writing them that
 way, so `NULL` is the ordinary case rather than a missing value.
+
+**`forecast` holds the parsed days, not the provider's body, and 4.3 is what
+settled it.** This line read *"cached Open-Meteo response"*, which reads as the
+raw JSON — and `pack_trip` never holds that: `get_daily_forecast` answers parsed
+`Forecast` objects, so the unparsed body is not in reach to store. What is
+stored is one object per day — `day`, `date`, the four numbers, the `condition`,
+and **that day's weather `rule`** — which is exactly what `04-API-SPEC.md`'s
+`days[]` renders, minus the occasion and the look id the route adds. The rule is
+stored rather than recomputed on read: it is a pure function of three of the
+numbers, so a reader *could* rebuild it, but then a trip packed under one version
+of the band table would render under another and the sentence the model actually
+obeyed would be lost. The cache is still the point — reopening a trip re-reads
+the plan rather than re-fetching a forecast that has moved since.
 
 **What `packing_list` holds, settled at task 4.3** — the column was created at
 4.1 typed only as the object this file sketched, because its keys belong beside

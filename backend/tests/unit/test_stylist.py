@@ -156,19 +156,48 @@ def test_the_root_carries_exactly_the_three_documented_keys() -> None:
     ]
 
 
-def test_a_look_carries_exactly_the_five_documented_keys() -> None:
+def test_a_look_carries_exactly_the_four_documented_keys() -> None:
     # `confidence` and `look_id` are struck from `03`'s look object: neither has
     # a column, a renderer or a task, and in strict mode every property is one
     # the model must produce on every call. `AUDITS.md` O-9, `DECISIONS.md` 157.
     # `day` is struck at 2.5 on the same test, once a live call had shown it
     # being filled from the date. `AUDITS.md` O-24, `DECISIONS.md` 163.
+    # `occasion` is struck at 4.3 on the same test again, and it is the last
+    # field to fail it: the trip contract keys an occasion to a day in the
+    # *request*, so the model's echo has no reader on either path.
+    # `AUDITS.md` O-26, `DECISIONS.md` 193.
     assert list(stylist.STYLIST_SCHEMA["schema"]["properties"]["looks"]["items"]["properties"]) == [
-        "occasion",
         "title",
         "item_ids",
         "reasoning",
         "weather_note",
     ]
+
+
+def test_a_trip_look_is_the_same_four_keys_with_a_day_in_front() -> None:
+    # One shared dict rather than two literals, so a change to what a look holds
+    # cannot land on one schema and not the other. `DECISIONS.md` 189, 193.
+    assert list(stylist.TRIP_SCHEMA["schema"]["properties"]["looks"]["items"]["properties"]) == [
+        "day",
+        "title",
+        "item_ids",
+        "reasoning",
+        "weather_note",
+    ]
+
+
+def test_the_trip_schema_is_named_for_the_contract_it_answers() -> None:
+    assert stylist.TRIP_SCHEMA["name"] == "trip_packing_plan"
+    assert stylist.TRIP_SCHEMA["strict"] is True
+
+
+def test_the_packing_list_holds_item_ids_and_nothing_else() -> None:
+    # No `by_category` — strict mode cannot express a free-form category map and
+    # the frontend groups from `items[].category`. No `reuse_summary` — Python
+    # computes it, because asking a model for arithmetic means checking it.
+    packing = stylist.TRIP_SCHEMA["schema"]["properties"]["packing_list"]
+    assert list(packing["properties"]) == ["item_ids"]
+    assert packing["required"] == ["item_ids"]
 
 
 def test_the_schema_has_no_packing_list() -> None:
@@ -638,14 +667,6 @@ async def test_the_fake_says_out_loud_that_it_is_a_placeholder(fake: None) -> No
     assert "Placeholder" in answer.message
 
 
-@pytest.mark.asyncio
-async def test_the_fake_echoes_the_requested_occasion(fake: None) -> None:
-    answer = await stylist.suggest_looks(WARDROBE, _context(occasion="evening"))
-
-    assert answer.looks[0].occasion == "evening"
-    assert answer.missing_pieces == ()
-
-
 # --- answers that cannot be used --------------------------------------------
 
 
@@ -792,7 +813,158 @@ async def test_returned_ids_are_not_normalised_here(monkeypatch: pytest.MonkeyPa
 
 
 def test_the_response_is_immutable() -> None:
-    look = stylist.Look(occasion="work", title="t", item_ids=(), reasoning="r", weather_note="w")
+    look = stylist.Look(title="t", item_ids=(), reasoning="r", weather_note="w")
 
+    # `title` rather than `occasion`, which 4.3 removed: setting an attribute
+    # that does not exist raises `AttributeError` on a slotted class too, so the
+    # old spelling would have gone on passing without testing immutability at
+    # all. `DECISIONS.md` 163 repointed this same test once before.
     with pytest.raises(AttributeError):
-        look.occasion = "evening"  # type: ignore[misc]
+        look.title = "evening"  # type: ignore[misc]
+
+
+# --- the trip message, and the trip fake ------------------------------------
+
+
+COLD_RULE = "Outerwear is REQUIRED, warmth 3-4."
+
+# The fake rotates its picks by the day index, so a trip needs more than one of
+# something to vary. Four items is the single-day wardrobe above; this adds a
+# second top and a second bottom, which is the smallest wardrobe that can dress
+# three days without repeating a whole look.
+TOP_TWO = _item("TANK55", category="top", subcategory="tank")
+JEANS_TWO = _item("SHTS47", category="bottom", subcategory="shorts")
+TRIP_WARDROBE = [TOP, JEANS, BOOTS, BLAZER, TOP_TWO, JEANS_TWO]
+
+
+def _trip_day(number: int, **overrides: Any) -> stylist.TripDay:
+    fields: dict[str, Any] = {
+        "day": number,
+        "date": datetime.date(2026, 3, 13 + number),
+        "occasion": "work",
+        "forecast_summary": SUMMARY,
+        "weather_rule": RULE,
+    }
+    return stylist.TripDay(**(fields | overrides))
+
+
+def _trip_context(days: int = 4, **overrides: Any) -> stylist.TripContext:
+    fields: dict[str, Any] = {
+        "destination": "Berlin",
+        "days": tuple(_trip_day(number) for number in range(1, days + 1)),
+        "reuse_target": 12,
+    }
+    return stylist.TripContext(**(fields | overrides))
+
+
+def test_the_trip_message_carries_one_line_per_day_in_the_documents_order() -> None:
+    message = stylist._user_message(WARDROBE, _trip_context(days=2))
+
+    assert "Destination: Berlin" in message
+    assert "Dates: 2026-03-14 to 2026-03-15 (2 days)" in message
+    assert f"Day 1 | work | {SUMMARY} | {RULE}" in message
+    assert f"Day 2 | work | {SUMMARY} | {RULE}" in message
+
+
+def test_the_trip_message_states_the_reuse_target_as_a_number() -> None:
+    # Without an explicit numeric target the model reuses almost nothing, which
+    # is the finding `STAGE-4`'s prompt-tuning note is built on.
+    message = stylist._user_message(WARDROBE, _trip_context(days=4))
+
+    assert "Aim for at most 12 distinct items across 4 days." in message
+
+
+def test_the_trip_message_omits_notes_entirely_when_there_are_none() -> None:
+    # `_outerwear_line`'s rule: a line printed about a field the user did not
+    # send is an instruction nobody gave. `DECISIONS.md` 158.
+    assert "Notes:" not in stylist._user_message(WARDROBE, _trip_context())
+    assert "Notes: one dinner out" in stylist._user_message(
+        WARDROBE, _trip_context(notes="one dinner out")
+    )
+
+
+def test_a_trip_message_carries_the_wardrobe_and_the_profile_like_any_other() -> None:
+    message = stylist._user_message(
+        WARDROBE, _trip_context(height_cm=165, preferences="- Liked: relaxed tops")
+    )
+
+    assert f"WARDROBE ({len(WARDROBE)} items):" in message
+    assert "Height: 165 cm." in message
+    assert "- Liked: relaxed tops" in message
+
+
+@pytest.mark.asyncio
+async def test_the_fake_builds_one_look_per_day_numbered_in_order(fake: None) -> None:
+    answer = await stylist.suggest_looks(WARDROBE, _trip_context(days=3))
+
+    assert [look.day for look in answer.looks] == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_the_fake_never_repeats_a_whole_look(fake: None) -> None:
+    # Rule 11 under `USE_FAKE_AI`: picking the first of every category every day
+    # returns N identical looks, which is two failed attempts and a `502` on the
+    # one path built to make E2E journeys deterministic.
+    answer = await stylist.suggest_looks(TRIP_WARDROBE, _trip_context(days=2))
+
+    assert len({frozenset(look.item_ids) for look in answer.looks}) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_wardrobe_too_small_to_vary_still_repeats_and_this_is_the_known_limit(
+    fake: None,
+) -> None:
+    # Stated rather than discovered: rotation cannot invent combinations a
+    # wardrobe does not hold, so one top and one bottom dress every day the same
+    # way and rule 11 rejects the plan. The demo wardrobe's 64 items are far past
+    # this; a four-item fixture is not. `AUDITS.md` O-27's family.
+    answer = await stylist.suggest_looks(WARDROBE, _trip_context(days=2))
+
+    assert len({frozenset(look.item_ids) for look in answer.looks}) == 1
+
+
+@pytest.mark.asyncio
+async def test_the_fakes_packing_list_is_the_deduplicated_union_of_its_looks(fake: None) -> None:
+    # Rule 5 in both directions, which the fake satisfies by deriving the list
+    # from the looks rather than composing it separately.
+    answer = await stylist.suggest_looks(TRIP_WARDROBE, _trip_context(days=3))
+
+    worn = {item_id for look in answer.looks for item_id in look.item_ids}
+    assert answer.packing_list is not None
+    assert set(answer.packing_list) == worn
+    assert len(answer.packing_list) == len(set(answer.packing_list))
+
+
+@pytest.mark.asyncio
+async def test_the_fake_packs_a_coat_when_the_day_requires_one(fake: None) -> None:
+    # `AUDITS.md` **O-27 closes here.** The fake never picked outerwear, so every
+    # request below 16°C failed rule 6 twice and answered `502` — four months of
+    # the year on the single-day path, and near-certain across a fourteen-day
+    # trip, which is what made a known bug a blocker for this task.
+    context = stylist.TripContext(
+        destination="Berlin",
+        days=(_trip_day(1, weather_rule=COLD_RULE),),
+        reuse_target=4,
+    )
+
+    answer = await stylist.suggest_looks(WARDROBE, context)
+
+    assert BLAZER_ID in answer.looks[0].item_ids
+
+
+@pytest.mark.asyncio
+async def test_the_single_day_fake_packs_a_coat_too(fake: None) -> None:
+    answer = await stylist.suggest_looks(WARDROBE, _context(weather_rule=COLD_RULE))
+
+    assert BLAZER_ID in answer.looks[0].item_ids
+
+
+@pytest.mark.asyncio
+async def test_the_fake_still_obeys_an_explicit_no_coat(fake: None) -> None:
+    # Rule 6 does not run when the user asked for no outerwear (`DECISIONS.md`
+    # 158), so the fake must not add one either.
+    answer = await stylist.suggest_looks(
+        WARDROBE, _context(weather_rule=COLD_RULE, include_outerwear=False)
+    )
+
+    assert BLAZER_ID not in answer.looks[0].item_ids

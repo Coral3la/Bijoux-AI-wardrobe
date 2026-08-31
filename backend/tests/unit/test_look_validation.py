@@ -111,7 +111,6 @@ def _context(**overrides: Any) -> stylist.StylistContext:
 
 def _look(*item_ids: str) -> stylist.Look:
     return stylist.Look(
-        occasion="work",
         title="Morning meetings",
         item_ids=item_ids,
         reasoning="The straight jean balances the oversized shirt.",
@@ -416,3 +415,246 @@ def test_a_rejected_look_is_logged_with_the_first_violation(
         _validate(_response(_look(TOP_ID, JEANS_ID)))
 
     assert [record.violation for record in caplog.records] == ["the look has no shoes"]
+
+
+# --- the trip path: rules 5, 10 and 11, and rules 4 and 6 with a day ---------
+#
+# `03-AI-CONTRACTS.md`'s trip order is 1, 2, 4, 10, 5, 6, 9, 11. Rules 7 and 8
+# do not run — `POST /trips/pack` accepts no anchor and no locks — and the three
+# that could not run before Stage 4 now have fields to read. Every violation on
+# this path names its day, and the number is the look's **position** in the
+# array rather than its returned `day`: rules 1 and 2 run before rule 10, so at
+# that point the ordinals are exactly what has not been checked.
+# `DECISIONS.md` 194.
+
+
+def _day(number: int, **overrides: Any) -> stylist.TripDay:
+    fields: dict[str, Any] = {
+        "day": number,
+        "date": datetime.date(2026, 3, 13 + number),
+        "occasion": "work",
+        "forecast_summary": "18°C, no rain.",
+        "weather_rule": MILD_RULE,
+    }
+    return stylist.TripDay(**(fields | overrides))
+
+
+def _trip(days: int = 2, **overrides: Any) -> stylist.TripContext:
+    fields: dict[str, Any] = {
+        "destination": "Berlin",
+        "days": tuple(_day(number) for number in range(1, days + 1)),
+        "reuse_target": 10,
+    }
+    return stylist.TripContext(**(fields | overrides))
+
+
+def _trip_look(day: int, *item_ids: str) -> stylist.Look:
+    return stylist.Look(
+        title=f"Day {day}",
+        item_ids=item_ids,
+        reasoning="The straight jean balances the oversized shirt.",
+        weather_note="18°C — no coat needed.",
+        day=day,
+    )
+
+
+def _trip_response(
+    *looks: stylist.Look, packing: tuple[str, ...] | None = None
+) -> stylist.StylistResponse:
+    packed = (
+        packing
+        if packing is not None
+        else tuple(dict.fromkeys(item_id for look in looks for item_id in look.item_ids))
+    )
+    return stylist.StylistResponse(
+        looks=looks, missing_pieces=(), message="Four days in Berlin.", packing_list=packed
+    )
+
+
+def _validate_trip(response: stylist.StylistResponse, **context: Any) -> stylist.LookValidation:
+    return stylist.validate_look_response(response, WARDROBE, _trip(**context))
+
+
+def test_a_two_day_plan_that_obeys_every_rule_is_accepted() -> None:
+    answer = _trip_response(
+        _trip_look(1, TOP_ID, JEANS_ID, BOOTS_ID),
+        _trip_look(2, TANK_ID, SHORTS_ID, BOOTS_ID),
+    )
+
+    assert _validate_trip(answer).ok
+
+
+def test_rule_4_counts_against_the_days_the_trip_asked_for() -> None:
+    # The parameter 2.5 could not supply: `expected_days` was hard-coded 1 until
+    # a caller existed that could ask for another number. `DECISIONS.md` 164.
+    answer = _trip_response(_trip_look(1, TOP_ID, JEANS_ID, BOOTS_ID))
+
+    violation = _validate_trip(answer, days=3).violation
+
+    assert violation is not None
+    assert "1 looks" in violation
+    assert "exactly 3 were requested" in violation
+
+
+def test_a_day_returned_twice_is_rejected_even_though_the_count_is_right() -> None:
+    # Rule 10 is not rule 4 in different words, and this is the case that shows
+    # it: two looks, two days asked for, and day 2 undressed.
+    answer = _trip_response(
+        _trip_look(1, TOP_ID, JEANS_ID, BOOTS_ID),
+        _trip_look(1, TANK_ID, SHORTS_ID, BOOTS_ID),
+    )
+
+    violation = _validate_trip(answer).violation
+
+    assert violation is not None
+    assert "numbered 1, 1" in violation
+    assert "1 to 2" in violation
+
+
+def test_a_look_with_no_day_number_is_rejected() -> None:
+    answer = _trip_response(
+        stylist.Look(
+            title="t", item_ids=(TOP_ID, JEANS_ID, BOOTS_ID), reasoning="r", weather_note="w"
+        ),
+        _trip_look(2, TANK_ID, SHORTS_ID, BOOTS_ID),
+    )
+
+    violation = _validate_trip(answer).violation
+
+    assert violation is not None
+    assert "no day number" in violation
+
+
+def test_two_days_dressed_identically_are_rejected() -> None:
+    # Rule 11. The cheapest way to pack twelve items across seven days is to
+    # wear Tuesday twice, so the reuse instruction is exactly what pushes the
+    # model here.
+    answer = _trip_response(
+        _trip_look(1, TOP_ID, JEANS_ID, BOOTS_ID),
+        _trip_look(2, BOOTS_ID, TOP_ID, JEANS_ID),
+    )
+
+    violation = _validate_trip(answer).violation
+
+    assert violation is not None
+    assert "same items as day 1" in violation
+
+
+def test_the_same_items_in_a_different_order_are_the_same_look() -> None:
+    # Set equality, not sequence equality — the assertion above already relies
+    # on it, and this names the property so a later `tuple(...)` comparison
+    # fails a test rather than quietly admitting a repeat.
+    answer = _trip_response(
+        _trip_look(1, TOP_ID, JEANS_ID, BOOTS_ID),
+        _trip_look(2, JEANS_ID, BOOTS_ID, TOP_ID),
+    )
+
+    assert not _validate_trip(answer).ok
+
+
+def test_an_item_worn_on_a_day_and_missing_from_the_packing_list_is_rejected() -> None:
+    # Rule 5, the direction `03` did not print until 4.3 and the one a user
+    # feels: a garment worn on Thursday and left at home.
+    answer = _trip_response(
+        _trip_look(1, TOP_ID, JEANS_ID, BOOTS_ID),
+        _trip_look(2, TANK_ID, SHORTS_ID, BOOTS_ID),
+        packing=(TOP_ID, JEANS_ID, BOOTS_ID, TANK_ID),
+    )
+
+    violation = _validate_trip(answer).violation
+
+    assert violation is not None
+    assert f"wears {SHORTS_ID}" in violation
+    assert "not in the packing list" in violation
+
+
+def test_a_packed_item_that_no_day_wears_is_rejected() -> None:
+    answer = _trip_response(
+        _trip_look(1, TOP_ID, JEANS_ID, BOOTS_ID),
+        _trip_look(2, TANK_ID, SHORTS_ID, BOOTS_ID),
+        packing=(TOP_ID, JEANS_ID, BOOTS_ID, TANK_ID, SHORTS_ID, DRESS_ID),
+    )
+
+    violation = _validate_trip(answer).violation
+
+    assert violation is not None
+    assert f"packing list contains {DRESS_ID}" in violation
+
+
+def test_a_trip_with_no_packing_list_is_rejected() -> None:
+    answer = _trip_response(
+        _trip_look(1, TOP_ID, JEANS_ID, BOOTS_ID),
+        _trip_look(2, TANK_ID, SHORTS_ID, BOOTS_ID),
+        packing=None,
+    )
+    answer = stylist.StylistResponse(
+        looks=answer.looks, missing_pieces=(), message="m", packing_list=None
+    )
+
+    violation = _validate_trip(answer).violation
+
+    assert violation is not None
+    assert "no packing list" in violation
+
+
+def test_only_the_cold_day_needs_a_coat() -> None:
+    # Rule 6, per day: look *i* is judged against day *i*'s rule, which is what
+    # makes "the rainy day gets water-resistant outerwear" a rule rather than an
+    # average. Day 1 is mild and bare; day 2 is cold and wears the coat.
+    answer = _trip_response(
+        _trip_look(1, TOP_ID, JEANS_ID, BOOTS_ID),
+        _trip_look(2, TANK_ID, SHORTS_ID, BOOTS_ID, COAT_ID),
+    )
+    context = stylist.TripContext(
+        destination="Berlin",
+        days=(
+            _day(1),
+            _day(2, weather_rule=COLD_RULE, forecast_summary="12°C, no rain."),
+        ),
+        reuse_target=10,
+    )
+
+    assert stylist.validate_look_response(answer, WARDROBE, context).ok
+
+
+def test_the_cold_day_without_a_coat_is_rejected_and_named() -> None:
+    answer = _trip_response(
+        _trip_look(1, TOP_ID, JEANS_ID, BOOTS_ID),
+        _trip_look(2, TANK_ID, SHORTS_ID, BOOTS_ID),
+    )
+    context = stylist.TripContext(
+        destination="Berlin",
+        days=(
+            _day(1),
+            _day(2, weather_rule=COLD_RULE, forecast_summary="12°C, no rain."),
+        ),
+        reuse_target=10,
+    )
+
+    violation = stylist.validate_look_response(answer, WARDROBE, context).violation
+
+    assert violation is not None
+    assert violation.startswith("day 2:")
+    assert "requires outerwear" in violation
+
+
+def test_a_trip_violation_names_the_position_not_the_returned_day() -> None:
+    # The look in slot 1 calls itself day 9. Rule 2 fires before rule 10 has
+    # checked any ordinal, so the message names where it is, not what it claims.
+    answer = _trip_response(
+        _trip_look(9, TOP_ID, JEANS_ID), _trip_look(2, TANK_ID, SHORTS_ID, BOOTS_ID)
+    )
+
+    violation = _validate_trip(answer).violation
+
+    assert violation is not None
+    assert violation.startswith("day 1:")
+    assert "no shoes" in violation
+
+
+def test_a_single_day_violation_is_not_prefixed() -> None:
+    # The single-day wording is untouched by 4.3, and every string in this file
+    # above depends on it.
+    violation = _validate(_response(_look(TOP_ID, JEANS_ID))).violation
+
+    assert violation == "the look has no shoes"

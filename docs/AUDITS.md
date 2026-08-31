@@ -98,7 +98,9 @@ contradiction** — a thing no document disagrees about and nobody has looked at
 It was extended at 1.6 rather than duplicated, and **O-15** was opened by the
 same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
-task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, **which task 3.1 closed**, printing both indexes in `02` before migration `0004` built them and finding, on the way, that deleting them failed no test. **O-29 and O-30 were opened at task 3.2**, and they are the two kinds this file has collected most: a cost that only becomes visible on its third instance — three screens with no way into them — and a documented endpoint with nothing under its heading, which is **O-1's shape** found the same way, by the task implementing the section next to it. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had. **O-31 was opened at task 4.1**, and it is the first item here that is a defect in a *shipped* artefact rather than in a document or an unread surface: three constraint names that the live schema has held wrongly since Stage 0, found by the task that was about to add a fourth the same way, and invisible to the one test written to catch exactly it. **Task 4.3 closed O-7**, the oldest item still open — audit 1 predicted the unsatisfiable trip constraints that `DECISIONS.md` 190 later had to settle, and its recommendation is taken in shape though not in number, for measurements taken after it was written. **O-32 was opened by the same task**, and it is the first that is a collision between two stages rather than a defect in either: Stage 4's repack and delete were specified before Stage 3 gave a look three columns worth keeping, and neither document is wrong on its own terms. Task 4.3 also **decided O-26** without closing it — the strike is in `03-AI-CONTRACTS.md` and the heading waits for the code, which is the same task's next commit.
+task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, **which task 3.1 closed**, printing both indexes in `02` before migration `0004` built them and finding, on the way, that deleting them failed no test. **O-29 and O-30 were opened at task 3.2**, and they are the two kinds this file has collected most: a cost that only becomes visible on its third instance — three screens with no way into them — and a documented endpoint with nothing under its heading, which is **O-1's shape** found the same way, by the task implementing the section next to it. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had. **O-31 was opened at task 4.1**, and it is the first item here that is a defect in a *shipped* artefact rather than in a document or an unread surface: three constraint names that the live schema has held wrongly since Stage 0, found by the task that was about to add a fourth the same way, and invisible to the one test written to catch exactly it. **Task 4.3 closed O-7**, the oldest item still open — audit 1 predicted the unsatisfiable trip constraints that `DECISIONS.md` 190 later had to settle, and its recommendation is taken in shape though not in number, for measurements taken after it was written. **Task 4.3 also closed O-27**, three lines in the fake, after a fourteen-day trip
+turned "a `502` for four months of the year" into "a `502` for nearly any trip".
+**O-32 was opened by the same task**, and it is the first that is a collision between two stages rather than a defect in either: Stage 4's repack and delete were specified before Stage 3 gave a look three columns worth keeping, and neither document is wrong on its own terms. Task 4.3 also **decided O-26** without closing it — the strike is in `03-AI-CONTRACTS.md` and the heading waits for the code, which is the same task's next commit.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -1263,7 +1265,7 @@ the code lands**, in the same task's `feat(ai)` commit — the document decided 
 and an item marked closed above a schema that still carries the property would be
 the count-in-two-places problem this file opens by describing.
 
-#### O-27 · `USE_FAKE_AI` cannot produce a valid look on a cold day — opened at task 2.7
+#### O-27 · ~~`USE_FAKE_AI` cannot produce a valid look on a cold day~~ — **closed at task 4.3**
 
 Measured by reading, not by running: `_fake_response` picks the first shoes,
 then the first top and bottom, falling back to the first dress. **It never picks
@@ -1291,6 +1293,29 @@ under it. Failing that, `_fake_response` gains one clause: include the first
 `outerwear` item when the rule demands one. Whichever is taken, it is a decision
 about the fake's contract and belongs in `06-TESTING-STRATEGY.md`'s fake-AI
 section beside 159.
+
+**Closed at task 4.3, because a trip made it unignorable.** `_fake_items` now
+picks an outerwear item when `weather.requires_outerwear` says the day's rule
+demands one, and does not when the user asked for no coat — rule 6 does not run
+in that case either, so the fake and the validator agree in both directions.
+Three lines.
+
+What changed is the cost, not the diagnosis. On the single-day path this was a
+`502` for four months of the year; on a fourteen-day trip, one cold day is enough
+and the odds of avoiding one are small — so "trips work under `USE_FAKE_AI`",
+which is what E2E journey 9 needs, was not reachable while this stood.
+`test_the_fake_packs_a_coat_when_the_day_requires_one` and its single-day twin
+are what fail if it regresses; a mutation run at 4.3 confirmed both, and a second
+mutation confirmed the no-coat case is defended separately.
+
+**One neighbour of this item is now written down rather than open.** The trip
+fake rotates its picks by the day index so that no two days are dressed
+identically (rule 11), and rotation cannot invent combinations a wardrobe does
+not hold: fewer distinct outfits than days still repeats, and still fails
+validation twice. The demo wardrobe's 64 items are far past that line and a
+hand-built fixture is not, so it is a documented limit with a named test —
+`test_a_wardrobe_too_small_to_vary_still_repeats_and_this_is_the_known_limit` —
+rather than a second audit item.
 
 #### O-28 · ~~The validation table counts no slot: two base tops, then two bottoms~~ — **opened and closed at task 2.11a, widened and closed again at 2.11b**
 
@@ -1344,9 +1369,13 @@ the dress was anchored or locked, so under `USE_FAKE_AI` — the flag
 `07-DEPLOYMENT.md` runs the whole E2E job with — every anchored dress and every
 swap on a dress look became a `502` the moment rule 9 widened. Fixed in the
 same commit, which is the third time a validation rule has had to teach the
-fake something (rules 7, 8, and now 9). **This is O-27's shape exactly**, and
-O-27 is still open: a fake that must satisfy every rule it is judged by is a
-second stylist, and nothing about that has been decided. `DECISIONS.md` 179.
+fake something (rules 7, 8, and now 9). **This is O-27's shape exactly.** O-27
+itself closed at 4.3, where rules 10 and 11 taught the fake twice more — an
+outerwear pick and a per-day rotation — which makes five rules that have had to,
+and the *class* remains what this paragraph named: a fake that must satisfy every
+rule it is judged by is a second stylist, and nothing about that has been
+decided. What 4.3 added is a written limit rather than a solution — rotation
+cannot invent outfits a small wardrobe does not hold. `DECISIONS.md` 179.
 
 ### Noted in passing, not a documentation defect
 
