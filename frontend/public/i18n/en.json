@@ -357,7 +357,6 @@
   "trip.waiting.forecast": "Reading the forecast…",
   "trip.waiting.wardrobe": "Going through your wardrobe…",
   "trip.waiting.assembling": "Packing your suitcase…",
-  "trip.packed.title": "{{destination}} is packed.",
   "trip.packed.counts.one": "{{items}} items · 1 look",
   "trip.packed.counts.other": "{{items}} items · {{looks}} looks",
   "trip.error.tripTooLong": "Trips can span at most 14 days from today. Move the dates closer or shorten the trip.",
@@ -367,5 +366,17 @@
   "trip.error.forecastUnavailable": "We have no forecast for those dates. Try dates closer to today.",
   "trip.error.stylistFailed": "We couldn't pack this trip just now. Please try again.",
   "trip.error.validation": "We couldn't pack that trip. Check the dates and the occasions, then try again.",
-  "trip.error.general": "We couldn't pack this trip. Please try again."
+  "trip.error.general": "We couldn't pack this trip. Please try again.",
+  "trip.view.loading": "Opening your trip…",
+  "trip.view.dates": "{{start}} – {{end}}",
+  "trip.view.headerLine": "{{counts}} · {{reuse}}",
+  "trip.view.reuse": "You'll wear the {{name}} on {{days}} days",
+  "trip.view.days": "Days of this trip",
+  "trip.view.temp": "{{temp}}°C",
+  "trip.view.day.noLook": "No look for this day.",
+  "trip.view.packingList": "Packing list",
+  "trip.view.group": "{{name}} ({{count}})",
+  "trip.view.groupOther": "Other",
+  "trip.error.notFound": "We can't find that trip. It may have been deleted.",
+  "trip.error.load": "We couldn't open this trip. Please try again."
 }

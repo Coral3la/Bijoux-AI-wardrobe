@@ -124,3 +124,13 @@ export interface PackResponse {
   readonly looks: readonly Look[];
   readonly missing_pieces: readonly MissingPiece[];
 }
+
+// `GET /trips/{id}`, mirroring `TripDetailResponse`. It is `PackResponse`
+// minus `missing_pieces`, and it is a second interface rather than the same one
+// with the key made optional: the pack response always carries the list and
+// this one never does, so an optional key would leave every reader of a packed
+// trip checking for something the server promised.
+export interface TripDetail {
+  readonly trip: Trip;
+  readonly looks: readonly Look[];
+}

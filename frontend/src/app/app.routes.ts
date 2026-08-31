@@ -65,6 +65,15 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/trips/trips.page').then((m) => m.TripsPage),
   },
+  // Declared after /trips and before the wildcard, exactly as wardrobe/:id sits
+  // after /wardrobe. Unlike the five screens above it, this one has a way in
+  // from the moment it ships: the form navigates here the instant a pack
+  // succeeds, which is what closes the dead end DECISIONS.md 205 accepted.
+  {
+    path: 'trips/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/trips/trip-detail.page').then((m) => m.TripDetailPage),
+  },
   { path: '', pathMatch: 'full', redirectTo: 'wardrobe' },
   { path: '**', redirectTo: 'wardrobe' },
 ];

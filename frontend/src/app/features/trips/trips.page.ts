@@ -8,11 +8,11 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 
 import { TripsApi } from '../../core/api/trips.api';
 import { I18nService } from '../../core/i18n/i18n.service';
-import { PackRequest, Trip } from '../../shared/models/trip.model';
+import { PackRequest } from '../../shared/models/trip.model';
 import { TripDraft, TripForm, newTripDraft, tripProblem } from './trip-form';
 
 // Four lines for a wait nobody has measured, so the last one is reached at nine
@@ -118,21 +118,6 @@ function toRequest(draft: TripDraft, destination: string): PackRequest {
              be progress. The status line is the whole of the wait, and it is
              announced rather than silently replaced. -->
         <p class="text-sm" role="status" aria-live="polite">{{ i18n.t(statusKey()) }}</p>
-      } @else if (packed(); as trip) {
-        <section class="flex flex-col gap-2 rounded-lg bg-surface p-6">
-          <!-- The place name in the body face, not font-display. It is text
-               this project did not write and Fraunces is latin-subset, so a
-               non-Latin destination would fall back per character and render in
-               two faces on one line. DECISIONS.md 071 names this screen.
-
-               Task 4.6 replaces this panel with a navigation to the trip view.
-               Until it exists, the trip is packed and stored and this is what
-               says so. -->
-          <h2 class="text-xl">
-            {{ i18n.t('trip.packed.title', { destination: trip.destination }) }}
-          </h2>
-          <p class="text-sm">{{ counts(trip) }}</p>
-        </section>
       } @else {
         @if (error(); as key) {
           <p class="text-sm font-medium text-danger" role="alert">{{ i18n.t(key) }}</p>
@@ -146,6 +131,7 @@ function toRequest(draft: TripDraft, destination: string): PackRequest {
 export class TripsPage {
   protected readonly i18n = inject(I18nService);
   private readonly api = inject(TripsApi);
+  private readonly router = inject(Router);
 
   // Held here rather than in a store, and rather than in the form. Not a store
   // because nothing else reads it: `StylistStore` exists because a look is
@@ -156,7 +142,6 @@ export class TripsPage {
   protected readonly draft = signal<TripDraft>(newTripDraft());
   protected readonly isPacking = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly packed = signal<Trip | null>(null);
 
   private readonly statusIndex = signal(0);
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -175,16 +160,6 @@ export class TripsPage {
     inject(DestroyRef).onDestroy(() => this.stopStatusCycle());
   }
 
-  // Pluralised on the looks alone. `item_count` cannot be one — a wearable look
-  // is at least a top, a bottom and shoes — whereas a one-day trip really does
-  // pack one look, and it is the only count here that can reach 1.
-  protected counts(trip: Trip): string {
-    const { item_count, look_count } = trip.packing_list.reuse_summary;
-    return look_count === 1
-      ? this.i18n.t('trip.packed.counts.one', { items: item_count })
-      : this.i18n.t('trip.packed.counts.other', { items: item_count, looks: look_count });
-  }
-
   protected pack(): void {
     const draft = this.draft();
     // The null check is the compiler's: `tripProblem` already refuses a draft
@@ -201,9 +176,22 @@ export class TripsPage {
     this.error.set(null);
 
     this.api.pack(toRequest(draft, draft.destination.name)).subscribe({
+      // isPacking stays true across the navigation. Clearing it first would put
+      // the filled-in form back on screen for the frame between the response
+      // and the route resolving, and the last thing the user did was submit it.
+      //
+      // The callback only has anything to do when the navigation did not
+      // happen: one that did destroys this component on the way, and the two
+      // writes land on signals nobody is reading. Without it a refused
+      // navigation leaves the trip packed, stored, and behind a status line
+      // that never stops.
       next: (response) => {
-        this.packed.set(response.trip);
-        this.isPacking.set(false);
+        void this.router.navigate(['/trips', response.trip.id]).then((navigated) => {
+          if (!navigated) {
+            this.isPacking.set(false);
+            this.error.set('trip.error.general');
+          }
+        });
       },
       // The draft is left exactly as it was, which is what the form being the
       // page's rather than its own buys: the message goes above a screen the

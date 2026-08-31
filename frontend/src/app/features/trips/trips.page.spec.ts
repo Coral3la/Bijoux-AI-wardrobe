@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import en from '../../../../public/i18n/en.json';
@@ -18,6 +18,7 @@ const RAW_DETAIL = 'the-servers-own-sentence';
 
 let fixture: ComponentFixture<TripsPage>;
 let mock: HttpTestingController;
+let router: Router;
 
 function berlin(overrides: Partial<LocationResult> = {}): LocationResult {
   return { name: 'Berlin', country: 'Germany', lat: 52.52437, lon: 13.41053, ...overrides };
@@ -124,10 +125,14 @@ describe('TripsPage', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([{ path: 'wardrobe', children: [] }]),
+        provideRouter([
+          { path: 'wardrobe', children: [] },
+          { path: 'trips/:id', children: [] },
+        ]),
       ],
     });
     mock = TestBed.inject(HttpTestingController);
+    router = TestBed.inject(Router);
 
     const loading = TestBed.inject(I18nService).load();
     mock.expectOne('/i18n/en.json').flush(en);
@@ -275,59 +280,49 @@ describe('TripsPage', () => {
     packRequest().flush(packed());
   });
 
-  it('confirms the packed trip with the destination and the counts', async () => {
+  // 4.5's confirmation panel is gone: the counts it rendered are the packing
+  // view's header line, word for word, and the sentence is written once there
+  // rather than twice on two screens.
+  it('navigates to the packed trip', async () => {
+    await render();
+    fillIn();
+    submit();
+    // The status cycle needs a fake clock and the router's navigation does not
+    // run under one, so the wait for it is measured on the real one.
+    vi.useRealTimers();
+    packRequest().flush(packed());
+    await fixture.whenStable();
+
+    expect(router.url).toBe('/trips/trip-1');
+  });
+
+  // The id comes off the response and not off anything the form holds, which
+  // is a distinction a fixture id equal to the destination could not make.
+  it('navigates to the id the server answered with', async () => {
+    await render();
+    fillIn();
+    submit();
+    vi.useRealTimers();
+    packRequest().flush(packed({ id: 'trip-42' }));
+    await fixture.whenStable();
+
+    expect(router.url).toBe('/trips/trip-42');
+  });
+
+  // Clearing it first would put the filled-in form back on screen for the
+  // frame between the response and the route resolving.
+  it('keeps the status line up until the navigation lands', async () => {
     await render();
     fillIn();
     submit();
     packRequest().flush(packed());
     TestBed.tick();
 
-    expect(text()).toContain('Berlin is packed.');
-    expect(text()).toContain('8 items · 4 looks');
-  });
+    expect(element().querySelector('form')).toBeNull();
+    expect(text()).toContain(en['trip.waiting.geocoding']);
 
-  // `item_count` cannot be one — a wearable look is at least a top, a bottom
-  // and shoes — so the looks are the only count that reaches the singular.
-  it('says one look rather than 1 looks on a one-day trip', async () => {
-    await render();
-    fillIn({ start: 1, end: 1 });
-    submit();
-    packRequest().flush(
-      packed({
-        packing_list: {
-          item_ids: ['item-1'],
-          reuse_summary: { item_count: 4, look_count: 1, most_reused: null },
-        },
-      }),
-    );
-    TestBed.tick();
-
-    expect(text()).toContain('4 items · 1 look');
-    expect(text()).not.toContain('1 looks');
-  });
-
-  // The destination is text this project did not write, and Fraunces is
-  // latin-subset — DECISIONS.md 071 names this screen as one of the four that
-  // has to keep generated text off the display face.
-  it('prints the destination in the body face', async () => {
-    await render();
-    fillIn();
-    submit();
-    packRequest().flush(packed());
-    TestBed.tick();
-
-    const heading = element().querySelector('section h2')!;
-    expect(heading.className).not.toContain('font-display');
-  });
-
-  it('does not navigate away, because the trip view does not exist yet', async () => {
-    await render();
-    fillIn();
-    submit();
-    packRequest().flush(packed());
-    TestBed.tick();
-
-    expect(text()).toContain('Berlin is packed.');
+    vi.useRealTimers();
+    await fixture.whenStable();
   });
 
   const failures: readonly (readonly [string, number, string])[] = [

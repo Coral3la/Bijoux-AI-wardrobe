@@ -1513,6 +1513,14 @@ screen and cannot do it through the address bar. **Do not let a fourth screen
 ship with a bespoke link.** This item is not a defect in any of the three
 tasks; it is the cost of specifying screens one at a time.
 
+**A fifth was shipped at task 4.6**, and it is an exit like the fourth: the
+packing view carries its own **Back to wardrobe**. The screen is the first in
+this project that arrives with an entry point already built — `/trips`
+navigates into it the instant a pack succeeds — so what it needed was the way
+*out*, and a navigation the user cannot undo is a worse dead end than one they
+typed. The count is now five bespoke controls across five tasks, and the
+recommendation below is unchanged and still unclaimed.
+
 **A fourth was shipped anyway, after task 3.3.** `/stylist` gained a **Back to
 wardrobe** link, and the count this item keeps is now four bespoke controls
 across four tasks. Two things are worth separating. The first three are entry
@@ -1714,3 +1722,37 @@ mutation that moves the destructive half above the model call is caught by it.
 deleted with a worn look under it leaves `items.wear_count` where it was, which
 is right — the garment was worn — and unexplainable on any screen that counts
 looks. Stated under `DELETE /trips/{id}`, not fixed.
+
+#### O-33 · `POST /trips/{id}/repack` and `DELETE /trips/{id}` have no owning task — opened at task 4.6
+
+Two of the five `/trips` routes are built, tested, documented and reachable by
+nobody, and unlike `GET /trips` — which this project decided deliberately would
+never have a caller — both of these have a screen they obviously belong on.
+That screen is `/trips/:id`, and task 4.6 built it without them.
+
+**This is a gap in the plan, not in the task.** `STAGE-4` 4.6 specifies a
+header, a horizontal day strip, a look per day and a packing list, and says
+nothing about repacking or deleting. 4.6a is the per-item swap, which reuses
+`POST /looks/suggest` and never touches repack; 4.7 is the export. So the two
+endpoints are owned by no numbered task in the stage, which
+`PROGRESS.md` obscured until this task read it — that file paired repack with
+4.6a, and 4.6a is the swap.
+
+**What ships without them.** Stage 4 ends with no way to re-pack an existing
+trip: a user whose forecast has moved must fill the form in again and pack a
+second trip, and the first one stays in the database for ever, because there is
+also no way to delete it. `DECISIONS.md` 200 settled *what* a repack and a
+delete do to a trip's looks — in detail, and in the same commit that built
+both — so the missing half is only the control.
+
+**Recommendation.** Give them a numbered task rather than an ad-hoc button, and
+give it to Stage 4 rather than Stage 5 if the stage is still open: the repack
+inherits the whole of `POST /trips/pack`'s surface — the twenty-second wait,
+the four status lines and all seven failure codes — on a screen that now has
+content to lose, and that is a task, not a control. The delete is smaller and
+has one real question, which is where it navigates: there is no `/trips` list
+and `/trips` itself is the form, so the only honest destination today is
+`/wardrobe`. Two-click arm-and-disarm, as `item-detail.page.ts` does it —
+`DECISIONS.md` 126 records why `window.confirm` is not an option in this test
+gate. **Neither should be added to `/trips/:id` without one**, which is what
+4.6 declined to do.

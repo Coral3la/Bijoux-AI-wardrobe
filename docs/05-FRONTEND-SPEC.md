@@ -384,27 +384,75 @@ orientation:
 **Result — packing view:**
 
 ```
-┌────────────────────────────────┐
-│  Berlin · 14–17 March          │
-│  8 items · 4 looks             │
-├────────────────────────────────┤
-│ [Day 1][Day 2][Day 3][Day 4]   │  ← horizontal day strip
-│  12°C   14°C   17°C   15°C     │
-│   🌧      ☁      ☀      ☁      │
-├────────────────────────────────┤
-│  (look card for selected day)  │
-├────────────────────────────────┤
-│  PACKING LIST                  │
-│  Tops (3) ────────────────     │
-│   ▢ white oversized shirt      │  ← checkable, local state only
-│   ▢ black knit sweater         │
-│  Bottoms (2) ─────────────     │
-│   …                            │
-│  "The jeans appear on 3 days"  │
-└────────────────────────────────┘
+┌────────────────────────────────────────────┐
+│  Berlin                                    │
+│  2026-03-14 – 2026-03-17                   │
+│  8 items · 4 looks · You'll wear the       │
+│  white oversized shirt on 3 days           │
+├────────────────────────────────────────────┤
+│ [Day 1][Day 2][Day 3][Day 4]               │  ← horizontal day strip
+│  12°C   14°C   17°C   15°C                 │
+│   🌧      ☁      ☀      ☁                  │
+├────────────────────────────────────────────┤
+│  (the selected day's look)                 │
+├────────────────────────────────────────────┤
+│  Packing list                              │
+│  Tops (3) ────────────────                 │
+│   ▢ white oversized shirt                  │  ← checkable, local state only
+│   ▢ black knit sweater                     │
+│  Bottoms (2) ─────────────                 │
+│   …                                        │
+└────────────────────────────────────────────┘
 ```
 
 The reuse summary is the line that makes the feature land. Show it prominently.
+
+**Built at task 4.6, and the box above is redrawn rather than annotated** —
+four things in it were wrong or unbuildable, each settled at that task's
+orientation.
+
+- **The reuse sentence moved into the header**, which is where it now sits with
+  the two counts on one line. This document drew it at the *foot* of the packing
+  list and `STAGE-4` 4.6 drew it inline with the counts —
+  *"8 items across 5 looks — the jeans appear on 3 days"* — and a sentence
+  split across two ends of one screen is worse than either placement. The
+  counts half is 4.5's confirmation panel word for word, which is what settles
+  which end it joins; that panel is **deleted** by this task, and `/trips`
+  navigates here instead. `DECISIONS.md` 206.
+- **"The jeans appear on 3 days" cannot be written from one template.**
+  `display_name` is model-written text whose grammatical number is unknowable
+  in the browser, so *the jeans appear* and *the blazer appears* cannot both
+  come out of one string. The verb after *you'll* is invariant, which is the
+  whole reason for the rewording. The clause is **omitted entirely** when
+  `most_reused` is null, when the garment has no `display_name`, and when the
+  item is in none of the response's looks — never rendered as *Untitled item*.
+- **The dates are printed as they arrive.** `14–17 March` needs a month name
+  and a range collapser, and this project formats no date anywhere:
+  `item.wear.last` prints `last_worn_at` raw. A formatter would either
+  hard-code English months against `CONVENTIONS.md` line 77 or take them from
+  `Intl` and the browser's locale, while every other string on the screen came
+  from `en.json`. Neither is worth a date range, so the ISO dates stand.
+- **It is not the look card.** That component ends in *Try again*, which has no
+  request behind a trip look, and carries the ↻ badge on every garment — which
+  is **4.6a's** and must not appear a task early. What is drawn is the saved
+  list's arrangement: the title, the garments in `look_items.position` order,
+  the reasoning and the weather note. `saved-looks.page.ts` refused the same
+  reuse for the same reason at 3.2.
+
+**A day can have no look, and it renders as a gap rather than as an error.**
+`days[].look_id` is nullable because a repack detaches a look that was saved,
+rated or worn (`AUDITS.md` **O-32**, `DECISIONS.md` 200), so the day keeps its
+forecast and loses its outfit. Every day gets a tab either way — the tab is
+built from the forecast, not from the look — and **day 1 is selected on arrival
+even when day 1 is the gap**, because an opening selection that depended on
+which days kept a look would leave the reader working out why day 3 is the one
+lit up.
+
+**There is no repack control and no delete control**, and neither is an
+oversight: `STAGE-4` 4.6 asks for a header, a day strip, a look and a list, and
+`POST /trips/{id}/repack` and `DELETE /trips/{id}` have no owning task anywhere
+in the stage. `AUDITS.md` **O-33** records that gap rather than this screen
+closing it out of turn.
 
 ### 8. Profile — `/profile`
 

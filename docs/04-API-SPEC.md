@@ -662,6 +662,15 @@ hydrated in `look_items.position` order like every other look this API answers.
 `404` with `code: "not_found"` for a trip belonging to another account, the same
 code and status as one that never existed, per `06-TESTING-STRATEGY.md`.
 
+**A malformed id is a `422`, not a `404`, and this list said otherwise until
+task 4.6 built the client for it.** `trip_id` is declared `uuid.UUID`, so
+FastAPI rejects `/trips/abc` before `read_trip` runs and answers `detail`
+without a `code` — the same shape every other path-parameter route here
+produces, and the same one `POST /trips/pack` already reads a status for. The
+line is added rather than the route loosened: a route that accepted any string
+would push the parse into the query and answer `404` for a value that was never
+an id. `401` `invalid_token` is unchanged.
+
 ### `DELETE /trips/{id}`
 ```
 ← 204  (no body)
