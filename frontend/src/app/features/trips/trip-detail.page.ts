@@ -4,13 +4,13 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import { TripsApi } from '../../core/api/trips.api';
 import { I18nService } from '../../core/i18n/i18n.service';
-import { Condition } from '../../shared/models/enums';
+import { Condition, roleOf } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
 import { Look } from '../../shared/models/look.model';
 import { TripDay, TripDetail } from '../../shared/models/trip.model';
-import { ItemCard } from '../wardrobe/item-card';
 import { packErrorKey, packStatus } from './pack-wait';
 import { PackingList } from './packing-list';
+import { StillWorn, TripLook } from './trip-look';
 
 // Local to this screen rather than in `enums.ts`, which mirrors `app/enums.py`
 // value for value: a glyph has no counterpart on the server and never will.
@@ -47,10 +47,66 @@ export function tripLoadErrorKey(error: unknown): string {
   return 'trip.error.load';
 }
 
+// Five documented codes and four keys, and the two absences are the table.
+//
+// `wardrobe_too_small` does **not** reuse `trip.error.wardrobeTooSmall`, which
+// says *eight*: the swap threshold is six, because it runs the single-day rule
+// order where rule 11 — no two looks alike — never runs, so eight would refuse a
+// look the model can build (DECISIONS.md 209). One code, two numbers, two
+// sentences. `stylist_failed` does not reuse the pack's either, for
+// DECISIONS.md 207's reason exactly one screen along: *"We couldn't pack this
+// trip"* under a trip that is visibly packed, said in answer to a tap on one
+// shoe, is the wrong sentence.
+//
+// `validation_error` is deliberately unmapped and falls to the general line. It
+// is reachable only by naming a day this trip does not have, which no correct
+// client can build — the days come from the trip on screen — and a bare 422 from
+// the request schema carries FastAPI's `detail` rather than a `code` anyway.
+// `pack-wait.ts` omits `home_location_missing` on the same rule.
+const SWAP_ERROR_KEYS: Readonly<Record<string, string>> = {
+  item_not_in_look: 'trip.error.itemNotInLook',
+  wardrobe_too_small: 'trip.error.swapWardrobeTooSmall',
+  locked_unavailable: 'trip.error.lockedUnavailable',
+  stylist_failed: 'trip.error.swapStylistFailed',
+  not_found: 'trip.error.notFound',
+};
+
+// The code alone, never the status — where `tripLoadErrorKey` reads both. That
+// one is a `GET`, where a bare 404 with no body really is the trip missing; a
+// bare 404 on a `POST` to a route that exists is infrastructure, and telling the
+// user their trip was deleted would be a worse guess than saying the swap
+// failed.
+export function swapErrorKey(error: unknown): string {
+  if (error instanceof HttpErrorResponse) {
+    const code = (error.error as { code?: string } | null)?.code;
+    if (code !== undefined && code in SWAP_ERROR_KEYS) {
+      return SWAP_ERROR_KEYS[code];
+    }
+  }
+  return 'trip.error.swapGeneral';
+}
+
+// Which days still wear the garment that just left one, read off the response
+// rather than off what was on screen a moment ago: the swap answers the whole
+// trip, so this is the same list the packing list below is built from and the
+// two cannot disagree. The swapped day cannot appear — rule 8 refuses a look
+// containing an excluded id, and the server excludes the replaced garment
+// itself — so it is not special-cased here.
+function stillWornDays(detail: TripDetail, itemId: string): number[] {
+  const looks = new Map(detail.looks.map((look) => [look.id, look]));
+  const days: number[] = [];
+  for (const day of detail.trip.days) {
+    if (day.look_id !== null && looks.get(day.look_id)?.items.some((item) => item.id === itemId)) {
+      days.push(day.day);
+    }
+  }
+  return days;
+}
+
 @Component({
   selector: 'app-trip-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ItemCard, PackingList],
+  imports: [PackingList, TripLook],
   template: `
     <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
       @if (detail(); as loaded) {
@@ -108,25 +164,17 @@ export function tripLoadErrorKey(error: unknown): string {
         </div>
 
         @if (selectedLook(); as look) {
-          <article class="flex flex-col gap-4 rounded-lg bg-surface p-5">
-            <!-- Body face again, one rule further: the title is written by the
-                 model. The look card applies it at the same heading. -->
-            <h2 class="text-2xl">{{ look.title }}</h2>
-
-            <!-- In the order the server sent, which is look_items.position and
-                 therefore the model's own — the saved list's arrangement, not
-                 the look card's layer grouping. The card groups because it is
-                 read as an outfit being assembled; this one sits under a day
-                 tab and is read as what that day looks like. -->
-            <ul class="grid grid-cols-4 gap-2">
-              @for (item of look.items; track item.id) {
-                <li><app-item-card [item]="item" /></li>
-              }
-            </ul>
-
-            <p class="text-sm">{{ look.reasoning }}</p>
-            <p class="text-sm">{{ look.weather_note }}</p>
-          </article>
+          <!-- The article moved into TripLook at 4.6a, which is where the badge,
+               the per-tile wait and the still-worn line live. What is passed
+               down is facts and what comes back is one garment: the page owns
+               the trip, so it owns the arithmetic over every day of it. -->
+          <app-trip-look
+            [look]="look"
+            [swappingItemId]="swappingItemId()"
+            [stillWorn]="stillWorn()"
+            [errorKey]="swapError()"
+            (swap)="swapItem($event)"
+          />
         } @else {
           <!-- A day with no look, which is a real state rather than an error:
                a repack detaches a look that was saved, rated or worn instead of
@@ -163,7 +211,7 @@ export function tripLoadErrorKey(error: unknown): string {
           <button
             type="button"
             (click)="repack()"
-            [disabled]="repacking() || deleting()"
+            [disabled]="repacking() || deleting() || swapping()"
             class="min-h-11 rounded-md px-3 text-sm underline disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             {{ i18n.t('trip.repack.action') }}
@@ -179,7 +227,7 @@ export function tripLoadErrorKey(error: unknown): string {
             type="button"
             (click)="onDelete()"
             (blur)="disarm()"
-            [disabled]="repacking() || deleting()"
+            [disabled]="repacking() || deleting() || swapping()"
             class="min-h-11 rounded-md px-3 text-sm underline disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             [class.text-danger]="armed()"
             [class.font-medium]="armed()"
@@ -216,6 +264,27 @@ export class TripDetailPage {
   protected readonly repacking = signal(false);
   protected readonly deleting = signal(false);
   protected readonly armed = signal(false);
+
+  // A third error signal, and the reasoning that split the first two applies
+  // again: `errorKey` is a screen with nothing on it, `actionError` is a line
+  // above a trip whose repack or delete failed, and this one is a line inside
+  // the look whose swap failed. Rendering a failed swap under the packing list
+  // would say the trip's action failed when one day's did.
+  protected readonly swapError = signal<string | null>(null);
+
+  // The id of the tile waiting, not a boolean — the wait is drawn on one tile.
+  protected readonly swappingItemId = signal<string | null>(null);
+  protected readonly swapping = computed(() => this.swappingItemId() !== null);
+
+  protected readonly stillWorn = signal<StillWorn | null>(null);
+
+  // Per day, because a rejection is about a day's weather and its occasion: the
+  // shoe that is wrong for Tuesday's rain is the right answer for Thursday. Held
+  // here and sent nowhere else — the server cannot rebuild this list, because
+  // the looks that carried those rejections were replaced by the swaps that
+  // rejected them. Fresh on every mount: the id comes from a route snapshot, so
+  // a back button is a new component and a new Map without anything being said.
+  private readonly excluded = signal<ReadonlyMap<number, ReadonlySet<string>>>(new Map());
 
   protected readonly statusKey = packStatus(this.repacking);
 
@@ -310,6 +379,13 @@ export class TripDetailPage {
 
   protected select(day: number): void {
     this.selectedDay.set(day);
+    // Both belong to the look that was on screen: *"That piece isn't in this
+    // day's look"* and *"You'll still wear the shirt on Day 3"* are sentences
+    // about a day the reader has just left. The exclusions are not cleared with
+    // them — those are per day and keyed by it, so they are still the right
+    // answer when the reader comes back.
+    this.swapError.set(null);
+    this.stillWorn.set(null);
   }
 
   protected repack(): void {
@@ -318,7 +394,7 @@ export class TripDetailPage {
     // presses landing in the same frame both see an enabled button. Neither
     // clause can be reached from the rendered screen, which is why the mutation
     // pass leaves both of them standing and the tests assert `disabled`.
-    if (this.repacking() || this.deleting()) {
+    if (this.repacking() || this.deleting() || this.swapping()) {
       return;
     }
     // The repack disarms the delete, which is the "any other interaction" half
@@ -328,6 +404,12 @@ export class TripDetailPage {
     this.disarm();
     this.repacking.set(true);
     this.actionError.set(null);
+    // The exclusions go with the looks they were exclusions from. A repack
+    // rebuilds every day against a fresh forecast, so a garment rejected for
+    // Tuesday's rain is being judged against different weather the moment this
+    // returns, and carrying the list across would silently narrow a plan the
+    // user asked to have made again.
+    this.clearSwapState();
 
     this.api.repack(this.id).subscribe({
       // The two keys are copied across rather than the response stored whole.
@@ -347,7 +429,7 @@ export class TripDetailPage {
   }
 
   protected onDelete(): void {
-    if (this.repacking() || this.deleting()) {
+    if (this.repacking() || this.deleting() || this.swapping()) {
       return;
     }
 
@@ -373,6 +455,83 @@ export class TripDetailPage {
 
   protected disarm(): void {
     this.armed.set(false);
+  }
+
+  // One garment on the day on screen. No preview and no confirmation: the swap
+  // *is* the answer, and a second tap on the tile that came back is the user
+  // saying "not that one either" — which is what makes the exclusions a
+  // conversation rather than a form. The cost is that there is no undo, which is
+  // recorded rather than mitigated (DECISIONS.md 210).
+  protected swapItem(item: Item): void {
+    // The visible guard is the badges' own `disabled`; this is the real one, for
+    // repack()'s reason — a signal write schedules change detection rather than
+    // doing it, so two presses in one frame both see an enabled button.
+    if (this.swapping() || this.repacking() || this.deleting()) {
+      return;
+    }
+    // A dress has no role and therefore no badge, so this is unreachable from
+    // the rendered screen — and it is a return rather than a `!` because
+    // `roleOf` is the only thing standing between a dress and a request the
+    // server would answer `422` to.
+    const role = roleOf(item.category);
+    if (role === undefined) {
+      return;
+    }
+    // 126's "any other interaction", which the badge is: an armed delete
+    // surviving a swap is a second press landing on a control the user stopped
+    // thinking about.
+    this.disarm();
+
+    const day = this.selectedDay();
+    // The tapped garment joins the day's exclusions before the request goes out,
+    // and stays there if it fails. The server appends it for this call anyway;
+    // what this list is for is the *next* tap on this day.
+    const excluded = new Set(this.excluded().get(day) ?? []).add(item.id);
+    this.excluded.update((current) => new Map(current).set(day, excluded));
+
+    this.swappingItemId.set(item.id);
+    this.swapError.set(null);
+    this.stillWorn.set(null);
+
+    this.api
+      .swap(this.id, {
+        day,
+        item_id: item.id,
+        replace_role: role,
+        exclude_item_ids: [...excluded],
+      })
+      .subscribe({
+        next: (detail) => {
+          this.detail.set(detail);
+          // Named from the garment that was tapped rather than from the
+          // response, which no longer holds it on this day. `Untitled item`
+          // stands here where DECISIONS.md 206 dropped the header's reuse
+          // clause over it: that sentence has to name a garment the reader has
+          // not touched, and this one answers a press on a specific tile — the
+          // antecedent is the press, and dropping the line would lose the days,
+          // which are what STAGE-4 4.6a asks for.
+          const days = stillWornDays(detail, item.id);
+          this.stillWorn.set(days.length === 0 ? null : { name: this.name(item), days });
+          this.swappingItemId.set(null);
+        },
+        // The day's look is left standing. A failed swap changed nothing on the
+        // server, so blanking the look would be the screen disagreeing with the
+        // sentence underneath it.
+        error: (failure: unknown) => {
+          this.swapError.set(swapErrorKey(failure));
+          this.swappingItemId.set(null);
+        },
+      });
+  }
+
+  private clearSwapState(): void {
+    this.excluded.set(new Map());
+    this.swapError.set(null);
+    this.stillWorn.set(null);
+  }
+
+  private name(item: Item): string {
+    return item.display_name ?? this.i18n.t('item.untitled');
   }
 
   // The day's high, which is what this project already means by "the

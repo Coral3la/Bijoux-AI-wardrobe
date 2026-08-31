@@ -163,6 +163,29 @@ function deleteRequest() {
   return mock.expectOne(`${environment.apiUrl}/trips/${currentId}`);
 }
 
+function swapRequest() {
+  return mock.expectOne(`${environment.apiUrl}/trips/${currentId}/swap`);
+}
+
+// The look's garments, in the order it draws them, read off the tiles' alt text
+// — which is where a tile's name lives, the photograph being the whole of it.
+// The packing list below names every garment in the trip, so a page-wide
+// assertion cannot tell "not in this day's look" from "not in the suitcase",
+// and the first is what a day-local swap has to be asked.
+function lookItems(): string[] {
+  return [...element().querySelectorAll('app-trip-look img')].map(
+    (image) => image.getAttribute('alt') ?? '',
+  );
+}
+
+// The badges, and only the badges: the packing list's rows are labels around
+// checkboxes, so a `button` inside an `li` on this screen is a ↻ and nothing
+// else. Scoped to the component anyway, so that stops being a fact this helper
+// relies on the day something else grows a list.
+function badges(): HTMLButtonElement[] {
+  return [...element().querySelectorAll<HTMLButtonElement>('app-trip-look li button')];
+}
+
 // Found by the words on it rather than by a class or a position, so the label
 // each state renders is asserted by every test that presses the button.
 function button(label: string): HTMLButtonElement {
@@ -758,6 +781,365 @@ describe('TripDetailPage', () => {
 
       expect(text()).toContain(en['trip.delete.armed']);
       mock.expectNone(`${environment.apiUrl}/trips/${currentId}`);
+    });
+  });
+
+  // Task 4.6a. The component's own spec covers the badge, the spinner and the
+  // sentence; this one covers what only the page can be wrong about — what goes
+  // on the wire, what comes back, and what is remembered between two presses.
+  describe('swap', () => {
+    const SHIRT = { id: 'item-1', category: 'top', display_name: 'white shirt' } as const;
+    const BOOTS = { id: 'item-2', category: 'shoes', display_name: 'brown boots' } as const;
+    const HEELS = { id: 'item-3', category: 'shoes', display_name: 'black heels' } as const;
+
+    // The shirt is worn on both days and the shoes on one each, which is what
+    // makes the reuse arithmetic have an answer either way.
+    function packed(): TripDetail {
+      return {
+        trip: trip({
+          packing_list: {
+            item_ids: ['item-1', 'item-2', 'item-3'],
+            reuse_summary: { item_count: 3, look_count: 2, most_reused: null },
+          },
+        }),
+        looks: [
+          look({ id: 'look-1', items: [item(SHIRT), item(BOOTS)] }),
+          look({ id: 'look-2', title: 'Dinner out', items: [item(SHIRT), item(HEELS)] }),
+        ],
+      };
+    }
+
+    // Day 1's boots replaced by trainers. Day 2 is untouched, which is the
+    // acceptance criterion and also what lets a second swap be asked for on it.
+    function bootsSwapped(): TripDetail {
+      return {
+        trip: trip({
+          packing_list: {
+            item_ids: ['item-1', 'item-3', 'item-4'],
+            reuse_summary: { item_count: 3, look_count: 2, most_reused: null },
+          },
+        }),
+        looks: [
+          look({
+            id: 'look-1',
+            items: [
+              item(SHIRT),
+              item({ id: 'item-4', category: 'shoes', display_name: 'grey trainers' }),
+            ],
+          }),
+          look({ id: 'look-2', title: 'Dinner out', items: [item(SHIRT), item(HEELS)] }),
+        ],
+      };
+    }
+
+    // The shirt gone from day 1 and still worn on day 2, which is the case the
+    // still-worn line exists for.
+    function shirtSwapped(): TripDetail {
+      return {
+        trip: trip({
+          packing_list: {
+            item_ids: ['item-1', 'item-2', 'item-3', 'item-5'],
+            reuse_summary: { item_count: 4, look_count: 2, most_reused: null },
+          },
+        }),
+        looks: [
+          look({
+            id: 'look-1',
+            items: [
+              item({ id: 'item-5', category: 'top', display_name: 'grey knit' }),
+              item(BOOTS),
+            ],
+          }),
+          look({ id: 'look-2', title: 'Dinner out', items: [item(SHIRT), item(HEELS)] }),
+        ],
+      };
+    }
+
+    function fail(code: string | null, status: number): void {
+      swapRequest().flush(code === null ? { detail: RAW_DETAIL } : { detail: RAW_DETAIL, code }, {
+        status,
+        statusText: 'Failed',
+      });
+      fixture.detectChanges();
+    }
+
+    it('sends the day, the garment, its role and the exclusions', async () => {
+      await loaded(packed());
+
+      badges()[1].click();
+      fixture.detectChanges();
+
+      const request = swapRequest();
+      expect(request.request.method).toBe('POST');
+      expect(request.request.body).toEqual({
+        day: 1,
+        item_id: 'item-2',
+        replace_role: 'shoes',
+        exclude_item_ids: ['item-2'],
+      });
+      request.flush(bootsSwapped());
+    });
+
+    it('re-renders the trip from the response', async () => {
+      await loaded(packed());
+      badges()[1].click();
+      fixture.detectChanges();
+      swapRequest().flush(bootsSwapped());
+      fixture.detectChanges();
+
+      expect(lookItems()).toEqual(['white shirt', 'grey trainers']);
+      expect(text()).toContain('grey trainers');
+      expect(text()).not.toContain('brown boots');
+      expect(text()).not.toContain(RAW_DETAIL);
+    });
+
+    // STAGE-4 4.6a's first criterion. Day 2's look is asserted whole, because a
+    // swap that propagated would apply a judgement made at 12°C and rain to a
+    // day dressed at 17°C and dry.
+    it('changes the named day and no other', async () => {
+      await loaded(packed());
+      badges()[1].click();
+      fixture.detectChanges();
+      swapRequest().flush(bootsSwapped());
+      fixture.detectChanges();
+
+      tabs()[1].click();
+      fixture.detectChanges();
+
+      expect(text()).toContain('Dinner out');
+      expect(lookItems()).toEqual(['white shirt', 'black heels']);
+    });
+
+    // The day on the wire is the day on screen, not the day the page opened on.
+    it('swaps on the selected day rather than on the first', async () => {
+      await loaded(packed());
+      tabs()[1].click();
+      fixture.detectChanges();
+
+      badges()[1].click();
+      fixture.detectChanges();
+
+      expect(swapRequest().request.body).toMatchObject({ day: 2, item_id: 'item-3' });
+    });
+
+    // A second tap on one day is "not that one either", so the rejected garment
+    // and the one that replaced it are both excluded from the third answer.
+    it('accumulates the exclusions across two taps on one day', async () => {
+      await loaded(packed());
+      badges()[1].click();
+      fixture.detectChanges();
+      swapRequest().flush(bootsSwapped());
+      fixture.detectChanges();
+
+      badges()[1].click();
+      fixture.detectChanges();
+
+      expect(swapRequest().request.body).toMatchObject({
+        exclude_item_ids: ['item-2', 'item-4'],
+      });
+    });
+
+    // Per day, not per trip: the shoe that is wrong for Tuesday's rain is the
+    // right answer for Thursday. A single shared list would send day 1's
+    // rejection with day 2's request, which is what this asserts it does not.
+    it("keeps one day's exclusions out of another day's request", async () => {
+      await loaded(packed());
+      badges()[1].click();
+      fixture.detectChanges();
+      swapRequest().flush(bootsSwapped());
+      fixture.detectChanges();
+
+      tabs()[1].click();
+      fixture.detectChanges();
+      badges()[0].click();
+      fixture.detectChanges();
+
+      expect(swapRequest().request.body).toEqual({
+        day: 2,
+        item_id: 'item-1',
+        replace_role: 'top',
+        exclude_item_ids: ['item-1'],
+      });
+    });
+
+    // The exclusions belong to the looks they were exclusions from, and a
+    // repack replaces every one of them against a fresh forecast.
+    it('forgets the exclusions when the trip is re-packed', async () => {
+      await loaded(packed());
+      badges()[1].click();
+      fixture.detectChanges();
+      swapRequest().flush(bootsSwapped());
+      fixture.detectChanges();
+
+      press(en['trip.repack.action']);
+      repackRequest().flush(repacked());
+      fixture.detectChanges();
+
+      badges()[0].click();
+      fixture.detectChanges();
+
+      expect(swapRequest().request.body).toMatchObject({ exclude_item_ids: ['item-1'] });
+    });
+
+    // STAGE-4 4.6a's third criterion: removing the jeans from Tuesday must not
+    // read as taking them out of the suitcase while Thursday still wears them.
+    it('names the days that still wear the garment that left', async () => {
+      await loaded(packed());
+      badges()[0].click();
+      fixture.detectChanges();
+      swapRequest().flush(shirtSwapped());
+      fixture.detectChanges();
+
+      expect(text()).toContain("You'll still wear the white shirt on Day 2.");
+    });
+
+    it('says nothing when the garment that left is worn nowhere else', async () => {
+      await loaded(packed());
+      badges()[1].click();
+      fixture.detectChanges();
+      swapRequest().flush(bootsSwapped());
+      fixture.detectChanges();
+
+      expect(text()).not.toContain('still wear');
+    });
+
+    it('drops the still-worn line when the reader moves to another day', async () => {
+      await loaded(packed());
+      badges()[0].click();
+      fixture.detectChanges();
+      swapRequest().flush(shirtSwapped());
+      fixture.detectChanges();
+
+      tabs()[1].click();
+      fixture.detectChanges();
+
+      expect(text()).not.toContain('still wear');
+    });
+
+    it("locks the trip's own actions while a swap is running", async () => {
+      await loaded(packed());
+      badges()[0].click();
+      fixture.detectChanges();
+
+      expect(badges()[0].disabled).toBe(true);
+      expect(button(en['trip.repack.action']).disabled).toBe(true);
+      expect(button(en['trip.delete.idle']).disabled).toBe(true);
+      swapRequest().flush(shirtSwapped());
+    });
+
+    // 126's "any other interaction", the badge being one of them.
+    it('disarms the delete', async () => {
+      await loaded(packed());
+      press(en['trip.delete.idle']);
+
+      badges()[0].click();
+      fixture.detectChanges();
+
+      expect(text()).not.toContain(en['trip.delete.armed']);
+      swapRequest().flush(shirtSwapped());
+    });
+
+    it("leaves the day's look on screen when the swap fails", async () => {
+      await loaded(packed());
+      badges()[0].click();
+      fixture.detectChanges();
+      fail('stylist_failed', 502);
+
+      expect(text()).toContain('white shirt');
+      expect(text()).toContain('Morning meetings');
+      expect(header()).toContain('Berlin');
+      expect(text()).not.toContain(RAW_DETAIL);
+    });
+
+    // DECISIONS.md 207's reasoning one screen along: "We couldn't pack this
+    // trip just now" is the wrong sentence in answer to a tap on one shoe.
+    it('names the swap rather than the pack when the stylist fails', async () => {
+      await loaded(packed());
+      badges()[0].click();
+      fixture.detectChanges();
+      fail('stylist_failed', 502);
+
+      expect(text()).toContain(en['trip.error.swapStylistFailed']);
+      expect(text()).not.toContain(en['trip.error.stylistFailed']);
+    });
+
+    // Six, not eight: the swap runs the single-day rule order, where rule 11
+    // never runs. DECISIONS.md 209.
+    it("asks for six tagged items rather than the pack's eight", async () => {
+      await loaded(packed());
+      badges()[0].click();
+      fixture.detectChanges();
+      fail('wardrobe_too_small', 400);
+
+      expect(text()).toContain(en['trip.error.swapWardrobeTooSmall']);
+      expect(text()).not.toContain(en['trip.error.wardrobeTooSmall']);
+    });
+
+    it('explains a stale badge', async () => {
+      await loaded(packed());
+      badges()[0].click();
+      fixture.detectChanges();
+      fail('item_not_in_look', 422);
+
+      expect(text()).toContain(en['trip.error.itemNotInLook']);
+    });
+
+    it('explains a garment archived from another tab', async () => {
+      await loaded(packed());
+      badges()[0].click();
+      fixture.detectChanges();
+      fail('locked_unavailable', 422);
+
+      expect(text()).toContain(en['trip.error.lockedUnavailable']);
+    });
+
+    // Unmapped on purpose, so it lands on the general line rather than on a
+    // sentence about a trip that cannot be found or a badge that is stale.
+    it('falls back to the general message on validation_error', async () => {
+      await loaded(packed());
+      badges()[0].click();
+      fixture.detectChanges();
+      fail('validation_error', 422);
+
+      expect(text()).toContain(en['trip.error.swapGeneral']);
+      expect(text()).not.toContain(en['trip.error.notFound']);
+      expect(text()).not.toContain(en['trip.error.itemNotInLook']);
+      expect(text()).not.toContain(en['trip.error.validation']);
+    });
+
+    it('falls back to the general message when the failure carries no code', async () => {
+      await loaded(packed());
+      badges()[0].click();
+      fixture.detectChanges();
+      fail(null, 500);
+
+      expect(text()).toContain(en['trip.error.swapGeneral']);
+    });
+
+    // The message is about a look the reader has left.
+    it('clears the failure when the reader moves to another day', async () => {
+      await loaded(packed());
+      badges()[0].click();
+      fixture.detectChanges();
+      fail('stylist_failed', 502);
+
+      tabs()[1].click();
+      fixture.detectChanges();
+
+      expect(text()).not.toContain(en['trip.error.swapStylistFailed']);
+    });
+
+    it('clears the failure when the next swap is asked for', async () => {
+      await loaded(packed());
+      badges()[0].click();
+      fixture.detectChanges();
+      fail('stylist_failed', 502);
+
+      badges()[0].click();
+      fixture.detectChanges();
+
+      expect(text()).not.toContain(en['trip.error.swapStylistFailed']);
+      swapRequest().flush(shirtSwapped());
     });
   });
 });

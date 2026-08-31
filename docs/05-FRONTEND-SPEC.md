@@ -551,6 +551,59 @@ orientation.
   rather than the fifth — see `AUDITS.md` O-29's closing census. The redirect
   described above is unaffected and still uncounted.*
 
+**The ↻ badge is task 4.6a's, and it is the last thing this screen gained.** It
+sits on every garment in the day's look that has a `replace_role` — so not on a
+dress, because replacing one can legally return a top *and* a bottom, which is
+not the single-item swap the field names (`AUDITS.md` **O-25**). One tap replaces
+that garment on that day, spends one model call, and re-renders the whole trip
+from the response: the look, the packing list and the reuse line. Six things
+about it, settled at that task's orientation.
+
+- **The look moved into its own component**, `trip-look.ts`, and it is still
+  **not** the stylist's `LookCard` — the third refusal, on the three grounds 4.6
+  already recorded: that card ends in *Try again*, which has no request behind a
+  trip look; it carries a heart and two thumbs, which belong to `/saved`; and it
+  groups by layer where this arranges by `look_items.position`. What changed is
+  that the block now owns per-tile interaction, so it is a component rather than
+  a page's `<article>` — `packing-list.ts`'s reasoning, one section up. It is not
+  in `shared/ui/`: one caller, and **O-15** stays at zero.
+- **The wait is a spinner over the tapped tile and nothing else** — no status
+  cycle, no `packStatus`. The pack's four lines exist because that screen has
+  nothing to show for twenty seconds; this one has the whole look, and covering
+  it would throw away the only thing that makes a four-to-eight second wait
+  legible. Every badge disables while one swap is in flight, because the store
+  behind this takes one request at a time.
+- **There is no preview and no confirmation, and there is no undo.** The swap
+  *is* the answer, and a second tap on the tile that came back is the user
+  saying *not that one either* — which is what makes the exclusions a
+  conversation rather than a form. The cost is recorded rather than mitigated:
+  a garment swapped away cannot be swapped back except by taking what the model
+  offers next. `DECISIONS.md` 210.
+- **The exclusions are per day, client-held, and fresh on every mount.** A shoe
+  that is wrong for Tuesday's rain is the right answer for Thursday, so one
+  shared list would narrow six days on the strength of one. The server cannot
+  rebuild them — the looks that carried those rejections were replaced by the
+  swaps that rejected them — and a repack clears them, because it rebuilds every
+  day against a forecast the rejections were never judged against.
+- **Where the garment that left is still worn, the screen names the days**, under
+  the tile grid and above the model's own prose: *"You'll still wear the white
+  shirt on Day 2."* This is `STAGE-4` 4.6a's third property and the reason the
+  feature is not a wiring job — without it, taking the jeans off Tuesday reads as
+  taking them out of the suitcase while Thursday still wears them. The days are
+  joined with `trip.swap.daysSeparator` and there is **no "and"**: `Intl` would
+  write one and take the browser's locale with it, on a screen whose every other
+  word came from `en.json`, which is `DECISIONS.md` 206's refusal of a date
+  formatter one sentence along.
+- **A failed swap says so inside the look**, at the foot of the article, not in
+  the page's `actionError` under the packing list — that line means *the whole
+  trip's action failed*, and a swap that fails costs one day nothing. The day's
+  look stays exactly as it was. **Two of the pack's messages could not be
+  reused**: `wardrobe_too_small` says *eight* and the swap threshold is **six**,
+  and the pack's `stylist_failed` says *"We couldn't pack this trip"* in answer
+  to a tap on one shoe. Both got keys of their own, which is `DECISIONS.md` 207's
+  finding a second time. `validation_error` is deliberately given no message and
+  falls to the general line.
+
 ### 8. Profile — `/profile`
 
 Height, sizes, style notes, home city with autocomplete. Style notes needs placeholder text that teaches by example: *"e.g. I prefer high-rise bottoms and avoid crop tops."*

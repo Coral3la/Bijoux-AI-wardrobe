@@ -1,4 +1,4 @@
-import { Condition, Occasion } from './enums';
+import { Condition, Occasion, Role } from './enums';
 import { Look, MissingPiece } from './look.model';
 
 // The wire shapes of `/trips`, mirrored from `backend/app/schemas/trip.py`
@@ -128,11 +128,38 @@ export interface PackResponse {
   readonly missing_pieces: readonly MissingPiece[];
 }
 
-// `GET /trips/{id}`, mirroring `TripDetailResponse`. It is `PackResponse`
-// minus `missing_pieces`, and it is a second interface rather than the same one
-// with the key made optional: the pack response always carries the list and
-// this one never does, so an optional key would leave every reader of a packed
-// trip checking for something the server promised.
+// `POST /trips/{trip_id}/swap`'s body: one day, one garment, one role.
+//
+// `replace_role` is required, where `SuggestRequest` makes it optional. That is
+// the endpoint's own narrowing rather than this file's: `POST /looks/suggest`
+// serves a plain suggestion as well as a swap, so most of its traffic omits the
+// field; this route does one thing and the badge always knows the role of the
+// tile it sits on. `Role` comes from `enums.ts`, which is the only place the
+// category-to-role map exists — the server validates the six values and derives
+// none (AUDITS.md O-25).
+//
+// `exclude_item_ids` has a server-side default and is still required here,
+// because the client that omits it is a client that has lost the accumulation:
+// the list is what stops a second tap on one day handing back the garment the
+// first tap rejected, and the server cannot rebuild it — the looks carrying
+// those rejections were replaced by this endpoint and are gone.
+export interface TripSwapRequest {
+  readonly day: number;
+  readonly item_id: string;
+  readonly replace_role: Role;
+  readonly exclude_item_ids: readonly string[];
+}
+
+// `GET /trips/{id}` and `POST /trips/{trip_id}/swap`, mirroring
+// `TripDetailResponse`. It is `PackResponse` minus `missing_pieces`, and it is a
+// second interface rather than the same one with the key made optional: the pack
+// response always carries the list and this one never does, so an optional key
+// would leave every reader of a packed trip checking for something the server
+// promised.
+//
+// The swap answers it too rather than a shape of its own — it edits one day and
+// replies with the whole trip, because `packing_list` has moved and a client
+// cannot reassemble a plan from a fragment. DECISIONS.md 209.
 export interface TripDetail {
   readonly trip: Trip;
   readonly looks: readonly Look[];

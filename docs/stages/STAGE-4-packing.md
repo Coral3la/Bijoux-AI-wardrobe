@@ -165,14 +165,19 @@ context and the retry loop, and it was never true of the endpoint.*
 **Acceptance criteria — 4.6a's own**, because this task was inserted after the
 list at the foot of this file was written:
 
-- [ ] Swapping an item on day 3 changes day 3 and no other day
-- [ ] After a swap the packing list contains the new item, and every look item
+- [x] Swapping an item on day 3 changes day 3 and no other day
+- [x] After a swap the packing list contains the new item, and every look item
       is still in the packing list
-- [ ] An item swapped out of one day but still worn on another stays in the
+- [x] An item swapped out of one day but still worn on another stays in the
       packing list, and the UI says which days still wear it
-- [ ] The rejected item is not returned by the swap that rejected it
+- [x] The rejected item is not returned by the swap that rejected it
 
-`DECISIONS.md` 192.
+*The last two are met across the split: the frontend renders the still-worn line
+and accumulates `exclude_item_ids` per day, and 4.6a-1's server appends the
+replaced garment to that list and enforces it through rule 8 — so the rejection
+is a rule rather than a hope even if a client forgets to send it.*
+
+`DECISIONS.md` 192, 209, 210.
 
 ### 4.6b Repack and delete a trip
 

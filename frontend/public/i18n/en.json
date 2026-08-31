@@ -383,5 +383,14 @@
   "trip.delete.armed": "Tap again to delete. Saved looks from this trip go too.",
   "trip.delete.doing": "Deleting…",
   "trip.error.repackGeneral": "We couldn't re-pack this trip. Please try again.",
-  "trip.error.delete": "We couldn't delete this trip. Please try again."
+  "trip.error.delete": "We couldn't delete this trip. Please try again.",
+  "trip.swap.action": "Swap {{item}} for something else",
+  "trip.swap.doing": "Finding another piece…",
+  "trip.swap.stillWorn": "You'll still wear the {{name}} on {{days}}.",
+  "trip.swap.daysSeparator": ", ",
+  "trip.error.itemNotInLook": "That piece isn't in this day's look any more. Re-open the trip to see what changed.",
+  "trip.error.swapWardrobeTooSmall": "Bijoux needs at least six tagged items to swap one out. Add a few more and try again.",
+  "trip.error.lockedUnavailable": "Bijoux can't rebuild this look — one of the other pieces is no longer in your wardrobe. Re-pack the trip instead.",
+  "trip.error.swapStylistFailed": "We couldn't find another piece just now. Please try again.",
+  "trip.error.swapGeneral": "We couldn't swap that piece. Please try again."
 }

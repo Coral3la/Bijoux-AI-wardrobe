@@ -3,17 +3,22 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
-import { PackRequest, PackResponse, TripDetail } from '../../shared/models/trip.model';
+import {
+  PackRequest,
+  PackResponse,
+  TripDetail,
+  TripSwapRequest,
+} from '../../shared/models/trip.model';
 
 @Injectable({ providedIn: 'root' })
 export class TripsApi {
   private readonly http = inject(HttpClient);
 
-  // Four methods for five endpoints, on `looks.api.ts`'s rule: a parameter with
+  // Five methods for six endpoints, on `looks.api.ts`'s rule: a parameter with
   // no screen is not written. `GET /trips` is the one left out, and it has no
-  // planned caller at all — 04-API-SPEC.md records that deliberately. The other
-  // two arrive at task 4.6b with the controls that call them, which closes
-  // AUDITS.md O-33.
+  // planned caller at all — 04-API-SPEC.md records that deliberately. *The
+  // previous version of this sentence said the repack and the delete "arrive at
+  // task 4.6b", in the commit that made them arrive; they are the two below.*
   //
   // The body goes out exactly as the caller built it. The request schema
   // rejects an unknown key with a 422 rather than dropping it, so a field added
@@ -44,5 +49,14 @@ export class TripsApi {
   // with it, and `204` is the whole of the answer.
   remove(id: string): Observable<void> {
     return this.http.delete<void>(`${environment.apiUrl}/trips/${id}`);
+  }
+
+  // `TripDetail`, the same shape `get` answers, because a swap edits one day and
+  // replies with the whole trip: `packing_list` has moved, so `days[]`, the reuse
+  // summary and every look are re-read together (DECISIONS.md 209). The `id` is
+  // separated from the body because the trip is in the path and the day is not —
+  // `days[]` is a computed view, so there is no `/days/{day}` to post to.
+  swap(id: string, request: TripSwapRequest): Observable<TripDetail> {
+    return this.http.post<TripDetail>(`${environment.apiUrl}/trips/${id}/swap`, request);
   }
 }
