@@ -49,6 +49,25 @@ Return `400` with `code: "forecast_unavailable"` when dates fall outside the hor
 
 Constraints: maximum 14 days, at least 8 `ready` items, rate limit 10 packs per hour.
 
+**The rate limit is not built here.** `04-API-SPEC.md` records that no task in
+any stage file builds the counter its table needs, and asks that whoever writes
+it add it to a stage file first — so it is added to `STAGE-5-qa-deploy.md` § 5.2,
+beside the integration tests that have named rate limits since Stage 0, with all
+three of the table's limits and a commit checkpoint of its own. This endpoint
+ships unthrottled, which is an exposure with a date rather than an omission:
+`POST /trips/pack` is the most expensive call in the project. Building it here
+for one endpoint would leave the table reading as implemented while
+`POST /items/upload` and `POST /looks/suggest` stayed exactly as open as they
+have been since 0.7 and 2.7. `DECISIONS.md` 191.
+
+**Dates are bounded on the last day, not the first.** `end_date <= today + 14`.
+The line above and `04-API-SPEC.md`'s "`start_date` no more than 14 days ahead"
+together admit a fourteen-day trip ending on day 27, which no forecast covers;
+the bound has to bind the end or it does not bind the provider at all. Fourteen
+rather than `weather.py`'s measured fifteen is one day of margin against a
+horizon that moves daily. No seasonal-average fallback is built in this stage,
+as a data source or as a message. `DECISIONS.md` 190.
+
 ### 4.5 Trip form
 Destination with autocomplete via `/me/locations/search`. Date range picker. Once dates are chosen, render one occasion chip row per day, defaulting to `casual`. An optional notes field.
 
@@ -58,6 +77,39 @@ Keep this to a single screen. A multi-step wizard would add a day of work and no
 Header with destination, dates, item count and look count. A horizontal day strip showing temperature and a weather icon per day. Tapping a day swaps the look card below. The packing list is grouped by category with checkable rows, using local state only.
 
 The reuse summary — *"8 items across 5 looks — the jeans appear on 3 days"* — goes somewhere prominent. It is the line that makes the feature land.
+
+### 4.6a Swap one item on a trip look
+
+The ↻ badge from the look card, on the trip look. Reuses Stage 2's plumbing
+unchanged — `locked_item_ids`, `replace_role`, `exclude_item_ids`, and
+validation rules 7 and 8 — rather than building a second swap.
+
+Three properties are what make it a task rather than a wiring job:
+
+1. The replacement is **local to that day**. A trip's looks each obey their own
+   weather rule, so propagating one day's substitution applies a judgement made
+   at 12°C and rain to a day dressed at 19°C and dry.
+2. The **packing list is recomputed**: the new item enters it, and the old one
+   leaves only if no remaining day still wears it.
+3. Where the old item *is* still worn on other days, the UI **names them**.
+   Reuse is the whole point of the feature, so removing the jeans from Tuesday
+   does not take them out of the suitcase while Thursday still wears them — and
+   without that line the user swaps expecting to pack less and packs the same.
+
+Whether the recomputation happens on the server or in the client is this task's
+open question. `trips.packing_list` is a stored `JSONB` column either way.
+
+**Acceptance criteria — 4.6a's own**, because this task was inserted after the
+list at the foot of this file was written:
+
+- [ ] Swapping an item on day 3 changes day 3 and no other day
+- [ ] After a swap the packing list contains the new item, and every look item
+      is still in the packing list
+- [ ] An item swapped out of one day but still worn on another stays in the
+      packing list, and the UI says which days still wear it
+- [ ] The rejected item is not returned by the swap that rejected it
+
+`DECISIONS.md` 192.
 
 ### 4.7 Export
 A share or copy button producing the packing list as plain text. Trivial to build, and it is the thing a user would actually use on the morning of a trip.
@@ -77,7 +129,7 @@ A share or copy button producing the packing list as plain text. Trivial to buil
 
 ## Commit checkpoints
 
-`feat(db): trips schema` · `feat(weather): multi-day forecast` · `feat(ai): trip packing orchestration` · `feat(api): trip endpoints` · `feat(web): trip form` · `feat(web): packing view` · `feat(web): packing list export`
+`feat(db): trips schema` · `feat(weather): multi-day forecast` · `feat(ai): trip packing orchestration` · `feat(api): trip endpoints` · `feat(web): trip form` · `feat(web): packing view` · `feat(web): swap an item on a trip look` · `feat(web): packing list export`
 
 ## Prompt tuning note
 

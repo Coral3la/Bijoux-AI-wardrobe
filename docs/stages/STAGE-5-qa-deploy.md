@@ -33,6 +33,31 @@ Fill the gaps from `06-TESTING-STRATEGY.md`:
 
 Coverage target ≥ 75% on `app/services` and `app/api`. Report it; do not chase 100%.
 
+**This task also builds the rate limiter itself, not only its tests.** `04-API-SPEC.md`
+has carried the table since Stage 0 and recorded, at task 0.7, that no task in any
+stage file builds the counter it needs — asking that whoever writes it add it to a
+stage file first. `STAGE-4` 4.4 declined to build it for one endpoint, because a
+counter on `POST /trips/pack` alone would leave the table reading as implemented
+while its other two rows stayed as open as they have been since 0.7 and 2.7.
+`DECISIONS.md` 191.
+
+All three limits, per user, in-memory, no Redis:
+
+| Endpoint | Limit |
+|---|---|
+| `POST /items/upload` | 100 per hour |
+| `POST /looks/suggest` | 30 per hour |
+| `POST /trips/pack` | 10 per hour |
+
+`429` with `code: "rate_limited"` — already in `CONVENTIONS.md`'s list — and a
+`Retry-After` header. `/auth/*` stays deliberately unthrottled and stays
+recorded as such: the table caps cost, it does not resist attack.
+
+**It takes its own commit checkpoint, `feat(core): rate limiter`, ahead of this
+task's `test:` one.** A mechanism that changes what the code does is not
+housekeeping and is not a test — the distinction `CONVENTIONS.md` drew when it
+added `refactor` before task 1.1.
+
 **Four `GET /items` behaviours this task would otherwise have covered were reassigned into Stage 1**, to the task that first depends on each: the `include_archived` exclusion to **1.4**; `limit`'s default and cap to **1.5**; the `status` filter and the `created_at DESC, short_id` ordering to **1.7**. The `status` filter's *test* is written at 1.4's start, ahead of the two frontend tasks that lean on it, but the behaviour belongs to 1.7 — this line said 1.4 owned it until task 1.7, where `STAGE-1` said otherwise and won, being the document carrying the argument. All four shipped at 0.7 and were undefended at 0.10. They moved because each one fails in a way that presents as something else — a polling loop that never empties, a grid that reorders itself, a `DELETE` that appears to do nothing, a filter bar counting over the first hundred items — and none of those is worth four stages of exposure. Do not go looking for them here.
 
 ### 5.3 Playwright suite
@@ -98,7 +123,7 @@ Two things were done in the same commit and do not need doing again: `docs/READM
 
 ## Commit checkpoints
 
-`test: record ai fixtures` · `test: backend suite to target` · `test(e2e): page objects` · `test(e2e): user journeys` · `docs: known issues` · `ci: github actions pipeline` · `chore: production deployment` · `docs: evaluation results` · `docs: project readme`
+`test: record ai fixtures` · `feat(core): rate limiter` · `test: backend suite to target` · `test(e2e): page objects` · `test(e2e): user journeys` · `docs: known issues` · `ci: github actions pipeline` · `chore: production deployment` · `docs: evaluation results` · `docs: project readme`
 
 **Task 5.8 is two commits, and the first one is already in the log under a different message.** It landed during Stage 1 as `docs: rewrite the root README as a from-clean-clone guide`, which is a narrower claim than `docs: project readme` and was the accurate one for what it contained. The line above is left as it stands rather than amended, because it is still the right message for the commit that closes 5.8 — the difference from **STAGE-1**'s two corrections is that neither the type nor the scope here is wrong, only the count, and the count is recorded in § 5.8 where a reader meets it before writing anything. A reader diffing this list against `git log` and finding one README commit they cannot place should read § 5.8 first.
 

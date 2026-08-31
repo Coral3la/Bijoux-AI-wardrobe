@@ -82,7 +82,22 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [ ] Trip endpoints
 - [ ] Trip form
 - [ ] Packing view
+- [ ] Swap one item on a trip look *(4.6a, added 2026-08-31)*
 - [ ] Export
+
+**Two roadmap changes, both recorded before any Stage 4 code exists.** The rate
+limiter `04-API-SPEC.md` has specified since Stage 0 and no task ever built is
+now **Stage 5's**, inside § 5.2 beside the integration tests that have named it
+since the start, with all three limits and a commit checkpoint of its own —
+`STAGE-4` 4.4 ships `POST /trips/pack` unthrottled rather than closing one row
+of a three-row table (`DECISIONS.md` 191). And **Stage 4 gains a seventh task**,
+4.6a, for the per-item swap on a trip look: local to its day, recomputing the
+packing list, and naming the other days that still wear a garment it removed
+(192). Two further decisions were fixed in the same commit and add no task — the
+trip call gets its **own** response schema rather than extending
+`outfit_recommendation`, which strict mode would make a field null on every
+single-day call (189), and a trip's dates are bounded on the **last** day,
+`end_date <= today + 14`, with no seasonal-average fallback in this stage (190).
 
 ## Stage 5 — QA and Deployment  *(do not cut)*
 `stages/STAGE-5-qa-deploy.md` · target 5 days
