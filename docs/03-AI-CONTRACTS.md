@@ -190,6 +190,8 @@ Roughly $0.0002 per item at `detail: "low"`. Tagging 150 items costs about three
 
 One function serves both single-day recommendations and trip packing. A single day is a trip of length one with no packing list.
 
+**Two response schemas, not one, and that sentence is why.** `outfit_recommendation` is the single-day shape and `trip_packing_plan` is the trip shape; `suggest_looks` sends whichever the context it was handed calls for. Strict mode has no optional property, so a single schema carrying `packing_list` and `day` would make the model emit both on every `POST /looks/suggest` call for the rest of the project — the exact cost `DECISIONS.md` 157 refused when it deferred `packing_list` in the first place. `DECISIONS.md` 189, and 193 for the shape settled here.
+
 ### Wardrobe serialisation (`services/serializer.py`)
 
 Each item becomes one compact line.
@@ -403,15 +405,37 @@ Aim for at most 12 distinct items across 4 days.
 Then return the deduplicated packing list.
 ```
 
+**`day` is a 1-based ordinal within the trip, not a date component.** Day 1 is
+`start_date`, day *n* is `end_date`, and the numbering is the trip's own — the
+15th of March is day 2 of a trip beginning on the 14th and day 1 of a trip
+beginning on the 15th. This is the meaning `AUDITS.md` **O-24** found missing at
+2.5, when the model answered `"day": 14` for a request dated 2026-03-14 and the
+field was struck for having no reader; it returns here with one, and with the
+`Day N |` lines above stating the numbering in the same message that asks for it.
+Rule 10 below is what enforces it. `looks.for_date` is still the column a look
+is keyed to — the route maps day *n* to `start_date + (n - 1)` when it persists
+— so the ordinal lives in the AI contract and in the day strip, and never in the
+database. `DECISIONS.md` 163, 193.
+
 The reuse target is computed as `min(days * 4, days + 8)` and injected. Without an explicit numeric target the model reuses almost nothing.
 
-### Response schema
+**The target is prompt-only and is deliberately not a validation rule.** A
+wardrobe that cannot dress seven days from twelve garments should answer with
+the looks it can build rather than spend the one retry and then a `502` on
+arithmetic — the same reasoning `DECISIONS.md` 158 applied to the weather rule,
+where the honest instruction on a wardrobe that cannot comply is to approximate.
+What measures it instead is `STAGE-4`'s prompt-tuning note: run 3, 5 and 7 days
+against the demo wardrobe and record the actual distinct-item counts in
+`docs/eval-results.md`. `STAGE-4`'s acceptance criterion — *the packing list
+contains strictly fewer items than `days × 4`* — is a measurement made there and
+not a rule the validator enforces. `DECISIONS.md` 193.
+
+### Response schema — a single day (`outfit_recommendation`)
 
 ```json
 {
   "looks": [
     {
-      "occasion": "work",
       "title": "Morning meetings",
       "item_ids": ["A3F9K2", "7BX1QM", "SEFA38", "EH8VVQ"],
       "reasoning": "The high-rise straight jean balances the oversized shirt and the tucked front keeps the waist defined.",
@@ -431,18 +455,32 @@ The reuse target is computed as `min(days * 4, days + 8)` and injected. Without 
 
 `missing_pieces` is `[]` when nothing is missing.
 
+**`occasion` is gone from the look object, and `AUDITS.md` O-26 closes here by
+removal.** The model still produced one on every call and nothing had read it
+since 2.7, when `DECISIONS.md` 168–172 made the occasion a closed vocabulary and
+put the **request's** value into `looks.occasion` and onto the wire. O-26 named
+one thing that could reverse the strike — *a trip's per-day occasion may give
+the field a reader again* — and the trip contract below does not: the request
+carries `occasions: [{"day": 1, "occasion": "work"}, …]`, so the route already
+knows which occasion belongs to which day and the model's echo is the same
+unread string one path along. That is 157's and 163's test applied a third time,
+to the last field that had survived it. `DECISIONS.md` 193.
+
 **Built at task 2.4 as `STYLIST_SCHEMA` in `app/services/stylist.py`, verified
 against one live call, and narrower than this document was before that task in
 three ways.** `DECISIONS.md` 157.
 
-- **`packing_list` is not in the schema yet, and this is staging rather than
-  disagreement.** It arrives at Stage 4 together with the trip user message and
-  the reuse arithmetic, because its `by_category` map cannot be expressed in
-  strict mode as written — strict mode requires `additionalProperties: false`
-  and every key named, so a free-form category map has to become a fixed list of
-  keys, and that list is a decision for the task that has a reader for it.
-  Shipping it now would mean the model emitting `packing_list: null` on every
-  call this project makes for two stages.
+- **`packing_list` is not in this schema and never will be.** It was deferred at
+  2.4 because its `by_category` map cannot be expressed in strict mode as
+  written — strict mode requires `additionalProperties: false` and every key
+  named, so a free-form category map has to become a fixed list of keys — and
+  because shipping it would mean the model emitting `packing_list: null` on
+  every call this project makes for two stages. **Task 4.3 answered both halves
+  by building a second schema rather than by extending this one** (`DECISIONS.md`
+  189): `trip_packing_plan` below carries the packing list, and `by_category` is
+  not in it either — the frontend groups by category from the hydrated
+  `items[].category` it already has. This schema is unchanged at Stage 4 except
+  for the `occasion` strike above.
 - **`look_id`, `confidence` and `day` are struck.** None has a column in
   `02-DATA-MODEL.md`, a renderer in `05-FRONTEND-SPEC.md` or a task, and in
   strict mode every property is one the model must produce on every call —
@@ -453,22 +491,79 @@ three ways.** `DECISIONS.md` 157.
   a date was being filled from the date and the two disagreed about what the
   field meant. A look is keyed to its day by `looks.for_date`, which is the
   column `02-DATA-MODEL.md` actually has; Stage 4 reintroduces a day number
-  beside the trip schema that needs one. `AUDITS.md` O-24, `DECISIONS.md` 163.
+  beside the trip schema that needs one, and `trip_packing_plan` below is that
+  schema. It stays struck **here**: a single-day call still has no day to
+  number. `AUDITS.md` O-24, `DECISIONS.md` 163, 193.
 - **No `minItems`.** It is not verified against this pin, and "one look per
   expected day" is rule 4 of the validation table below, which is `validate_look_response`'s.
 
 The schema's `name` is `outfit_recommendation`, beside `garment_tags` for
-Contract 1.
+Contract 1 and `trip_packing_plan` for the trip.
 
 The model returns **JSON only** — no prose outside the structure. Everything the
 user reads is a field in this object, rendered by the UI.
+
+### Response schema — a trip (`trip_packing_plan`)
+
+The second of Contract 2's two schemas, sent when the context is a trip. Built
+at task 4.3; `DECISIONS.md` 189 fixed that there would be two and 193 fixes what
+this one holds.
+
+```json
+{
+  "looks": [
+    {
+      "day": 1,
+      "title": "Rainy first morning",
+      "item_ids": ["A3F9K2", "7BX1QM", "SEFA38", "EH8VVQ"],
+      "reasoning": "The wool blazer over the shirt carries the formality of the meeting without a second coat.",
+      "weather_note": "12°C and wet — the leather boots are the only water-resistant shoe you packed."
+    }
+  ],
+  "packing_list": { "item_ids": ["A3F9K2", "7BX1QM", "SEFA38", "EH8VVQ"] },
+  "missing_pieces": [],
+  "message": "Four days in Berlin from twelve pieces."
+}
+```
+
+**A look object is `outfit_recommendation`'s properties plus `day`, from one
+shared dict.** `_LOOK_PROPERTIES` in `app/services/stylist.py` is the single
+definition; the trip schema copies it and adds `day`, so a change to what a look
+holds is one edit rather than two that the compiler cannot compare —
+`DECISIONS.md` 189 recorded that drift as the price of two schemas and this is
+the mitigation it named.
+
+**`packing_list` is `{ "item_ids": [...] }` and holds nothing else.** No
+`by_category`: it cannot be expressed in strict mode and the frontend does not
+need it, since it groups the packing list from `items[].category` on the
+hydrated response. No `reuse_summary` either — **Python computes that**, from
+`item_ids` and the looks it already has, and the model is not asked for
+arithmetic it would have to be checked on anyway.
+
+**The ids in `packing_list.item_ids` are `short_id`s**, like every other id in
+this contract — they are the only ids the model is ever shown. What the *stored*
+`trips.packing_list` holds is different and deliberately so: `pack_trip` maps
+them through the wardrobe it sent and writes **row UUIDs as strings**, because a
+UUID is the only id that leaves this API (`04-API-SPEC.md`: `short_id` exists for
+the AI layer). `02-DATA-MODEL.md` carries the stored shape, including the
+`reuse_summary` object Python writes beside them.
+
+**`day` is required on every look and is the ordinal described above** — 1-based,
+within the trip. `missing_pieces` and `message` are `outfit_recommendation`'s,
+unchanged and shared: a trip reports a shortfall the same way a single day does.
+
+No `minItems` here either, for the reason it is absent there: the count is
+rule 4's, which is the rule that can name what was wrong.
 
 ### Validation — `validate_look_response()`
 
 Run in this order. Any failure triggers **one** retry with the violation named explicitly, then a `502`.
 
-**Five of the eight run at Stage 2**, and the split is by what has a field to
-read rather than by preference. `validate_look_response` is a synchronous
+**The list has eleven numbers, ten live rules and two paths.** Five ran when it
+was written at 2.5, seven after the anchor and the swap, and the split has
+always been by what has a field to read rather than by preference: rule 3 is
+struck into rule 9, rules 7 and 8 need `POST /looks/suggest`'s fields, and rules
+5, 10 and 11 need `trip_packing_plan`'s. `validate_look_response` is a synchronous
 function in `app/services/stylist.py` that calls nothing and raises nothing: it
 returns the first violation and the response with its ids normalised, and the
 retry, the give-up and `502 stylist_failed` belong to `POST /looks/suggest` at
@@ -478,14 +573,20 @@ retry, the give-up and `502 stylist_failed` belong to `POST /looks/suggest` at
 1. **Every `item_id` exists in this user's wardrobe.** This is the hallucination guard and it is non-negotiable. An unknown ID is never rendered.
 2. Every look contains shoes, and either (a top and a bottom) or a dress.
 3. ~~No look contains two `outer` items.~~ **Absorbed into rule 9 at task 2.11b**, where it is one slot of a table. The number stays in this list rather than being reclaimed: eight documents, a test and three code comments name rule 3, and a renumbering that buys nothing is how a reference becomes wrong.
-4. `len(looks) == expected_days`.
-5. Every item in `packing_list.item_ids` appears in at least one look. **Stage 4, with the field it reads.** `STYLIST_SCHEMA` carries no `packing_list` until the trip message is designed beside it (`DECISIONS.md` 157), so this rule has nothing to look at before then and 2.5 does not implement it.
-6. When the weather rule required outerwear, each look for that day contains an `outerwear` item — **unless the user asked for no outerwear.** `DECISIONS.md` 158 gave an explicit `include_outerwear: false` precedence over the weather rule and the system prompt says so in words, so a look that obeyed the user at 12°C is correct; enforcing this rule over it would spend the retry and then answer `502` to the one answer that did as it was told. Narrowed at 2.5. Rule 6 reads the rule *sentence* through `weather.requires_outerwear`, never a temperature — the stylist is never sent a number.
+4. `len(looks) == expected_days`. **`expected_days` is a parameter from task 4.3**, where a caller can finally ask for a number other than one; 2.5 hard-coded `1` because `03`'s single-day path is the whole of "a trip of length one" and no request could say otherwise. `DECISIONS.md` 164 recorded the hard-coding as the single-day half of this rule.
+5. **Both directions: every item in `packing_list.item_ids` appears in at least one look, and every item in every look appears in `packing_list.item_ids`.** **Stage 4, with the field it reads** — `STYLIST_SCHEMA` carries no `packing_list` (`DECISIONS.md` 157) and `trip_packing_plan` is the schema that does, so this rule runs on the trip path alone. Widened from one direction to two at 4.3: `STAGE-4`'s acceptance criteria ask for both — *every packed item appears in at least one look, and every look item appears in the packing list* — and only the second is the one a user feels, because a garment worn on Thursday and missing from the list is a garment left at home. `DECISIONS.md` 194.
+6. When the weather rule required outerwear, each look for that day contains an `outerwear` item — **unless the user asked for no outerwear.** `DECISIONS.md` 158 gave an explicit `include_outerwear: false` precedence over the weather rule and the system prompt says so in words, so a look that obeyed the user at 12°C is correct; enforcing this rule over it would spend the retry and then answer `502` to the one answer that did as it was told. Narrowed at 2.5. Rule 6 reads the rule *sentence* through `weather.requires_outerwear`, never a temperature — the stylist is never sent a number. **Per-day from 4.3**: a trip carries one rule per day and look *i* is judged against day *i*'s rule, which is what makes "the rainy day gets water-resistant outerwear" a rule rather than an average. The single-day path passes one rule and is unchanged; `include_outerwear` has no trip spelling, because `POST /trips/pack` takes no such field.
 7. When `anchor_item_id` was supplied, it appears in the returned look.
 8. When `locked_item_ids` were supplied, every one of them appears, and the rejected item does not.
 9. **At most one item per slot, and a dress instead of separates.** One `outer` layer item, one `top` tagged `layer: base`, one `bottom`, one `dress`, one pair of `shoes`, one `bag`, and at most two accessories — and where a `dress` is present, no separate `top` or `bottom` at all. Read from the wardrobe that was sent, the way rule 3 read `outer`. Added at task 2.11a for base tops alone and widened at **2.11b**, after a shoe-swap answered with long jeans and shorts in one look.
+10. **The days are `1..n`, each exactly once** — `sorted(look.day for look in looks) == list(range(1, expected_days + 1))`. Trip path only; the single-day schema has no `day`. It is not the same rule as 4: seven looks numbered 1, 1, 2, 3, 4, 5, 6 pass the count and leave day 7 undressed and Monday wearing two outfits. Added at 4.3 with the field, which is the condition `DECISIONS.md` 163 struck `day` for failing. `DECISIONS.md` 194.
+11. **No two looks are composed of the same set of item ids.** Set equality, not order — the same four garments in a different sequence is the same outfit. `STAGE-4`'s acceptance criterion is *no two days produce an identical full look*, and the system prompt has asked for it since Stage 0 without anything enforcing it, which is rule 9's own history (`AUDITS.md` O-28). It is a rule rather than prompt-only because the model reaches for it exactly when the reuse instruction bites hardest: the cheapest way to pack twelve items across seven days is to repeat Tuesday. Trip path only — one look cannot duplicate itself. `DECISIONS.md` 194.
 
 Rules 7 and 8 are fully deterministic and make excellent E2E assertions — the requested item is either there or it is not. They arrive with the anchor at 2.10 and the swap at 2.11, which are the tasks that put the fields on the wire.
+
+**The run order differs between the two paths, and 4.3 states both rather than leaving the table to be read twice.** A single-day call runs **1, 2, 4, 6, 7, 8, 9** — unchanged from 2.11b. A trip call runs **1, 2, 4, 10, 5, 6, 9, 11**: rules 7 and 8 have no fields on `POST /trips/pack`, and **rule 10 is hoisted above 5 and 6** because rule 6 pairs look *i* with day *i*'s weather rule and that pairing is meaningless until the ordinals are known to be `1..n`. Rule 1 stays first on both, for the reason it always was: it is what makes every later rule able to look an id up without a `KeyError` on a hallucinated one.
+
+**Every violation on the trip path names its day, and the number is the look's 1-based position in the returned array** — `day 3: the look has no shoes`. Not the `day` the model returned: rules 1 and 2 run *before* rule 10, so at that point the returned ordinals are exactly what is not yet trustworthy, and a message keyed to an unverified number can name a day twice or not at all. Once rule 10 has passed, position and `day` are the same number. Single-day violations are unprefixed and their wording is untouched, because 2.5's tests pin those strings. `DECISIONS.md` 194 carries both this and the run order above it.
 
 **Rule 2 says a look is not missing anything; rule 9 says it does not wear anything twice.** They are the two halves of one question — *can a person put this on?* — and neither implies the other: rule 2 asks whether a bottom is present and never how many, which is exactly how two pairs of jeans reached a user.
 

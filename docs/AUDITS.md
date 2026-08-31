@@ -98,7 +98,7 @@ contradiction** — a thing no document disagrees about and nobody has looked at
 It was extended at 1.6 rather than duplicated, and **O-15** was opened by the
 same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
-task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, **which task 3.1 closed**, printing both indexes in `02` before migration `0004` built them and finding, on the way, that deleting them failed no test. **O-29 and O-30 were opened at task 3.2**, and they are the two kinds this file has collected most: a cost that only becomes visible on its third instance — three screens with no way into them — and a documented endpoint with nothing under its heading, which is **O-1's shape** found the same way, by the task implementing the section next to it. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had. **O-31 was opened at task 4.1**, and it is the first item here that is a defect in a *shipped* artefact rather than in a document or an unread surface: three constraint names that the live schema has held wrongly since Stage 0, found by the task that was about to add a fourth the same way, and invisible to the one test written to catch exactly it.
+task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, **which task 3.1 closed**, printing both indexes in `02` before migration `0004` built them and finding, on the way, that deleting them failed no test. **O-29 and O-30 were opened at task 3.2**, and they are the two kinds this file has collected most: a cost that only becomes visible on its third instance — three screens with no way into them — and a documented endpoint with nothing under its heading, which is **O-1's shape** found the same way, by the task implementing the section next to it. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had. **O-31 was opened at task 4.1**, and it is the first item here that is a defect in a *shipped* artefact rather than in a document or an unread surface: three constraint names that the live schema has held wrongly since Stage 0, found by the task that was about to add a fourth the same way, and invisible to the one test written to catch exactly it. **Task 4.3 closed O-7**, the oldest item still open — audit 1 predicted the unsatisfiable trip constraints that `DECISIONS.md` 190 later had to settle, and its recommendation is taken in shape though not in number, for measurements taken after it was written. **O-32 was opened by the same task**, and it is the first that is a collision between two stages rather than a defect in either: Stage 4's repack and delete were specified before Stage 3 gave a look three columns worth keeping, and neither document is wrong on its own terms. Task 4.3 also **decided O-26** without closing it — the strike is in `03-AI-CONTRACTS.md` and the heading waits for the code, which is the same task's next commit.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -272,7 +272,7 @@ mechanism, which is a 5.4 entry rather than an architectural hole. Whoever
 decides Stage 2's remaining budget should read this beside **O-5**: both are
 "one small task at the top of Stage 2" and only one of them costs money.
 
-#### O-7 · The trip constraints in `04` cannot all hold at once — Stage 4
+#### O-7 · ~~The trip constraints in `04` cannot all hold at once~~ — **closed at task 4.3**
 
 `04` line 224: *"maximum 14 days; `start_date` no more than 14 days ahead (the
 free forecast horizon)"*. `STAGE-4` 4.2: *"Open-Meteo provides 16 days; cap
@@ -287,6 +287,21 @@ guard.
 `end_date` no more than 16 days ahead — Open-Meteo's horizon.* It is the last day
 that needs a forecast, the number then comes from the provider rather than from
 coincidence, and `400 forecast_unavailable` keeps a single, checkable condition.
+
+**Closed at task 4.3, in shape but not in number.** `04-API-SPEC.md` now reads
+`end_date <= today + 14`, and the parenthetical calling 14 the provider's horizon
+is gone. The recommendation's **16** was not taken, and two measurements made
+after this item was written are why: task 2.1 measured the horizon at **`today +
+15`** against the live provider — it served `2026-09-10` and refused
+`2026-09-11`, which extended this item at the time — and `DECISIONS.md` 190 then
+spent one more day as margin, because a horizon that rolls forward daily and was
+measured on a single day loses exactly one day to a range built in a browser at
+23:50 local and evaluated on a server already into tomorrow. So the bound is the
+project's, deliberately inside the provider's, rather than the provider's own.
+**The enforcement is task 4.4's** — `400 trip_too_long` on `POST /trips/pack`,
+with `CONVENTIONS.md` carrying the code and naming 4.4 as its producer. What
+closes here is what this item was opened about: two constraints in one document
+that could not both hold.
 
 **Measured at task 2.1, and the recommendation above is off by one.** A live
 call on 2026-08-26 asked for each day in turn: the provider served `2026-09-10`
@@ -1237,6 +1252,17 @@ it for a stated reason rather than by inheritance. Do not add a validation rule
 comparing the echo to the request: that would spend the project's one retry on a
 string nothing renders, which is 163's argument about `day` word for word.
 
+**Decided at task 4.3, and the reversal did not happen.** The trip contract
+carries per-day occasions in the **request** — `occasions: [{"day": 1,
+"occasion": "work"}, …]` — so the route already knows which occasion belongs to
+which day, and the model's echo has no reader on the trip path either. `occasion`
+is struck from the look object on both schemas; `03-AI-CONTRACTS.md` carries the
+reasoning and `DECISIONS.md` 193 the decision. **This heading stays open until
+the code lands**, in the same task's `feat(ai)` commit — the document decided it,
+`STYLIST_SCHEMA` still emits the field until `app/services/stylist.py` is edited,
+and an item marked closed above a schema that still carries the property would be
+the count-in-two-places problem this file opens by describing.
+
 #### O-27 · `USE_FAKE_AI` cannot produce a valid look on a cold day — opened at task 2.7
 
 Measured by reading, not by running: `_fake_response` picks the first shoes,
@@ -1545,3 +1571,55 @@ the decision is that a cosmetic name in an error nobody branches on is not
 worth a migration. Whichever is taken, extend `test_db_naming.py` to read
 `pg_constraint` rather than only `Base.metadata`, or the seam stays open behind
 a green test.
+
+#### O-32 · A repack or a delete destroys trip looks that were saved, rated or worn — opened at task 4.3
+
+`04-API-SPEC.md` has said since Stage 0 that `POST /trips/{id}/repack`
+*"replaces the existing looks"*, and task 4.3 filled in `DELETE /trips/{id}` as a
+hard delete relying on `0005`'s `ON DELETE CASCADE`. Both are correct about
+trips and neither has looked at what a trip's looks have become since Stage 3.
+
+**Three columns on `looks` are at stake, and three separate features read them.**
+`is_saved` puts a look on `/saved` (3.2). `feedback` is what the preference block
+counts, and `03-AI-CONTRACTS.md` requires **three rated looks** before that block
+is sent at all — so deleting rated looks can silently switch the stylist's
+learned preferences back off (3.5). `worn_at` records a wearing, and its
+transaction has already incremented `items.wear_count` and moved
+`items.last_worn_at`, which 3.6's insights panel counts. Nothing about a trip
+row says any of this; a trip look is an ordinary look with a foreign key.
+
+**The `wear_count` half does not reverse and should not.** A garment worn in
+Berlin was worn, so deleting the look correctly leaves the count alone — but it
+leaves a `wear_count` of 3 on an item whose looks number 2, which is a number no
+screen can explain. That is a consequence to state rather than a defect to fix.
+
+**Three options, and they may not have the same answer for the two endpoints.**
+
+1. **Cascade and delete them all.** What the DDL does today and what the
+   documented sentence describes. Cheapest, and it is defensible for `DELETE`,
+   where the user asked for the trip to be gone. On a *repack* it means a tap
+   meant to refresh the weather also empties three days out of `/saved`.
+2. **Detach the marked ones** — `UPDATE looks SET trip_id = NULL WHERE trip_id =
+   :id AND (is_saved OR feedback IS NOT NULL OR worn_at IS NOT NULL)` — and
+   delete the rest. Keeps every signal and every saved card. The cost is a look
+   on `/saved` that belongs to no trip and whose `weather_note` describes a
+   forecast for a city the row no longer names.
+3. **Refuse the repack while any look is marked**, with a `409` and a code. The
+   safest for the data and the worst to use: the way out is for the user to
+   un-save or un-rate a look in order to repack, which is asking them to damage
+   the record to get past a guard protecting it.
+
+**Recommendation.** Take 2 for `repack` and 1 for `DELETE`, and say so in
+`04-API-SPEC.md` — a repack is an edit to a trip the user is keeping, where
+losing a rating is collateral, and a delete is a deliberate act on the whole
+trip, where cascading is what the user asked for. Option 3 needs a
+nineteenth error code — `trip_too_long` is the eighteenth — and a screen that
+explains it, for a case option 2 makes
+disappear. **This belongs to task 4.4**, which owns both endpoints; 4.3 spells
+it out here rather than deciding it from a document commit, on `DECISIONS.md`
+192's precedent — the packing list's owner was left to the task that had to
+write it.
+
+If 2 is taken, one thing to check rather than assume: `days[].look_id` in the
+trip object must be rewritten to the new looks, and a detached look must not
+still be pointed at by the packing list it was packed for.

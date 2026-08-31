@@ -400,10 +400,13 @@ set rather than the page.
 `from_date` and `to_date` are inclusive and filter on **`for_date`** — the day
 the look was *for*, not the day it was made.
 
-**`trip_id` is named here and not implemented.** The column arrives with
-migration `0005`, so the parameter is undeclared and FastAPI ignores it: sending
-one today filters nothing and answers `200` with every look. Built at Stage 4
-with the column.
+**`trip_id` is named here and still not implemented, and the reason changed at
+task 4.1.** The column exists now — migration `0005` built it — but the query
+parameter is undeclared, so FastAPI ignores it: sending one filters nothing and
+answers `200` with every look. It is **task 4.4's** if anything, and nothing in
+Stage 4 needs it: a trip's looks are read through `GET /trips/{id}`, which
+answers them as a sibling key, so this parameter has no caller in any planned
+screen.
 
 Items are hydrated in `look_items.position` order, which is the model's own —
 this endpoint is that column's first reader on the server.
@@ -490,24 +493,183 @@ code and status as one that never existed.
 
 ## Trips *(Stage 4)*
 
+### The trip object
+
+One shape for one resource, as the user object is (`DECISIONS.md` 034). Every
+endpoint below that answers a trip answers **this**, and a trip's looks are
+always a **sibling key** rather than a field inside it. Settled at task 4.3;
+`DECISIONS.md` 195.
+
+```json
+{ "id": "uuid", "destination": "Berlin", "dest_lat": 52.52, "dest_lon": 13.41,
+  "start_date": "2026-03-14", "end_date": "2026-03-17",
+  "notes": "one dinner out",
+  "days": [
+    { "day": 1, "date": "2026-03-14", "occasion": "work",
+      "temp_min_c": 8, "temp_max_c": 12, "precip_mm": 4.2, "wind_kph": 11,
+      "condition": "rain",
+      "rule": "Outerwear is REQUIRED, warmth 3-4. Rain expected. Strongly prefer water_resistant outerwear and closed water_resistant shoes.",
+      "look_id": "uuid" }
+  ],
+  "packing_list": {
+    "item_ids": [ "uuid", "uuid" ],
+    "reuse_summary": { "item_count": 8, "look_count": 4,
+                       "most_reused": { "item_id": "uuid", "days": 3 } }
+  },
+  "created_at": "2026-08-31T09:14:22Z" }
+```
+
+**`days` is the day strip, and it is the join.** `05-FRONTEND-SPEC.md` §7 needs a
+temperature and an icon per day and a look under the selected one, and
+`LookResponse` carries no day number — one shape for every look since
+`DECISIONS.md` 182, and a trip is not a reason to widen it for the other three
+endpoints. So the day carries `look_id` and the client indexes the sibling
+`looks` array by it. The alternative, pairing `days[i]` with `looks[i]`
+positionally, is an ordering contract nothing enforces and a rendering bug that
+would be invisible until a day was missing.
+
+**`day` here is `03-AI-CONTRACTS.md`'s ordinal** — 1-based within the trip, day 1
+is `start_date` — and `date` is printed beside it so no client does calendar
+arithmetic to label a tab.
+
+**Two of the row's columns are deliberately not on the wire.** `trips.occasions`
+is the request as it arrived; `days[].occasion` is that value merged with the
+forecast, so the raw column would be the same data in a second shape.
+`trips.forecast` is the cached provider response — `days` is its parsed
+projection, and the provider's own field names and units are not this API's
+contract (`DECISIONS.md` 143).
+
+**`packing_list.item_ids` are row UUIDs, and `reuse_summary` is an object.** The
+`short_id`s the model answered with never leave the server —
+`03-AI-CONTRACTS.md`'s schema carries those, and `pack_trip` maps them through
+the wardrobe it sent. `reuse_summary` is computed in Python, and it is
+`{ item_count, look_count, most_reused }` rather than the English sentence
+`02-DATA-MODEL.md` first sketched: the sentence *"the jeans appear on 3 days"* is
+user-facing text, and `CONVENTIONS.md` puts every one of those behind an i18n
+key in the frontend. `most_reused` is `null` when no item is worn on more than
+one day. `02-DATA-MODEL.md` carries the stored shape, which is this one.
+
 ### `POST /trips/pack`
 ```json
 → { "destination": "Berlin", "start_date": "2026-03-14", "end_date": "2026-03-17",
     "occasions": [ { "day": 1, "occasion": "work" }, { "day": 2, "occasion": "work" },
                    { "day": 3, "occasion": "casual" }, { "day": 4, "occasion": "evening" } ],
     "notes": "one dinner out" }
-← 200 { "trip": { … }, "looks": [ … ], "packing_list": { … }, "missing_pieces": [ … ] }
+← 200 { "trip": { …trip object… }, "looks": [ …LookResponse… ], "missing_pieces": [ … ] }
 ```
 
 Server-side: geocode destination → fetch daily forecast → build one rule per day → single stylist call → validate → persist trip and looks.
 
-Constraints: maximum 14 days; `start_date` no more than 14 days ahead (the free forecast horizon); at least 8 `ready` items.
-`400` with `code: "forecast_unavailable"` when the dates fall outside the horizon — offer seasonal averages as a fallback message, do not guess.
+`looks` are full `LookResponse` objects, the same shape `POST /looks/suggest`
+answers with, each carrying `trip_id`'s row and hydrated items in the model's own
+order. `missing_pieces` is `POST /looks/suggest`'s shape too, and like that
+endpoint's it is **not persisted** — it describes this run, so a reopened trip
+does not carry it. **There is no `message` key**, unlike the suggest response:
+`trips` has no column for it and `05-FRONTEND-SPEC.md` §7 has no line that would
+render it, so a sentence that survived only until the next page load would be a
+field lying about what the API stores.
 
-### `GET /trips` · `GET /trips/{id}` · `DELETE /trips/{id}`
+**Constraints, corrected against `DECISIONS.md` 190.** Maximum 14 days, and the
+bound is on the **last** day: `end_date <= today + 14`. This document said
+`start_date` no more than 14 days ahead until task 4.3, which admits a legal
+fourteen-day trip beginning on day 14 and ending on day 27 — thirteen days past
+anything Open-Meteo answers for. The bound has to bind the end or it does not
+bind the provider at all. Fourteen rather than `weather.py`'s measured
+`FORECAST_HORIZON_DAYS = 15` is one day of margin against a horizon that rolls
+forward daily. At least **8** `ready` items, which is `POST /looks/suggest`'s
+threshold plus two — the same `wardrobe_too_small` code with a different number,
+and the message names the number.
+
+**No seasonal-average fallback is offered, as data or as a message.** This
+document said *"offer seasonal averages as a fallback message"* until 4.3 and
+`STAGE-4` 4.2 said the opposite in the same breath — *"say so plainly rather
+than guessing from seasonal averages"*. 190 settles it against the fallback: the
+whole reliability argument for this feature (`DECISIONS.md` 004) is that the
+weather rule is a pure function of numbers a provider measured, and a look built
+on a climate average is a look built on a number nobody took.
+
+**Ships unthrottled.** `DECISIONS.md` 191 moved the rate limiter to
+`STAGE-5-qa-deploy.md` § 5.2 with all three of the limits below, rather than
+closing one row of a three-row table from inside 4.4. This is the most expensive
+call in the project and the exposure is recorded with a date and an owner.
+
+Failure codes on this endpoint: `400` `trip_too_long` when `end_date` is beyond
+`today + 14`; `400` `wardrobe_too_small` under 8 `ready` items, checked before
+the geocoder so a request that cannot be served costs nothing; `400`
+`forecast_unavailable` when the range is beyond the provider's horizon and `502`
+`forecast_unavailable` when Open-Meteo does not answer, exactly as `GET /weather`
+splits them; `502` `geocoding_unavailable` when the destination cannot be looked
+up; `502` `stylist_failed` after the model has failed validation twice; `422`
+`validation_error` for a malformed body — an `occasions` list whose days are not
+`1..n`, an occasion outside the six, `end_date` before `start_date`; `401`
+`invalid_token`.
+
+### `GET /trips`
+```json
+← 200 { "trips": [ { …trip object… } ], "total": 3 }
+```
+
+Query: `limit`, `offset`. Ordered `created_at DESC` with `id` as the tiebreaker,
+`GET /looks`'s ordering exactly; `limit` defaults to `100` and is capped at
+`200`; `total` counts the whole set. No looks — a list of trips is a list of
+trip objects, and the looks for one of them come from `GET /trips/{id}`.
+
+**This endpoint ships with no caller.** No Stage 4 task lists trips: 4.5 is the
+form, 4.6 the packing view, 4.6a the swap and 4.7 the export, and
+`05-FRONTEND-SPEC.md` §7 describes no trips list screen. It is specified and
+built because this document is authoritative and the heading has been here since
+Stage 0 — the same shape as `GET /me/locations/search` shipping ahead of its
+caller, and recorded rather than quietly dropped (`AUDITS.md` **O-16**'s family).
+
+Failure codes: `422` `validation_error`, `401` `invalid_token`.
+
+### `GET /trips/{id}`
+```json
+← 200 { "trip": { …trip object… }, "looks": [ …LookResponse… ] }
+```
+
+`POST /trips/pack`'s response minus `missing_pieces`, which was never stored.
+`looks` are the trip's looks — `WHERE trip_id = :id`, ordered by `for_date` —
+hydrated in `look_items.position` order like every other look this API answers.
+
+`404` with `code: "not_found"` for a trip belonging to another account, the same
+code and status as one that never existed, per `06-TESTING-STRATEGY.md`.
+
+### `DELETE /trips/{id}`
+```
+← 204  (no body)
+```
+
+**A hard delete, not an archive.** `DELETE /items/{id}` archives because a
+garment is referenced by every look that ever wore it and by the wear history
+`GET /items/stats` counts; a trip is referenced by nothing but its own looks, and
+`trips` has no `is_archived` column to set. The `ON DELETE CASCADE` on
+`looks.trip_id` is already declared in migration `0005`, and it reaches
+`look_items` in a second hop through `0002`'s own cascade. `DECISIONS.md` 195.
+
+**What that destroys is the open question `AUDITS.md` O-32 owns**: a trip look
+can have been saved, rated or worn, and `feedback` is what `POST /looks/suggest`'s
+preference block counts from task 3.5. Deleting the trip deletes those rows.
+O-32 carries the three options and belongs to task 4.4; this heading records that
+the cascade is the current behaviour, not that it is the decided one.
+
+`404` with `code: "not_found"` for another account's trip. `401` `invalid_token`.
 
 ### `POST /trips/{id}/repack`
-Re-runs packing with a refreshed forecast. Replaces the existing looks.
+```json
+← 200 { "trip": { …trip object… }, "looks": [ …LookResponse… ], "missing_pieces": [ … ] }
+```
+
+Re-runs packing with a refreshed forecast against the trip's stored destination,
+dates and occasions, and replaces the existing looks. Same body shape as
+`POST /trips/pack`, same failure codes, and the same unthrottled exposure —
+`DECISIONS.md` 191 again, one endpoint along.
+
+**"Replaces the existing looks" is exactly what `AUDITS.md` O-32 is about**, and
+it is not decided here: a repack that deletes a look the user saved, rated or
+marked worn removes signal three separate features read. Task 4.4 owns the
+choice between deleting them all, detaching the marked ones by setting
+`trip_id = NULL`, and refusing the repack while any look is marked.
 
 ---
 
@@ -540,6 +702,6 @@ Per user, enforced with a simple in-memory counter — Redis is not worth adding
 
 `429` with `code: "rate_limited"` and a `Retry-After` header. This is the answer to "how do you stop a demo account from burning your OpenAI budget?"
 
-**No task builds the counter this table needs.** `STAGE-4` 4.4 names the trips limit as a constraint on that endpoint and `STAGE-5` 5.2 lists rate limits among the integration tests to write — but nothing builds the mechanism, and the `POST /items/upload` and `POST /looks/suggest` limits are named by no task at all. `STAGE-0` 0.7 built the upload endpoint without it. That gap was found at task 0.7 and is recorded rather than quietly carried: whoever writes the rate limiter should add it to a stage file first. Narrowed at the 2026-08-18 audit — this said no task in any stage file, which 4.4 falsifies.
+**None of the three limits above is enforced today, and the counter now has a task.** The gap was found at `STAGE-0` 0.7, which built `POST /items/upload` without it, and recorded rather than quietly carried: *whoever writes the rate limiter should add it to a stage file first.* That instruction was honoured at task 4.2's commit — `DECISIONS.md` 191 puts the mechanism and all three rows in `STAGE-5-qa-deploy.md` § 5.2, beside the integration tests that have named rate limits since Stage 0, with a commit checkpoint of its own. **`STAGE-4` 4.4 therefore builds none of it**, and its constraints line naming "10 packs per hour" is a statement about this table rather than about that task. Until 5.2, every row here is a specification with no enforcement, and `POST /trips/pack` — the most expensive call in the project — is the one that costs the most to leave open.
 
 **Known limitation:** `/auth/*` is not on this table and is not throttled. Password guessing against `POST /auth/login` and email enumeration through `POST /auth/register` are both unlimited. The table above exists to cap cost, not to resist attack, and the omission is recorded rather than quietly carried — see `DECISIONS.md` 037 for the enumeration side of it.
