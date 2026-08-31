@@ -316,17 +316,27 @@ describe('StylistPage', () => {
     });
   });
 
+  // The moved date is derived from the clock, never written down. The page opens
+  // on todayInLocalTime() and re-forecasts only when the date actually changes,
+  // so a literal here is a test that passes until the calendar reaches it —
+  // this one was written five days out and went green to red on 2026-09-01.
+  // setDate is calendar arithmetic on purpose: adding 86_400_000 ms lands on the
+  // same local day when that day is 25 hours long.
   it('re-reads the forecast when the date moves', async () => {
     await render();
 
+    const moved = new Date();
+    moved.setDate(moved.getDate() + 1);
+    const movedDate = todayInLocalTime(moved);
+
     const picker = element().querySelector<HTMLInputElement>('input[type=date]')!;
-    picker.value = '2026-09-01';
+    picker.value = movedDate;
     picker.dispatchEvent(new Event('change'));
     await fixture.whenStable();
 
     const request = weatherRequest();
-    expect(request.request.params.get('date')).toBe('2026-09-01');
-    request.flush(weather({ date: '2026-09-01', condition: 'rain' }));
+    expect(request.request.params.get('date')).toBe(movedDate);
+    request.flush(weather({ date: movedDate, condition: 'rain' }));
     await fixture.whenStable();
 
     expect(text()).toContain('Rain');
