@@ -29,6 +29,7 @@ from app.services.weather import (
     ForecastProviderError,
     build_rule,
     condition_for,
+    get_daily_forecast,
     get_forecast,
     requires_outerwear,
     summarize_forecast,
@@ -64,6 +65,37 @@ LIVE_BODY: dict[str, Any] = {
     },
 }
 
+# Four days in the shape `LIVE_BODY` has, and **the shape is the part that was
+# captured** — the field names, the units and the parallel-array layout are
+# 2026-08-26's, the numbers are not. A four-day live body could not be committed
+# and stay meaningful: its dates are relative to the day it was fetched, and a
+# fixture naming absolute dates in the past describes a range the horizon check
+# now refuses. What this fixture is for is the one thing `LIVE_BODY` cannot
+# show, having a single element in every array: that the parser reads *all* of
+# them, in order, and pairs the right value with the right day.
+RANGE_BODY: dict[str, Any] = {
+    "latitude": 52.52,
+    "longitude": 13.41,
+    "generationtime_ms": 0.09,
+    "utc_offset_seconds": 3600,
+    "timezone": "Europe/Berlin",
+    "timezone_abbreviation": "GMT+1",
+    "elevation": 38.0,
+    "daily_units": LIVE_BODY["daily_units"],
+    "daily": {
+        "time": ["2026-03-14", "2026-03-15", "2026-03-16", "2026-03-17"],
+        "temperature_2m_max": [12.4, 14.1, 17.3, 15.0],
+        "temperature_2m_min": [4.2, 6.0, 8.8, 7.1],
+        "precipitation_sum": [4.0, 0.0, 0.0, 0.2],
+        "wind_speed_10m_max": [18.5, 12.0, 9.4, 33.6],
+        "weather_code": [61, 3, 0, 2],
+    },
+}
+
+BERLIN = (52.52, 13.41)
+TRIP_START = date(2026, 3, 14)
+TRIP_END = date(2026, 3, 17)
+
 # The provider's own error envelope, captured from the same session by asking
 # for a date past the horizon. Its shape is the reason a 400 from Open-Meteo is
 # mapped to `ForecastOutOfRangeError` and not to the provider error.
@@ -80,6 +112,22 @@ def clear_cache() -> None:
 
 def _transport(handler: Any) -> httpx.MockTransport:
     return httpx.MockTransport(handler)
+
+
+@pytest.fixture
+def stub_range(monkeypatch: pytest.MonkeyPatch) -> list[httpx.Request]:
+    """`stub_ok` for the four-day body. Its own fixture rather than a
+    parameter on that one, because every range test asserts against
+    `RANGE_BODY`'s numbers and a shared fixture would have to be told which
+    body it was serving in each of them."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=RANGE_BODY)
+
+    monkeypatch.setattr(weather, "_transport", lambda: _transport(handler))
+    return seen
 
 
 @pytest.fixture
@@ -490,3 +538,293 @@ async def test_a_failure_is_not_cached(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert forecast.temp_max_c == 31.7
     assert calls == 2
+
+
+# --- get_daily_forecast: the range ----------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_range_parses_every_day_in_order(stub_range: list[httpx.Request]) -> None:
+    # The assertion `LIVE_BODY` cannot make: six parallel arrays read to the
+    # end, with each value landing on its own day. Day 4's wind is checked
+    # because it is the only value in the fixture that trips a modifier at the
+    # far end of the arrays — a parser that read index 0 six times would pass
+    # every other assertion here.
+    forecasts = await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
+
+    assert [f.date for f in forecasts] == [
+        date(2026, 3, 14),
+        date(2026, 3, 15),
+        date(2026, 3, 16),
+        date(2026, 3, 17),
+    ]
+    assert [f.temp_max_c for f in forecasts] == [12.4, 14.1, 17.3, 15.0]
+    assert [f.temp_min_c for f in forecasts] == [4.2, 6.0, 8.8, 7.1]
+    assert [f.precip_mm for f in forecasts] == [4.0, 0.0, 0.0, 0.2]
+    assert [f.wind_kph for f in forecasts] == [18.5, 12.0, 9.4, 33.6]
+    assert [f.condition for f in forecasts] == [
+        Condition.RAIN,
+        Condition.CLOUDY,
+        Condition.CLEAR,
+        Condition.PARTLY_CLOUDY,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_four_day_range_is_one_request(stub_range: list[httpx.Request]) -> None:
+    # The whole of `STAGE-4` 4.2's "one request". A per-day loop returns the
+    # same four forecasts and passes the test above.
+    await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
+
+    assert len(stub_range) == 1
+    assert stub_range[0].url.params["start_date"] == "2026-03-14"
+    assert stub_range[0].url.params["end_date"] == "2026-03-17"
+
+
+@pytest.mark.asyncio
+async def test_a_range_sends_the_same_fields_and_timezone_as_one_day(
+    stub_range: list[httpx.Request],
+) -> None:
+    await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
+
+    assert stub_range[0].url.params["daily"].split(",") == list(weather.DAILY_FIELDS)
+    assert stub_range[0].url.params["timezone"] == "auto"
+
+
+@pytest.mark.asyncio
+async def test_range_coordinates_are_rounded_before_they_leave(
+    stub_range: list[httpx.Request],
+) -> None:
+    await get_daily_forecast(52.5200123, 13.4100456, TRIP_START, TRIP_END)
+
+    assert stub_range[0].url.params["latitude"] == "52.52"
+    assert stub_range[0].url.params["longitude"] == "13.41"
+
+
+@pytest.mark.asyncio
+async def test_a_one_day_range_is_legal(monkeypatch: pytest.MonkeyPatch) -> None:
+    # `start == end`. The shortest trip a `trips` row admits — `ck_trips_date_order`
+    # is `>=` — so this is the boundary that migration and this function share.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=LIVE_BODY)
+
+    monkeypatch.setattr(weather, "_transport", lambda: _transport(handler))
+
+    forecasts = await get_daily_forecast(32.08, 34.78, date(2026, 8, 26), date(2026, 8, 26))
+
+    assert [f.date for f in forecasts] == [date(2026, 8, 26)]
+
+
+@pytest.mark.asyncio
+async def test_an_inverted_range_never_reaches_the_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A ValueError rather than a ForecastOutOfRangeError: left to Open-Meteo
+    # this comes back as a 400 and would be reported to the user as "no
+    # forecast for those days", which is not what went wrong.
+    def explode(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("an inverted range must not leave the process")
+
+    monkeypatch.setattr(weather, "_transport", lambda: _transport(explode))
+
+    with pytest.raises(ValueError) as exc_info:
+        await get_daily_forecast(*BERLIN, TRIP_END, TRIP_START)
+
+    assert not isinstance(exc_info.value, weather.WeatherError)
+
+
+# --- get_daily_forecast: the cache, shared with get_forecast --------------
+
+
+@pytest.mark.asyncio
+async def test_a_range_fills_the_cache_the_single_day_endpoint_reads(
+    stub_range: list[httpx.Request],
+) -> None:
+    # The point of reusing `_cache` rather than holding a second one: the trip
+    # screen and `GET /weather` warm each other.
+    await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
+    forecast = await get_forecast(*BERLIN, date(2026, 3, 16))
+
+    assert len(stub_range) == 1
+    assert forecast.temp_max_c == 17.3
+
+
+@pytest.mark.asyncio
+async def test_a_fully_cached_range_does_not_leave(stub_range: list[httpx.Request]) -> None:
+    first = await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
+    second = await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
+
+    assert len(stub_range) == 1
+    # The cached answer is the whole range in order, not whichever days
+    # happened to still be held — a comprehension that dropped a miss would
+    # return three days here and satisfy a bare `len(stub_range) == 1`.
+    assert second == first
+    assert len(second) == 4
+
+
+@pytest.mark.asyncio
+async def test_a_partly_cached_range_fetches_the_whole_range_again(
+    stub_range: list[httpx.Request],
+) -> None:
+    # Three of the four days are held and the request still goes out whole.
+    # Stitching a sub-range onto the cached days would be the alternative, and
+    # it costs the same one request.
+    await get_forecast(*BERLIN, date(2026, 3, 14))
+    await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
+
+    assert len(stub_range) == 2
+    assert stub_range[1].url.params["start_date"] == "2026-03-14"
+
+
+@pytest.mark.asyncio
+async def test_an_expired_day_makes_the_range_leave_again(
+    stub_range: list[httpx.Request], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `test_an_expired_entry_is_fetched_again`'s idiom, one function along: the
+    # lambda closes over `now`, so rebinding it moves the clock.
+    now = 1_000.0
+    monkeypatch.setattr(weather.time, "monotonic", lambda: now)
+    await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
+
+    now += weather.CACHE_TTL_SECONDS + 1
+    await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
+
+    assert len(stub_range) == 2
+
+
+# --- get_daily_forecast: the horizon and the failures ---------------------
+
+
+@pytest.mark.asyncio
+async def test_a_range_ending_past_the_horizon_never_reaches_the_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def explode(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("a range past the horizon must not leave the process")
+
+    monkeypatch.setattr(weather, "_transport", lambda: _transport(explode))
+    start = date.today()
+    end = start + timedelta(days=FORECAST_HORIZON_DAYS + 1)
+
+    with pytest.raises(ForecastOutOfRangeError):
+        await get_daily_forecast(*BERLIN, start, end)
+
+
+@pytest.mark.asyncio
+async def test_a_range_ending_on_the_last_servable_day_is_allowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The horizon here is the provider's 15, not the trip's 14. `DECISIONS.md`
+    # 190 puts `end_date <= today + 14` on `POST /trips/pack` and the picker,
+    # because it is a product rule — and `GET /weather` serves day 15 today.
+    start = date.today()
+    end = start + timedelta(days=FORECAST_HORIZON_DAYS)
+    days = [(start + timedelta(days=n)).isoformat() for n in range((end - start).days + 1)]
+    body = {
+        "daily": {
+            "time": days,
+            "temperature_2m_max": [15.0] * len(days),
+            "temperature_2m_min": [7.0] * len(days),
+            "precipitation_sum": [0.0] * len(days),
+            "wind_speed_10m_max": [10.0] * len(days),
+            "weather_code": [0] * len(days),
+        }
+    }
+    monkeypatch.setattr(
+        weather, "_transport", lambda: _transport(lambda r: httpx.Response(200, json=body))
+    )
+
+    forecasts = await get_daily_forecast(*BERLIN, start, end)
+
+    assert len(forecasts) == FORECAST_HORIZON_DAYS + 1
+
+
+@pytest.mark.asyncio
+async def test_a_range_provider_400_is_out_of_range_rather_than_a_provider_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def bad_request(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json=LIVE_ERROR_BODY)
+
+    monkeypatch.setattr(weather, "_transport", lambda: _transport(bad_request))
+
+    with pytest.raises(ForecastOutOfRangeError):
+        await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
+
+
+@pytest.mark.asyncio
+async def test_an_unreachable_provider_raises_the_provider_error_for_a_range(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def refused(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(weather, "_transport", lambda: _transport(refused))
+
+    with pytest.raises(ForecastProviderError):
+        await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
+
+
+@pytest.mark.asyncio
+async def test_a_ragged_body_is_a_provider_failure_rather_than_a_short_range(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Six parallel arrays and one of them a day shorter.
+    #
+    # **This test does not defend `strict=True`, and the mutation run at 4.2 is
+    # how that was found:** flipping it to `strict=False` leaves all 82 tests
+    # green, because the short list it produces then fails the day-by-day range
+    # comparison instead and raises the same error from two lines further down.
+    # What this asserts is the outcome — a ragged body is a provider failure and
+    # never a four-day trip with three days in it — and the outcome has two
+    # guards behind it. Recorded rather than papered over: a test named for a
+    # mechanism it does not isolate is how a redundant line survives a
+    # refactor that deletes its real defender.
+    ragged = {"daily": dict(RANGE_BODY["daily"]) | {"weather_code": [61, 3, 0]}}
+    monkeypatch.setattr(
+        weather, "_transport", lambda: _transport(lambda r: httpx.Response(200, json=ragged))
+    )
+
+    with pytest.raises(ForecastProviderError):
+        await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
+
+
+@pytest.mark.asyncio
+async def test_a_range_missing_a_requested_day_is_a_provider_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Internally consistent — every array is three long — and still not the
+    # range that was asked for. The Thursday is simply absent.
+    short = {
+        "daily": {
+            "time": ["2026-03-14", "2026-03-15", "2026-03-17"],
+            "temperature_2m_max": [12.4, 14.1, 15.0],
+            "temperature_2m_min": [4.2, 6.0, 7.1],
+            "precipitation_sum": [4.0, 0.0, 0.2],
+            "wind_speed_10m_max": [18.5, 12.0, 33.6],
+            "weather_code": [61, 3, 2],
+        }
+    }
+    monkeypatch.setattr(
+        weather, "_transport", lambda: _transport(lambda r: httpx.Response(200, json=short))
+    )
+
+    with pytest.raises(ForecastProviderError):
+        await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
+
+
+@pytest.mark.asyncio
+async def test_a_failed_range_caches_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[int] = []
+
+    def flaky(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(500)
+
+    monkeypatch.setattr(weather, "_transport", lambda: _transport(flaky))
+
+    for _ in range(2):
+        with pytest.raises(ForecastProviderError):
+            await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
+
+    assert len(calls) == 2
