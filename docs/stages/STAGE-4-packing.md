@@ -136,6 +136,30 @@ list at the foot of this file was written:
 
 `DECISIONS.md` 192.
 
+### 4.6b Repack and delete a trip
+
+The two controls `/trips/:id` shipped without. `POST /trips/{id}/repack` and
+`DELETE /trips/{id}` were built, tested and documented at 4.4 and reachable by
+nobody; **this task is the one `AUDITS.md` O-33 asked for**, added after the
+list at the foot of this file was written and after 4.6 declined to build them
+out of turn.
+
+The repack inherits the whole of `POST /trips/pack`'s surface — the
+twenty-second wait, the four status lines and all seven failure codes — on a
+screen that has content to lose, which is what makes it a task rather than a
+button. The delete has one real question, which is where it navigates: there is
+no trips list and `/trips` is the form.
+
+**Acceptance criteria — 4.6b's own**, for the same reason 4.6a has its own:
+
+- [ ] Repacking a trip re-renders it from the response, keeping the selected day
+- [ ] A repack that fails leaves the trip on screen with its message above it
+- [ ] The delete needs two presses and disarms on blur and on a repack
+- [ ] Deleting a trip navigates to `/wardrobe`
+- [ ] The pack and the repack share one status cycle and one error table
+
+`DECISIONS.md` 207, `AUDITS.md` O-33.
+
 ### 4.7 Export
 A share or copy button producing the packing list as plain text. Trivial to build, and it is the thing a user would actually use on the morning of a trip.
 

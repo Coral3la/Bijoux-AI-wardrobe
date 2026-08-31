@@ -9,8 +9,9 @@ import { environment } from '../../../environments/environment';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { LocationResult } from '../../shared/models/location.model';
 import { PackResponse, Trip } from '../../shared/models/trip.model';
+import { STATUS_INTERVAL_MS } from './pack-wait';
 import { SEARCH_DEBOUNCE_MS, tripHorizon } from './trip-form';
-import { STATUS_INTERVAL_MS, TripsPage } from './trips.page';
+import { TripsPage } from './trips.page';
 
 // Distinctive on purpose: the assertion that it never reaches the screen has
 // to be able to fail.

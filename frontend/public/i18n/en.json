@@ -378,5 +378,11 @@
   "trip.view.group": "{{name}} ({{count}})",
   "trip.view.groupOther": "Other",
   "trip.error.notFound": "We can't find that trip. It may have been deleted.",
-  "trip.error.load": "We couldn't open this trip. Please try again."
+  "trip.error.load": "We couldn't open this trip. Please try again.",
+  "trip.repack.action": "Re-pack with today's forecast",
+  "trip.delete.idle": "Delete",
+  "trip.delete.armed": "Tap again to delete. Saved looks from this trip go too.",
+  "trip.delete.doing": "Deleting…",
+  "trip.error.repackGeneral": "We couldn't re-pack this trip. Please try again.",
+  "trip.error.delete": "We couldn't delete this trip. Please try again."
 }

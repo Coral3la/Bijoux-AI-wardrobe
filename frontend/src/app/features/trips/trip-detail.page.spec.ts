@@ -1,15 +1,16 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, provideRouter } from '@angular/router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ActivatedRoute, Router, provideRouter } from '@angular/router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import en from '../../../../public/i18n/en.json';
 import { environment } from '../../../environments/environment';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { Item } from '../../shared/models/item.model';
 import { Look } from '../../shared/models/look.model';
-import { Trip, TripDay, TripDetail } from '../../shared/models/trip.model';
+import { PackResponse, Trip, TripDay, TripDetail } from '../../shared/models/trip.model';
+import { STATUS_INTERVAL_MS } from './pack-wait';
 import { TripDetailPage } from './trip-detail.page';
 
 // Distinctive on purpose: the assertion that it never reaches the screen has to
@@ -18,6 +19,7 @@ const RAW_DETAIL = 'the-servers-own-sentence';
 
 let fixture: ComponentFixture<TripDetailPage>;
 let mock: HttpTestingController;
+let router: Router;
 let currentId: string;
 
 function item(overrides: Partial<Item> = {}): Item {
@@ -117,6 +119,22 @@ function detail(overrides: Partial<TripDetail> = {}): TripDetail {
   };
 }
 
+// The repack answers PackResponse, which is TripDetail plus a key this screen
+// has no model for. The fixture carries it so the assertion that it is dropped
+// on the way into the signal has something to drop.
+function repacked(overrides: Partial<Trip> = {}): PackResponse {
+  return {
+    trip: trip({ destination: 'Lisbon', ...overrides }),
+    looks: [
+      look({ id: 'look-1', title: 'Warmer plan' }),
+      look({ id: 'look-2', title: 'Second warmer plan', items: [item({ id: 'item-2' })] }),
+    ],
+    missing_pieces: [
+      { category: 'outerwear', description: 'a warm coat', reason: 'Nothing warm enough.' },
+    ],
+  };
+}
+
 function element(): HTMLElement {
   return fixture.nativeElement as HTMLElement;
 }
@@ -135,6 +153,31 @@ function tabs(): HTMLButtonElement[] {
 
 function tripRequest() {
   return mock.expectOne(`${environment.apiUrl}/trips/${currentId}`);
+}
+
+function repackRequest() {
+  return mock.expectOne(`${environment.apiUrl}/trips/${currentId}/repack`);
+}
+
+function deleteRequest() {
+  return mock.expectOne(`${environment.apiUrl}/trips/${currentId}`);
+}
+
+// Found by the words on it rather than by a class or a position, so the label
+// each state renders is asserted by every test that presses the button.
+function button(label: string): HTMLButtonElement {
+  const found = [...element().querySelectorAll<HTMLButtonElement>('button')].find(
+    (candidate) => (candidate.textContent ?? '').trim() === label,
+  );
+  if (found === undefined) {
+    throw new Error(`no button labelled ${label}`);
+  }
+  return found;
+}
+
+function press(label: string): void {
+  button(label).click();
+  fixture.detectChanges();
 }
 
 async function render(): Promise<void> {
@@ -172,6 +215,7 @@ describe('TripDetailPage', () => {
     });
     currentId = 'trip-1';
     mock = TestBed.inject(HttpTestingController);
+    router = TestBed.inject(Router);
 
     const loading = TestBed.inject(I18nService).load();
     mock.expectOne('/i18n/en.json').flush(en);
@@ -179,6 +223,7 @@ describe('TripDetailPage', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     mock.verify();
   });
 
@@ -468,5 +513,249 @@ describe('TripDetailPage', () => {
     fixture.detectChanges();
 
     expect(element().querySelector('a[href="/wardrobe"]')).not.toBeNull();
+  });
+  // 4.6b. AUDITS.md O-33: both endpoints were built, tested and reachable by
+  // nobody until these two controls.
+  describe('repack', () => {
+    it('asks the repack endpoint for the trip on screen', async () => {
+      currentId = 'trip-9';
+      await loaded();
+
+      press(en['trip.repack.action']);
+
+      repackRequest().flush(repacked());
+    });
+
+    // DECISIONS.md 202: the endpoint re-derives destination, dates, occasions
+    // and notes from the stored row, so there is nothing to send. `{}` would be
+    // a body on a request that declares no schema for one.
+    it('sends no body', async () => {
+      await loaded();
+
+      press(en['trip.repack.action']);
+
+      const request = repackRequest();
+      expect(request.request.method).toBe('POST');
+      expect(request.request.body).toBeNull();
+      request.flush(repacked());
+    });
+
+    it('renders the trip the repack answered with', async () => {
+      await loaded();
+
+      press(en['trip.repack.action']);
+      repackRequest().flush(repacked());
+      fixture.detectChanges();
+
+      expect(header()).toContain('Lisbon');
+      expect(text()).toContain('Warmer plan');
+      expect(text()).not.toContain('Morning meetings');
+    });
+
+    // D: the dates cannot change, so the ordinal stays valid and continuity
+    // beats a jump back to day 1.
+    it('keeps the selected day across the repack', async () => {
+      await loaded();
+      tabs()[1].click();
+      fixture.detectChanges();
+
+      press(en['trip.repack.action']);
+      repackRequest().flush(repacked());
+      fixture.detectChanges();
+
+      expect(text()).toContain('Second warmer plan');
+      expect(text()).not.toContain('Warmer plan · ');
+      expect(tabs()[1].getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('moves through the status lines while the repack runs', async () => {
+      await loaded();
+      vi.useFakeTimers();
+
+      press(en['trip.repack.action']);
+      expect(text()).toContain(en['trip.waiting.geocoding']);
+
+      vi.advanceTimersByTime(STATUS_INTERVAL_MS);
+      fixture.detectChanges();
+
+      expect(text()).toContain(en['trip.waiting.forecast']);
+      repackRequest().flush(repacked());
+    });
+
+    it('takes the status line away once the repack has answered', async () => {
+      await loaded();
+
+      press(en['trip.repack.action']);
+      repackRequest().flush(repacked());
+      fixture.detectChanges();
+
+      expect(text()).not.toContain(en['trip.waiting.geocoding']);
+    });
+
+    // C, and DECISIONS.md 200's ordering made visible: pack_trip runs before
+    // anything is detached or deleted, so a failed repack costs nothing and the
+    // trip is still the trip the user has.
+    it('leaves the trip on screen when the repack fails', async () => {
+      await loaded();
+
+      press(en['trip.repack.action']);
+      repackRequest().flush(
+        { detail: RAW_DETAIL, code: 'stylist_failed' },
+        { status: 502, statusText: 'Bad Gateway' },
+      );
+      fixture.detectChanges();
+
+      expect(text()).toContain(en['trip.error.stylistFailed']);
+      expect(header()).toContain('Berlin');
+      expect(text()).toContain('Morning meetings');
+      expect(text()).not.toContain(RAW_DETAIL);
+    });
+
+    // The six code-specific messages are the pack's, because the conditions are
+    // the same either side of a packed trip. The general one is not.
+    it('names the repack rather than the pack when the failure has no code', async () => {
+      await loaded();
+
+      press(en['trip.repack.action']);
+      repackRequest().flush({ detail: RAW_DETAIL }, { status: 500, statusText: 'Server Error' });
+      fixture.detectChanges();
+
+      expect(text()).toContain(en['trip.error.repackGeneral']);
+      expect(text()).not.toContain(en['trip.error.general']);
+    });
+
+    // DECISIONS.md 202: the repack geocodes the stored string again, so a trip
+    // that packed cleanly last week can answer this.
+    it('shows the destination message when the geocoder no longer matches', async () => {
+      await loaded();
+
+      press(en['trip.repack.action']);
+      repackRequest().flush(
+        { detail: RAW_DETAIL, code: 'destination_not_found' },
+        { status: 400, statusText: 'Bad Request' },
+      );
+      fixture.detectChanges();
+
+      expect(text()).toContain(en['trip.error.destinationNotFound']);
+    });
+
+    it('clears the failure when the next repack succeeds', async () => {
+      await loaded();
+      press(en['trip.repack.action']);
+      repackRequest().flush({ detail: RAW_DETAIL }, { status: 500, statusText: 'Server Error' });
+      fixture.detectChanges();
+
+      press(en['trip.repack.action']);
+      fixture.detectChanges();
+
+      expect(text()).not.toContain(en['trip.error.repackGeneral']);
+      repackRequest().flush(repacked());
+    });
+
+    it('cannot be asked for twice while one is running', async () => {
+      await loaded();
+      press(en['trip.repack.action']);
+
+      expect(button(en['trip.repack.action']).disabled).toBe(true);
+      expect(button(en['trip.delete.idle']).disabled).toBe(true);
+      repackRequest().flush(repacked());
+    });
+  });
+
+  // DECISIONS.md 126: two deliberate presses, because the gate's confirm()
+  // returns undefined and a confirm-guarded delete would never run.
+  describe('delete', () => {
+    it('arms on the first press and sends nothing', async () => {
+      await loaded();
+
+      press(en['trip.delete.idle']);
+
+      expect(text()).toContain(en['trip.delete.armed']);
+      mock.expectNone(`${environment.apiUrl}/trips/${currentId}`);
+    });
+
+    it('deletes on the second press', async () => {
+      await loaded();
+
+      press(en['trip.delete.idle']);
+      press(en['trip.delete.armed']);
+
+      const request = deleteRequest();
+      expect(request.request.method).toBe('DELETE');
+      request.flush(null, { status: 204, statusText: 'No Content' });
+    });
+
+    it('says so while the delete is in flight', async () => {
+      await loaded();
+      press(en['trip.delete.idle']);
+      press(en['trip.delete.armed']);
+
+      expect(text()).toContain(en['trip.delete.doing']);
+      expect(button(en['trip.delete.doing']).disabled).toBe(true);
+      deleteRequest().flush(null, { status: 204, statusText: 'No Content' });
+    });
+
+    it('goes back to the wardrobe once the trip is gone', async () => {
+      await loaded();
+      press(en['trip.delete.idle']);
+      press(en['trip.delete.armed']);
+      deleteRequest().flush(null, { status: 204, statusText: 'No Content' });
+      await fixture.whenStable();
+
+      expect(router.url).toBe('/wardrobe');
+    });
+
+    it('disarms on blur', async () => {
+      await loaded();
+      press(en['trip.delete.idle']);
+
+      button(en['trip.delete.armed']).dispatchEvent(new Event('blur'));
+      fixture.detectChanges();
+
+      expect(text()).toContain(en['trip.delete.idle']);
+      expect(text()).not.toContain(en['trip.delete.armed']);
+    });
+
+    // The "any other interaction" half of 126's rule: an armed delete surviving
+    // a twenty-second repack is a press landing on a control the user stopped
+    // thinking about.
+    it('disarms when a repack is asked for', async () => {
+      await loaded();
+      press(en['trip.delete.idle']);
+
+      press(en['trip.repack.action']);
+      repackRequest().flush(repacked());
+      fixture.detectChanges();
+
+      expect(text()).not.toContain(en['trip.delete.armed']);
+    });
+
+    it('keeps the trip on screen when the delete fails', async () => {
+      await loaded();
+      press(en['trip.delete.idle']);
+      press(en['trip.delete.armed']);
+      deleteRequest().flush({ detail: RAW_DETAIL }, { status: 500, statusText: 'Server Error' });
+      fixture.detectChanges();
+
+      expect(text()).toContain(en['trip.error.delete']);
+      expect(header()).toContain('Berlin');
+      expect(router.url).not.toBe('/wardrobe');
+      expect(text()).not.toContain(RAW_DETAIL);
+    });
+
+    // A failed delete disarms, so a second attempt is two presses again rather
+    // than one landing on a button the user last saw saying "Delete".
+    it('needs arming again after a failure', async () => {
+      await loaded();
+      press(en['trip.delete.idle']);
+      press(en['trip.delete.armed']);
+      deleteRequest().flush({ detail: RAW_DETAIL }, { status: 500, statusText: 'Server Error' });
+      fixture.detectChanges();
+
+      press(en['trip.delete.idle']);
+
+      expect(text()).toContain(en['trip.delete.armed']);
+      mock.expectNone(`${environment.apiUrl}/trips/${currentId}`);
+    });
   });
 });

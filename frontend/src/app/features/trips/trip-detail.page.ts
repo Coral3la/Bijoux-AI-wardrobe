@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { TripsApi } from '../../core/api/trips.api';
 import { I18nService } from '../../core/i18n/i18n.service';
@@ -9,6 +9,7 @@ import { Item } from '../../shared/models/item.model';
 import { Look } from '../../shared/models/look.model';
 import { TripDay, TripDetail } from '../../shared/models/trip.model';
 import { ItemCard } from '../wardrobe/item-card';
+import { packErrorKey, packStatus } from './pack-wait';
 import { PackingList } from './packing-list';
 
 // Local to this screen rather than in `enums.ts`, which mirrors `app/enums.py`
@@ -149,6 +150,55 @@ export function tripLoadErrorKey(error: unknown): string {
         }
 
         <app-packing-list [items]="packingItems()" />
+
+        <!-- Above the actions rather than in place of the trip, which is
+             DECISIONS.md 200's ordering made visible: pack_trip runs before
+             anything is detached or deleted, so a repack that fails costs
+             nothing and the trip the user is looking at is still the trip they
+             have. A screen blanked by the failure would say the opposite. -->
+        @if (actionError(); as key) {
+          <p class="text-sm font-medium text-danger" role="alert">{{ i18n.t(key) }}</p>
+        }
+
+        @if (repacking()) {
+          <p class="text-sm" role="status" aria-live="polite">{{ i18n.t(statusKey()) }}</p>
+        }
+
+        <div class="flex flex-wrap items-center gap-3 border-t border-current/10 pt-4">
+          <!-- Unguarded, unlike its neighbour, and the asymmetry is the point:
+               a repack detaches a look that was saved, rated or worn rather
+               than destroying it (DECISIONS.md 200), and /saved filters on
+               is_saved alone — so a saved look survives this button and is
+               still on the screen that lists it. There is nothing to warn
+               about, and a confirmation step for a reversible act teaches the
+               user to click through the one that is not. -->
+          <button
+            type="button"
+            (click)="repack()"
+            [disabled]="repacking() || deleting()"
+            class="min-h-11 rounded-md px-3 text-sm underline disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            {{ i18n.t('trip.repack.action') }}
+          </button>
+
+          <!-- Two deliberate clicks, not window.confirm and not a modal, as
+               item-detail.page.ts does it — DECISIONS.md 126 records why the
+               gate's confirm() makes a confirm-guarded delete read as tested
+               and never run. The armed label carries the cascade, because
+               DELETE /trips/{id} destroys the looks a repack would have kept
+               and this is the only place a user could learn that. -->
+          <button
+            type="button"
+            (click)="onDelete()"
+            (blur)="disarm()"
+            [disabled]="repacking() || deleting()"
+            class="min-h-11 rounded-md px-3 text-sm underline disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            [class.text-danger]="armed()"
+            [class.font-medium]="armed()"
+          >
+            {{ deleteLabel() }}
+          </button>
+        </div>
       } @else if (errorKey(); as key) {
         <p class="text-sm font-medium text-danger" role="alert">{{ i18n.t(key) }}</p>
       } @else {
@@ -160,6 +210,7 @@ export function tripLoadErrorKey(error: unknown): string {
 export class TripDetailPage {
   protected readonly i18n = inject(I18nService);
   private readonly api = inject(TripsApi);
+  private readonly router = inject(Router);
 
   // The snapshot, as item detail reads it: nothing changes the id under this
   // component, because every route into it is a fresh navigation — from the
@@ -168,6 +219,17 @@ export class TripDetailPage {
 
   protected readonly detail = signal<TripDetail | null>(null);
   protected readonly errorKey = signal<string | null>(null);
+
+  // A second error signal rather than a second message in `errorKey`, which is
+  // the load's: that one is a screen with nothing on it, and this one is a line
+  // above a trip that is still there. Folding them together would make the
+  // template choose between rendering a trip and rendering its failure.
+  protected readonly actionError = signal<string | null>(null);
+  protected readonly repacking = signal(false);
+  protected readonly deleting = signal(false);
+  protected readonly armed = signal(false);
+
+  protected readonly statusKey = packStatus(this.repacking);
 
   // The ordinal, not the index, because that is what the day carries and what
   // the join is keyed by. Day 1 on arrival even when day 1 has no look: the
@@ -244,6 +306,13 @@ export class TripDetailPage {
     return reuse === null ? counts : this.i18n.t('trip.view.headerLine', { counts, reuse });
   });
 
+  protected readonly deleteLabel = computed(() => {
+    if (this.deleting()) {
+      return this.i18n.t('trip.delete.doing');
+    }
+    return this.armed() ? this.i18n.t('trip.delete.armed') : this.i18n.t('trip.delete.idle');
+  });
+
   constructor() {
     this.api.get(this.id).subscribe({
       next: (detail) => this.detail.set(detail),
@@ -253,6 +322,69 @@ export class TripDetailPage {
 
   protected select(day: number): void {
     this.selectedDay.set(day);
+  }
+
+  protected repack(): void {
+    // The disabled binding is the visible guard and this one is the real one:
+    // a signal write schedules change detection rather than doing it, so two
+    // presses landing in the same frame both see an enabled button. Neither
+    // clause can be reached from the rendered screen, which is why the mutation
+    // pass leaves both of them standing and the tests assert `disabled`.
+    if (this.repacking() || this.deleting()) {
+      return;
+    }
+    // The repack disarms the delete, which is the "any other interaction" half
+    // of 126's rule: an armed delete surviving the twenty seconds this button
+    // costs is a second click landing on a control the user stopped thinking
+    // about two screens of status lines ago.
+    this.disarm();
+    this.repacking.set(true);
+    this.actionError.set(null);
+
+    this.api.repack(this.id).subscribe({
+      // The two keys are copied across rather than the response stored whole.
+      // `PackResponse` carries `missing_pieces` and `TripDetail` does not, and
+      // structural typing would let the wider object into the narrower signal
+      // without a word — leaving a field on this screen's model that nothing
+      // renders and `GET /trips/{id}` never answers with.
+      next: (response) => {
+        this.detail.set({ trip: response.trip, looks: response.looks });
+        this.repacking.set(false);
+      },
+      error: (failure: unknown) => {
+        this.actionError.set(packErrorKey(failure, 'trip.error.repackGeneral'));
+        this.repacking.set(false);
+      },
+    });
+  }
+
+  protected onDelete(): void {
+    if (this.repacking() || this.deleting()) {
+      return;
+    }
+
+    if (!this.armed()) {
+      this.armed.set(true);
+      return;
+    }
+    this.armed.set(false);
+    this.deleting.set(true);
+    this.actionError.set(null);
+
+    this.api.remove(this.id).subscribe({
+      next: () => {
+        this.deleting.set(false);
+        void this.router.navigate(['/wardrobe']);
+      },
+      error: () => {
+        this.deleting.set(false);
+        this.actionError.set('trip.error.delete');
+      },
+    });
+  }
+
+  protected disarm(): void {
+    this.armed.set(false);
   }
 
   // The day's high, which is what this project already means by "the

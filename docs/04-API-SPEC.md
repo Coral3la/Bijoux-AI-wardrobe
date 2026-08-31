@@ -641,8 +641,9 @@ Query: `limit`, `offset`. Ordered `created_at DESC` with `id` as the tiebreaker,
 `200`; `total` counts the whole set. No looks — a list of trips is a list of
 trip objects, and the looks for one of them come from `GET /trips/{id}`.
 
-**This endpoint ships with no caller.** No Stage 4 task lists trips: 4.5 is the
-form, 4.6 the packing view, 4.6a the swap and 4.7 the export, and
+**This endpoint ships with no caller, and after task 4.6b it is the only one
+here that does.** No Stage 4 task lists trips: 4.5 is the form, 4.6 the packing
+view, 4.6b the repack and delete controls, 4.6a the swap and 4.7 the export, and
 `05-FRONTEND-SPEC.md` §7 describes no trips list screen. It is specified and
 built because this document is authoritative and the heading has been here since
 Stage 0 — the same shape as `GET /me/locations/search` shipping ahead of its
@@ -698,6 +699,13 @@ looks it can show. `DECISIONS.md` 200.
 
 `404` with `code: "not_found"` for another account's trip. `401` `invalid_token`.
 
+**Its caller arrived at task 4.6b**, as the second control in `/trips/:id`'s
+footer row: two presses, the second one sending the request, and `/wardrobe` on
+`204` because there is no trips list to return to. The armed label is where the
+cascade above is finally said to a user — *"Tap again to delete. Saved looks
+from this trip go too."* — which is the only place in the product that names it.
+`AUDITS.md` **O-33**, `DECISIONS.md` 126 and 207.
+
 ### `POST /trips/{id}/repack`
 ```json
 ← 200 { "trip": { …trip object… }, "looks": [ …LookResponse… ], "missing_pieces": [ … ] }
@@ -732,6 +740,16 @@ would be an edit endpoint this document does not describe. The stored
 reused, because `pack_trip` owns the lookup; so a repack can answer
 `destination_not_found` for a trip that packed cleanly last week, and a trip's
 coordinates can move between two packs. `DECISIONS.md` 200 and 202.
+
+**Its caller arrived at task 4.6b**, and it takes this endpoint's whole surface:
+the twenty-second wait, the same four status lines the pack shows, and all seven
+failure codes. Six of the seven messages are the pack's word for word, because
+the conditions are the same either side of a packed trip; the general fallback
+is its own sentence, because *"We couldn't pack this trip"* reads oddly under a
+trip that is visibly packed. **A failure leaves the trip on screen** rather than
+replacing it, which is the paragraph above rendered: nothing is destroyed until
+`pack_trip` has answered, so a repack that fails costs the user nothing and the
+interface says so. `AUDITS.md` **O-33**, `DECISIONS.md` 207.
 
 ---
 

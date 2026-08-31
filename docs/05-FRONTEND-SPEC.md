@@ -402,6 +402,8 @@ orientation:
 │   ▢ black knit sweater                     │
 │  Bottoms (2) ─────────────                 │
 │   …                                        │
+├────────────────────────────────────────────┤
+│  Re-pack with today's forecast   Delete    │  ← 4.6b, added below the list
 └────────────────────────────────────────────┘
 ```
 
@@ -448,11 +450,46 @@ even when day 1 is the gap**, because an opening selection that depended on
 which days kept a look would leave the reader working out why day 3 is the one
 lit up.
 
-**There is no repack control and no delete control**, and neither is an
-oversight: `STAGE-4` 4.6 asks for a header, a day strip, a look and a list, and
-`POST /trips/{id}/repack` and `DELETE /trips/{id}` have no owning task anywhere
-in the stage. `AUDITS.md` **O-33** records that gap rather than this screen
-closing it out of turn.
+**The repack and the delete are task 4.6b's**, added in a footer row under the
+packing list — the shape `item-detail.page.ts` uses for its own two actions, and
+the last thing on the screen rather than the first. 4.6 shipped without them
+deliberately: `STAGE-4` 4.6 asks for a header, a day strip, a look and a list,
+and neither endpoint had an owning task anywhere in the stage, which `AUDITS.md`
+**O-33** opened and 4.6b closes. Five things about the pair, settled at 4.6b's
+orientation.
+
+- **The repack is one press and the delete is two**, and the asymmetry is the
+  feature rather than an inconsistency. `DECISIONS.md` 200 has a repack
+  *detach* a look that was saved, rated or worn, and `/saved` filters on
+  `is_saved` alone — so a saved look **survives a repack and is still on the
+  screen that lists it**. There is nothing to warn about, and a confirmation
+  step in front of a reversible act is training for clicking through the one in
+  front of the irreversible act next to it. The delete cascades, and its armed
+  label says so: *"Tap again to delete. Saved looks from this trip go too."*
+  That sentence is the only place in the product where the cascade is named.
+- **Two presses, not `window.confirm` and not a modal**, which is
+  `DECISIONS.md` 126 transposed one screen along — the gate's `confirm()`
+  returns `undefined`, so a confirm-guarded delete reads as tested and never
+  runs. It disarms on blur and when the repack is pressed.
+- **The repack wait is the pack's wait**, four cycling status lines and the same
+  three-second interval, because `DECISIONS.md` 202 has the endpoint re-geocode
+  the stored destination rather than reuse the columns — so even *"Finding your
+  destination…"* is true of it. The lines, the interval, the interval's teardown
+  and the seven-code error table now live in `pack-wait.ts` and are imported by
+  both screens rather than written twice (`DECISIONS.md` 207).
+- **A failed repack keeps the trip on screen** and puts its message above the
+  actions row. `pack_trip` runs before anything is detached or deleted, so the
+  failure costs the user nothing, and a screen blanked by it would say the
+  opposite of what the server guarantees. Six of the seven messages are the
+  pack's; the general fallback is its own, because *"We couldn't pack this
+  trip"* under a packed trip is the wrong sentence.
+- **The delete goes to `/wardrobe`.** There is no trips list, and `/trips` is
+  the form — which would drop somebody who has just deleted a trip into a fresh
+  pack request. This does **not** add to `AUDITS.md` **O-29**'s count: that
+  item counts bespoke controls a user can see and press, and this is a
+  redirect after an action, the same shape `item-detail.page.ts` has had since
+  1.9 and which was never counted either. The screen's own **Back to wardrobe**
+  link is the fifth control and remains the only one on it.
 
 ### 8. Profile — `/profile`
 

@@ -1723,7 +1723,7 @@ deleted with a worn look under it leaves `items.wear_count` where it was, which
 is right — the garment was worn — and unexplainable on any screen that counts
 looks. Stated under `DELETE /trips/{id}`, not fixed.
 
-#### O-33 · `POST /trips/{id}/repack` and `DELETE /trips/{id}` have no owning task — opened at task 4.6
+#### O-33 · ~~`POST /trips/{id}/repack` and `DELETE /trips/{id}` have no owning task~~ — **closed at task 4.6b**
 
 Two of the five `/trips` routes are built, tested, documented and reachable by
 nobody, and unlike `GET /trips` — which this project decided deliberately would
@@ -1756,3 +1756,29 @@ and `/trips` itself is the form, so the only honest destination today is
 `DECISIONS.md` 126 records why `window.confirm` is not an option in this test
 gate. **Neither should be added to `/trips/:id` without one**, which is what
 4.6 declined to do.
+
+**Closed at task 4.6b, which is the numbered task this item asked for.** Both
+controls are on `/trips/:id`, in a footer row under the packing list — the
+repack inheriting the whole of `POST /trips/pack`'s surface as predicted, and
+the delete arming and firing in two presses and navigating to `/wardrobe`,
+which is the destination this item named as the only honest one. `TripsApi`
+goes from two methods to four, and `GET /trips` is left as the one endpoint in
+this file with no caller and no plan for one.
+
+**The recommendation was taken in full, and one thing it did not anticipate
+changed the copy.** This item and `DECISIONS.md` 200 both describe the repack
+as the *gentler* of the two acts, and the screen had to decide whether either
+needed a warning. `/saved` filters on `is_saved` alone — `looks.api.ts` sends
+that parameter and no other — so a look detached by a repack **is still on
+`/saved` afterwards**, and there is nothing about a repack to warn a user
+about. The delete is the one that destroys those rows, and its armed label is
+now the only place in the product where that is said. So the asymmetry the
+audit drew between the two endpoints is drawn again in the interface, one layer
+up: the reversible act is one press and the irreversible one is two, and the
+sentence explaining the cascade sits on the control that causes it.
+
+**What this item did not close.** A look detached because it was *rated* or
+*worn* but never saved is still on no screen — it was on none before the repack
+either, so nothing regressed, but the wear count `DECISIONS.md` 200 declined to
+reverse now has a second unreconcilable neighbour. A "looks from past trips"
+screen would consume all three, and it remains nobody's task.

@@ -1,73 +1,11 @@
-import { HttpErrorResponse } from '@angular/common/http';
-import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  computed,
-  effect,
-  inject,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 
 import { TripsApi } from '../../core/api/trips.api';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { PackRequest } from '../../shared/models/trip.model';
+import { packErrorKey, packStatus } from './pack-wait';
 import { TripDraft, TripForm, newTripDraft, tripProblem } from './trip-form';
-
-// Four lines for a wait nobody has measured, so the last one is reached at nine
-// seconds and rested on. The endpoint geocodes, fetches up to fourteen days of
-// forecast, then makes one model call carrying the whole wardrobe — these name
-// the four steps in the order the server takes them, and none of them names a
-// duration, because no number has been taken.
-const STATUS_KEYS = [
-  'trip.waiting.geocoding',
-  'trip.waiting.forecast',
-  'trip.waiting.wardrobe',
-  'trip.waiting.assembling',
-] as const;
-
-export const STATUS_INTERVAL_MS = 3000;
-
-// Branch on the documented code, never on the status — the rule the stylist
-// store follows, and `forecast_unavailable` is why it matters: it is issued at
-// two statuses, 400 past the horizon and 502 when Open-Meteo does not answer,
-// and both say one thing to the user.
-//
-// `home_location_missing` is deliberately absent. It is `POST /looks/suggest`'s
-// code, for an account with no home coordinates; this endpoint is given a
-// destination and never reads them, and 04-API-SPEC.md's failure list for it
-// does not carry the code either.
-const PACK_ERROR_KEYS: Readonly<Record<string, string>> = {
-  trip_too_long: 'trip.error.tripTooLong',
-  wardrobe_too_small: 'trip.error.wardrobeTooSmall',
-  destination_not_found: 'trip.error.destinationNotFound',
-  geocoding_unavailable: 'trip.error.geocodingUnavailable',
-  forecast_unavailable: 'trip.error.forecastUnavailable',
-  stylist_failed: 'trip.error.stylistFailed',
-  validation_error: 'trip.error.validation',
-};
-
-interface ApiErrorBody {
-  readonly code?: string;
-}
-
-function packErrorKey(error: unknown): string {
-  if (error instanceof HttpErrorResponse) {
-    const code = (error.error as ApiErrorBody | null)?.code;
-    if (code !== undefined && code in PACK_ERROR_KEYS) {
-      return PACK_ERROR_KEYS[code];
-    }
-    // The one status this file reads, and it is read last, after every
-    // documented code has failed to match. A body the request schema rejects
-    // carries FastAPI's `detail` rather than `code`, so there is nothing else
-    // to branch on.
-    if (error.status === 422) {
-      return PACK_ERROR_KEYS['validation_error'];
-    }
-  }
-  return 'trip.error.general';
-}
 
 // `notes` is omitted rather than sent as an empty string: absent is what the
 // server defaults it to, and the schema forbids extra keys rather than dropping
@@ -143,22 +81,11 @@ export class TripsPage {
   protected readonly isPacking = signal(false);
   protected readonly error = signal<string | null>(null);
 
-  private readonly statusIndex = signal(0);
-  private timer: ReturnType<typeof setInterval> | null = null;
-
-  protected readonly statusKey = computed(() => STATUS_KEYS[this.statusIndex()]);
-
-  constructor() {
-    effect(() => {
-      if (this.isPacking()) {
-        this.startStatusCycle();
-      } else {
-        this.stopStatusCycle();
-      }
-    });
-
-    inject(DestroyRef).onDestroy(() => this.stopStatusCycle());
-  }
+  // The cycle is `pack-wait.ts`'s, and following `isPacking` is the whole of the
+  // wiring: 4.6b gave the same wait to a second screen, and the interval, its
+  // teardown and the guard against a second one started over a live one moved
+  // with it rather than being written twice. DECISIONS.md 207.
+  protected readonly statusKey = packStatus(this.isPacking);
 
   protected pack(): void {
     const draft = this.draft();
@@ -197,33 +124,9 @@ export class TripsPage {
       // page's rather than its own buys: the message goes above a screen the
       // user can correct and send again.
       error: (failure: unknown) => {
-        this.error.set(packErrorKey(failure));
+        this.error.set(packErrorKey(failure, 'trip.error.general'));
         this.isPacking.set(false);
       },
     });
-  }
-
-  // Guarded rather than assumed idle: the effect re-runs on every read of
-  // `isPacking`, and a second interval started over a live one would be an
-  // interval nothing holds a handle to.
-  private startStatusCycle(): void {
-    if (this.timer !== null) {
-      return;
-    }
-    this.statusIndex.set(0);
-    this.timer = setInterval(() => {
-      // Clamped, not wrapped. A line that comes back round claims work that is
-      // behind us, and this wait has no known length — so the last line is
-      // where it rests.
-      this.statusIndex.update((index) => Math.min(index + 1, STATUS_KEYS.length - 1));
-    }, STATUS_INTERVAL_MS);
-  }
-
-  private stopStatusCycle(): void {
-    if (this.timer === null) {
-      return;
-    }
-    clearInterval(this.timer);
-    this.timer = null;
   }
 }
