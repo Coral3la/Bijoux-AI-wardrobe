@@ -30,6 +30,7 @@ from app.models.look import FEEDBACK_DOWN, FEEDBACK_UP, Look, LookItem
 from app.models.user import User
 from app.schemas.item import ItemResponse
 from app.services import stylist as stylist_service
+from app.services import stylist_runner
 from app.services.stylist import Look as StylistLook
 from app.services.stylist import MissingPiece, StylistResponse
 from app.services.weather import Forecast
@@ -143,7 +144,10 @@ def forecasts(monkeypatch: pytest.MonkeyPatch) -> list[tuple[float, float, date]
 def stylist(monkeypatch: pytest.MonkeyPatch) -> Callable[..., FakeStylist]:
     def _install(*answers: StylistResponse | Exception) -> FakeStylist:
         fake = FakeStylist(*answers)
-        monkeypatch.setattr(looks_route, "suggest_looks", fake)
+        # Patched on `stylist_runner`, not on the route: task 4.3 moved the
+        # call-and-retry loop there so `pack_trip` could share it, and a fake
+        # installed on the route module would no longer be reached.
+        monkeypatch.setattr(stylist_runner, "suggest_looks", fake)
         return fake
 
     return _install

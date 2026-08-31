@@ -24,7 +24,6 @@ what a failure is worth on the wire.
 """
 
 import logging
-import time
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import date as date_type
@@ -36,10 +35,9 @@ from openai import OpenAIError
 from sqlalchemy import ColumnElement, func, select, update
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.api.v1.routes._stylist_shared import styleable_wardrobe, stylist_failed
 from app.core.deps import get_current_user, get_db
 from app.core.errors import ApiError
-from app.enums import ItemStatus
 from app.models.item import Item
 from app.models.look import FEEDBACK_DOWN, FEEDBACK_UP, Look, LookItem
 from app.models.user import User
@@ -55,12 +53,10 @@ from app.schemas.look import (
 )
 from app.services.stylist import Look as StylistLook
 from app.services.stylist import (
-    LookValidation,
     StylistContext,
     StylistResponse,
-    suggest_looks,
-    validate_look_response,
 )
+from app.services.stylist_runner import judged
 from app.services.weather import (
     FORECAST_HORIZON_DAYS,
     ForecastOutOfRangeError,
@@ -101,46 +97,6 @@ _CATEGORY_NAMES = {
     "swimwear": "swimwear",
     "sleepwear": "sleepwear",
 }
-
-
-def _stylist_failed() -> ApiError:
-    return ApiError(
-        status.HTTP_502_BAD_GATEWAY,
-        "stylist_failed",
-        "I couldn't put a look together just now — try again.",
-    )
-
-
-def _wardrobe(db: Session, user: User) -> list[ItemResponse]:
-    """Every item the stylist is allowed to see, in a stable order.
-
-    Three filters, and `AUDITS.md` O-21 is the whole of the third: `ready`
-    because a row still being tagged has no attributes to style with, not
-    archived because `DELETE /items/{id}` is an archive, and not swimwear or
-    sleepwear because `01-ARCHITECTURE.md` promises exactly that exclusion and
-    2.6a gave it two vocabulary members to match on. The list comes from
-    `settings`, so emptying it sends the whole wardrobe.
-
-    A row whose `category` is `NULL` is dropped by `NOT IN` rather than kept —
-    SQL's three-valued logic, left alone deliberately. `category` is in
-    `REQUIRED_TAG_FIELDS`, so a `ready` row has one, and an item with no
-    category is one the model could not place anyway.
-
-    Ordered oldest first so two identical requests build the same prompt, which
-    is what `STAGE-2`'s "two identical requests produce a valid look both times"
-    measures.
-    """
-    rows = db.scalars(
-        select(Item)
-        .where(
-            Item.user_id == user.id,
-            Item.status == ItemStatus.READY,
-            Item.is_archived.is_(False),
-            Item.category.not_in(tuple(settings.stylist_excluded_categories)),
-        )
-        .order_by(Item.created_at, Item.short_id)
-    ).all()
-    return [ItemResponse.model_validate(row) for row in rows]
 
 
 def _anchor(request: LookSuggestRequest, wardrobe: Sequence[ItemResponse]) -> ItemResponse | None:
@@ -231,7 +187,7 @@ def _preference_attributes(db: Session, user: User, feedback: int) -> list[str]:
             # An archived garment cannot be recommended, so a preference
             # learned from it can only describe outfits the stylist is unable
             # to build. `DELETE /items/{id}` is an archive, which makes this
-            # the same filter `_wardrobe` applies, one table along.
+            # the same filter `styleable_wardrobe` applies, one table along.
             Item.is_archived.is_(False),
         )
         .group_by(Item.category, Item.fit)
@@ -355,64 +311,6 @@ async def _context(
     )
 
 
-async def _attempt(
-    wardrobe: Sequence[ItemResponse],
-    context: StylistContext,
-    attempt: int,
-    correction: str | None = None,
-) -> LookValidation:
-    """One model call, judged, with everything a failure would need reported.
-
-    Both attempts log at `INFO` rather than only the failing one, because the
-    question this endpoint could not answer before was never "did it fail" — the
-    `502` already said that — but "how often, how slowly, and against how big a
-    wardrobe". A line only on failure cannot answer any of the three, since it
-    has nothing to be compared against.
-
-    `item_ids` is logged flat because rule 1 is the rule that fires most and the
-    id it rejected is the whole diagnosis: an invented id and a real id the model
-    shifted the case of are the same message and different bugs.
-    """
-    started = time.monotonic()
-    validation = validate_look_response(
-        await suggest_looks(wardrobe, context, correction=correction), wardrobe, context
-    )
-    logger.info(
-        "Stylist attempt finished",
-        extra={
-            "attempt": attempt,
-            "elapsed_ms": round((time.monotonic() - started) * 1000),
-            # The model actually used, not the pin: `.env` can and does override
-            # `OPENAI_STYLIST_MODEL`, and a rejection rate is meaningless beside
-            # the name of a model that was not called.
-            "model": settings.OPENAI_STYLIST_MODEL,
-            "wardrobe_items": len(wardrobe),
-            "violation": validation.violation,
-            "item_ids": [
-                item_id for look in validation.response.looks for item_id in look.item_ids
-            ],
-        },
-    )
-    return validation
-
-
-async def _judged(wardrobe: Sequence[ItemResponse], context: StylistContext) -> LookValidation:
-    """One call, and a second one only when the first broke a named rule.
-
-    The retry exists to carry a violation back to the model, so a failure with
-    no violation to name does not spend it: a `ValueError` means no usable
-    answer arrived and an `OpenAIError` means none arrived at all, and both are
-    `502` at the caller without a second trip through the whole wardrobe.
-    `03-AI-CONTRACTS.md` says the same thing about a timeout — "the request is
-    not retried automatically". `DECISIONS.md` 171.
-    """
-    validation = await _attempt(wardrobe, context, attempt=1)
-    if validation.ok:
-        return validation
-
-    return await _attempt(wardrobe, context, attempt=2, correction=validation.violation)
-
-
 def _persist(
     db: Session,
     user: User,
@@ -515,7 +413,7 @@ async def suggest_look(
     queries, which is the trade `GET /weather` already makes through
     `get_current_user`.
     """
-    wardrobe = _wardrobe(db, current_user)
+    wardrobe = styleable_wardrobe(db, current_user)
     # Before the forecast as well as before the model: `06-TESTING-STRATEGY.md`
     # asks for a test proving no AI call is attempted, and a small wardrobe is
     # knowable without spending anything at all.
@@ -540,21 +438,21 @@ async def suggest_look(
     )
 
     try:
-        validation = await _judged(wardrobe, context)
+        validation = await judged(wardrobe, context)
     except ValueError as exc:
         # The four measured leniencies of `DECISIONS.md` 161 arrive here: the
         # model answered, and what it answered is not usable.
         logger.warning("The stylist gave no usable answer", extra={"error": str(exc)})
-        raise _stylist_failed() from exc
+        raise stylist_failed() from exc
     except OpenAIError as exc:
         logger.warning("The stylist provider did not answer", extra={"error": str(exc)})
-        raise _stylist_failed() from exc
+        raise stylist_failed() from exc
 
     if not validation.ok:
         logger.warning(
             "The stylist failed validation twice", extra={"violation": validation.violation}
         )
-        raise _stylist_failed()
+        raise stylist_failed()
 
     # From `validation.response` and never from the raw answer: the ids were
     # upper-cased there, and `DECISIONS.md` 164 put normalisation in one place
