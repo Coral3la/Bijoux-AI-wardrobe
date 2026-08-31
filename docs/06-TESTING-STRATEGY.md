@@ -121,6 +121,8 @@ What gets covered:
 - **`user_edited` protection:** `POST /items/{id}/retag` returns `409` after a manual edit, and succeeds with `?force=true`.
 - **`wardrobe_too_small`:** 5 ready items returns `400` before any AI call is attempted.
 - **The trip endpoints.** Task 4.4, split by whether the model has to be faked at all: `tests/integration/test_trips_pack.py` covers `POST /trips/pack` and `POST /trips/{id}/repack` with the geocoder and forecast faked on `services/packing` and the stylist faked on `stylist_runner.suggest_looks` — one module further in, so **`validate_look_response` runs for real** and the trip path's rules 5, 10 and 11 judge every plan the tests assert on. `tests/integration/test_trips_read.py` needs no fake at all and plants rows directly, which is `test_trips_rows.py`'s approach one layer up. Between them: the one-commit write, the day-strip join, the packing list's UUIDs and tie-broken `reuse_summary`, both halves of `trip_too_long`, `wardrobe_too_small` before the geocoder, all five failure codes, `AUDITS.md` O-32's detach and cascade, and cross-user isolation on every endpoint.
+
+- **The swap endpoint.** Task 4.6a-1, `tests/integration/test_trips_swap.py`. Every test packs a trip first, because a swap is an edit to a stored plan; the fake stack is `test_trips_pack.py`'s shape and is **copied rather than imported**, because no test module in this suite imports another and hoisting the fixtures into a `tests/integration/conftest.py` would mean editing a file the task has no other reason to open. What it measures beyond the codes: that the day named changes and no other, that the swap survives a reload — the half `POST /looks/suggest` could not have delivered — that a detached look keeps `is_saved`, `feedback` and `worn_at` byte for byte, that a stylist failure leaves the look and the packing list untouched, and that the packing list keeps its survivors' order. **Two tests exist to catch a mutation rather than a bug.** The stored weather rule is overwritten with a sentence `build_rule` cannot produce, so the only way the assertion passes is by reading the column; and `shoes_a` is planted with the highest `uuid4` of the nine, so the tie-break test cannot pass by luck when a mutation sorts the list before summarising it. A third case is defended by a hand-edited row, because reading `occasion` off the replaced look rather than off `trips.occasions` is an equivalent mutant under every state this API can write.
 - **Rate limits** return `429` with `Retry-After`.
 
 ### A test that measures a moment cannot assert an event
@@ -877,6 +879,7 @@ Locators use `getByRole` and `getByLabel` first, `data-testid` only where the ac
 | 11 | Tagging failure → retry affordance | failure fixture produces ⚠ tile with a working retry |
 | 12 | "Style around this" from item detail | the returned look contains that exact item |
 | 13 | Swap the shoes in a look | all other items unchanged, the rejected shoe absent |
+| 13a | Swap the shoes on day 3 of a trip | day 3 changes, the other days do not, and the packing list moves with it |
 
 Journeys 12 and 13 are the most reliable assertions in the whole suite — the requested item is either in the DOM or it is not, with no judgement involved. Worth writing early.
 

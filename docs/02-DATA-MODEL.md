@@ -591,6 +591,17 @@ the same thing from the model's side: `trip_packing_plan` carries
 `packing_list.item_ids` and **no** `reuse_summary`, because a count is not
 something to ask a model for and then have to check.
 
+**`POST /trips/pack` stopped being the only writer at task 4.6a-1.** `POST
+/trips/{id}/swap` is the second, and it writes `packing_list` alone — never
+`forecast`, which is the stored plan a swap obeys rather than re-derives. What
+it writes is a **recomputation rather than a model answer**: the stylist is
+asked for one day's look and never sees the trip whole, so the list is derived
+from every look the trip still has — survivors in their existing positions, ids
+no look wears dropped, newcomers appended. The order is load-bearing, because
+`reuse_summary`'s tie-break reads it. Both writers fill the column on every path
+they can return `200` from, which is the whole of what the response model's
+non-null typing rests on. `DECISIONS.md` 209.
+
 **Nothing in the database enforces any of this.** `packing_list` is `JSONB` with
 no `CHECK` and no schema, exactly as `occasions` is — the shape is kept by the
 Pydantic response model at 4.4 and by `pack_trip`'s own return type, and a row

@@ -1,5 +1,5 @@
-"""The five `/trips` routes: pack one, list them, read one, throw one away, and
-pack it again.
+"""The six `/trips` routes: pack one, list them, read one, throw one away, pack
+it again, and change one garment on one day of it.
 
 `POST /pack` is the route Stage 4 exists for, and it is thin on purpose:
 `services/packing.py` does the geocoding, the forecast, the per-day rules, the
@@ -25,6 +25,20 @@ returned an answer. A `502` from the stylist must not empty a trip. `DELETE
 /trips/{id}` takes O-32's option 1 instead and lets `0005`'s cascade run, which
 is what the user asked for when they deleted the trip.
 
+**The swap is a trip endpoint because `POST /looks/suggest` cannot be one.**
+That route forecasts the user's **home** coordinates (`DECISIONS.md` 173 keeps
+them out of its body), refuses an account with none, and persists a look with no
+`trip_id` — so a swap routed through it would dress a Berlin day for the weather
+at home, and the answer would vanish from the trip on the next read. What it
+*can* lend is everything below HTTP: `POST /{trip_id}/swap` builds a
+`StylistContext`, runs the single-day rule order and reuses `judged` unchanged.
+**It asks no provider but the model.** The day's four numbers, its condition and
+**the rule sentence the model obeyed** are already in `trips.forecast`, so there
+is no geocode and no forecast call — and reading the stored rule rather than
+calling `build_rule` again is what stops one day of a packed plan re-rendering
+under a band table the other days were never judged against (`DECISIONS.md` 199,
+209).
+
 **`GET /trips` ships with no caller** and is built because `04-API-SPEC.md` is
 authoritative and has carried the heading since Stage 0 — `GET
 /me/locations/search`'s shape, recorded rather than quietly dropped.
@@ -39,7 +53,7 @@ import datetime
 import logging
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, status
 from openai import OpenAIError
@@ -53,6 +67,7 @@ from app.api.v1.routes._stylist_shared import (
 )
 from app.core.deps import get_current_user, get_db
 from app.core.errors import ApiError
+from app.enums import Condition
 from app.models.item import Item
 from app.models.look import Look, LookItem
 from app.models.trip import Trip
@@ -67,6 +82,7 @@ from app.schemas.trip import (
     TripPackRequest,
     TripPackResponse,
     TripResponse,
+    TripSwapRequest,
 )
 from app.services.geocoding import GeocodingError
 from app.services.packing import (
@@ -75,11 +91,17 @@ from app.services.packing import (
     StylistRejectedError,
     TripRequest,
     pack_trip,
+    reuse_summary,
 )
+from app.services.stylist import Look as StylistLook
+from app.services.stylist import StylistContext
+from app.services.stylist_runner import judged
 from app.services.weather import (
     FORECAST_HORIZON_DAYS,
+    Forecast,
     ForecastOutOfRangeError,
     ForecastProviderError,
+    summarize_forecast,
 )
 
 router = APIRouter(prefix="/trips", tags=["trips"])
@@ -96,6 +118,16 @@ MIN_WARDROBE_ITEMS = 8
 # `FORECAST_HORIZON_DAYS = 15` is one day of margin against a horizon that rolls
 # forward daily.
 MAX_TRIP_DAYS = 14
+
+# `POST /looks/suggest`'s six rather than this module's eight, because a swap
+# builds **one look for one day**: it runs the single-day rule order, where rule
+# 11 — no two looks alike — does not run at all. Eight is the number a trip needs
+# to dress several days differently, and applying it here would answer `400` to a
+# look the model can build, which is the mirror of the mistake `DECISIONS.md` 172
+# refused in the other direction. The number is copied rather than imported from
+# `looks.py`: 197 drew its line at what two routes both need, and a threshold each
+# route states for itself is not that. `CONVENTIONS.md`'s "Limits and units".
+MIN_SWAP_WARDROBE_ITEMS = 6
 
 # The three columns `AUDITS.md` O-32 is about, and the whole of what a repack
 # refuses to destroy. `is_saved` puts a look on `/saved` (3.2), `feedback` is
@@ -424,6 +456,245 @@ def _hydrate(db: Session, rows: Sequence[Look]) -> list[LookResponse]:
     ]
 
 
+def _day(trip: Trip, ordinal: int) -> Mapping[str, Any]:
+    """One entry of `trips.forecast`, or the `422` for a day this trip has not got.
+
+    `validation_error` rather than a code of its own, and the bound is checked
+    here rather than as a `ge=1` on the schema, for `trip_too_long`'s reason one
+    endpoint along: the request schema cannot know how many days a trip has, so a
+    constraint there would answer `0` and `99` with two different shapes of the
+    same refusal. One check against the trip's own column, one message naming
+    both ends. `DECISIONS.md` 209.
+    """
+    for entry in trip.forecast or []:
+        if entry["day"] == ordinal:
+            return entry
+    raise ApiError(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "validation_error",
+        f"day: this trip has days 1 to {len(trip.forecast or [])}.",
+    )
+
+
+def _replaceable(
+    look: LookResponse | None, item_id: uuid.UUID
+) -> tuple[LookResponse, ItemResponse]:
+    """The look on screen and the garment being swapped out of it, or the `422`.
+
+    **Answered before the model is asked**, which is the whole reason it is its
+    own function: a stale badge is a `422` costing nothing, and letting it
+    through would spend two model calls and answer `502 stylist_failed` about a
+    request that was never servable.
+
+    **A day with no look arrives here as `None` and leaves as the same `422`.**
+    That is not a stretch: there is no look, so the item is not in it, and the
+    screen draws a gap with no badge on it — so it is a body no correct client can
+    build. A twentieth error code for a state that is unreachable and already
+    described by this one is what `DECISIONS.md` 200 refused for the repack's
+    `409`.
+
+    Its own code rather than `validation_error`, on `locked_unavailable`'s
+    reasoning: this is the `422` a **correct** client provokes, by holding a look
+    that a repack in another tab has since replaced.
+    """
+    if look is not None:
+        for item in look.items:
+            if item.id == item_id:
+                return look, item
+    raise ApiError(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "item_not_in_look",
+        "item_id: that piece is not in this day's look.",
+    )
+
+
+def _swap_context(
+    db: Session,
+    user: User,
+    trip: Trip,
+    day: Mapping[str, Any],
+    look: LookResponse,
+    replaced: ItemResponse,
+    request: TripSwapRequest,
+    wardrobe: Sequence[ItemResponse],
+) -> StylistContext:
+    """The stored plan, in the shape `suggest_looks` takes for a single day.
+
+    **`weather_rule` is read from the column and `build_rule` is not called.**
+    `DECISIONS.md` 199 stored the rule sentence beside the four numbers precisely
+    so that a trip packed under one version of the band table cannot re-render
+    under another — the sentence the model obeyed is part of the plan rather than
+    a derivation of it. A swap edits one day of that plan, so it obeys that day's
+    rule; deriving it again would judge Thursday against a table the other six
+    days were never judged against, and nothing on the wire would say so. The
+    `Forecast` rebuilt below is for `summarize_forecast` alone, which is the
+    *sentence* the model reads next to the rule, and it carries the same numbers
+    the column stored.
+
+    **The replaced garment is excluded as well as unlocked**, which is what makes
+    `STAGE-4` 4.6a's fourth criterion a rule rather than a hope: rule 8 refuses a
+    look containing an excluded id, so the swap that rejected a shoe cannot answer
+    with it. It is appended to the client's own accumulated exclusions rather than
+    trusted to be among them.
+
+    **Its `short_id` comes from the look, not from the wardrobe.** A garment
+    archived since the trip was packed is not in the sent wardrobe at all, so a
+    lookup there would drop it from the exclusions — and it is exactly the garment
+    the user is trying to get rid of.
+
+    `include_outerwear` and `anchor_id` are `None` because this endpoint has
+    neither field, which is `TripContext`'s own reasoning: the weather rule decides
+    the coat, and every garment an anchor would have protected is locked here
+    anyway.
+    """
+    by_id = {item.id: item for item in wardrobe}
+
+    locked: list[ItemResponse] = []
+    for item in look.items:
+        if item.id == replaced.id:
+            continue
+        available = by_id.get(item.id)
+        if available is None:
+            # `_locked`'s check in `looks.py`, reached differently: there the
+            # client sent the ids, here the look row did. The answer is the same
+            # because the cause is — a garment that was on screen a moment ago
+            # and has been archived from another tab since — and rule 1 would
+            # otherwise call the id a hallucination two model calls later.
+            raise ApiError(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "locked_unavailable",
+                "locked_item_ids: one of that look's other pieces is no longer part of this wardrobe.",
+            )
+        locked.append(available)
+
+    for_date = trip.start_date + datetime.timedelta(days=request.day - 1)
+    occasions = {entry["day"]: entry["occasion"] for entry in trip.occasions}
+
+    return StylistContext(
+        date=for_date,
+        # The trip's stored occasion for this day, never the look's echo of it:
+        # `_write` wrote that column from the request and `occasion` was struck
+        # from both AI schemas at 4.3. `DECISIONS.md` 193.
+        occasion=occasions[request.day],
+        forecast_summary=summarize_forecast(
+            Forecast(
+                date=for_date,
+                temp_min_c=day["temp_min_c"],
+                temp_max_c=day["temp_max_c"],
+                precip_mm=day["precip_mm"],
+                wind_kph=day["wind_kph"],
+                condition=Condition(day["condition"]),
+            )
+        ),
+        weather_rule=day["rule"],
+        notes=trip.notes,
+        include_outerwear=None,
+        anchor_id=None,
+        locked_ids=tuple(item.short_id for item in locked),
+        excluded_ids=tuple(
+            by_id[item_id].short_id for item_id in request.exclude_item_ids if item_id in by_id
+        )
+        + (replaced.short_id,),
+        replace_role=request.replace_role,
+        height_cm=user.height_cm,
+        style_notes=user.style_notes,
+        # Measured back from the day being dressed rather than the server's
+        # today, which is `_packed`'s choice one endpoint along and
+        # `DECISIONS.md` 185's origin.
+        preferences=learned_preferences(db, user, wardrobe, for_date),
+    )
+
+
+def _replace_look(
+    db: Session,
+    user: User,
+    trip: Trip,
+    old: LookResponse,
+    answer: StylistLook,
+    items: Sequence[ItemResponse],
+    for_date: datetime.date,
+    occasion: str,
+) -> None:
+    """`AUDITS.md` O-32's option 2 for one day, and `DECISIONS.md` 200's ordering.
+
+    **Nothing in this function runs until the model has answered.** That is the
+    ordering O-32 turned on for the repack and it is worth no less here: a
+    destructive half above the model call would answer `502 stylist_failed`
+    having already taken a day's look away, and the look it took is one somebody
+    may have saved.
+
+    **The two statements are `_write`'s, narrowed from a trip to a row.** The
+    `UPDATE` claims the look out of the trip when it was saved, rated or worn, so
+    the `DELETE` under it needs no `_MARKED` of its own — it is keyed on
+    `trip_id` as well as `id`, and a row the `UPDATE` just detached no longer
+    matches. Writing `trip_id = NULL` is the whole of the detach: `is_saved`,
+    `feedback` and `worn_at` are never named by either statement, so a look on
+    `/saved` keeps its heart, its rating and its wearing exactly as they were.
+
+    **Unlike a repack, this detach leaves no gap.** The new look takes the day in
+    the same transaction, so `days[].look_id` resolves to it rather than to
+    `null` — which is why `05-FRONTEND-SPEC.md`'s gap is still a repack's story
+    and not this one's. And `items.wear_count` is not reversed by the detach, for
+    the reason it never is: a garment worn in Berlin was worn.
+    """
+    db.execute(update(Look).where(Look.id == old.id, _MARKED).values(trip_id=None))
+    db.execute(delete(Look).where(Look.id == old.id, Look.trip_id == trip.id))
+
+    row = Look(
+        user_id=user.id,
+        trip_id=trip.id,
+        title=answer.title,
+        # The trip's stored occasion, never the model's echo — struck from both
+        # AI schemas at 4.3, so the value that is certainly legal is the one the
+        # user sent. `DECISIONS.md` 193.
+        occasion=occasion,
+        reasoning=answer.reasoning,
+        weather_note=answer.weather_note,
+        # Computed from the ordinal rather than copied from `trips.forecast`'s
+        # own `date`, so that `_by_day` — which inverts exactly this arithmetic —
+        # cannot put the new look on a different day from the one it replaced.
+        for_date=for_date,
+    )
+    db.add(row)
+    db.flush()
+
+    db.add_all(
+        [
+            LookItem(look_id=row.id, item_id=item.id, position=position)
+            for position, item in enumerate(items)
+        ]
+    )
+    db.flush()
+
+
+def _swapped_ids(existing: Sequence[str], looks: Sequence[LookResponse]) -> list[str]:
+    """`trips.packing_list.item_ids` after a swap: survivors, then newcomers.
+
+    Three properties, in the order they matter. **Survivors keep their existing
+    positions**, so the list the user has been reading does not resequence around
+    one changed garment — and `reuse_summary`'s tie-break reads this order, so a
+    reshuffle would let one plan summarise two ways. **An id no look still wears
+    is dropped**, which is `STAGE-4` 4.6a's second property and the half that
+    makes the suitcase shrink. **Newcomers are appended in day order then
+    `look_items.position`**, which is the order `_hydrate` already answers in.
+
+    It is computed over **every** look rather than over the new one alone, and
+    that is deliberate: the acceptance criterion is *every look item is still in
+    the packing list*, and reading all of them makes that true by construction
+    rather than by an invariant no line rechecks. Where the invariant does hold —
+    and only `POST /trips/pack` and this function write the column — the two
+    answers are identical.
+    """
+    worn: list[str] = []
+    for look in looks:
+        for item in look.items:
+            if str(item.id) not in worn:
+                worn.append(str(item.id))
+
+    kept = [item_id for item_id in existing if item_id in worn]
+    return kept + [item_id for item_id in worn if item_id not in kept]
+
+
 @router.post("/pack")
 async def pack(
     request: TripPackRequest,
@@ -599,3 +870,117 @@ async def repack_trip(
 
     trip, looks, look_ids = _write(db, current_user, result, existing=trip)
     return TripPackResponse(trip=_trip(trip, look_ids), looks=looks, missing_pieces=_pieces(result))
+
+
+@router.post("/{trip_id}/swap")
+async def swap_item(
+    trip_id: uuid.UUID,
+    request: TripSwapRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TripDetailResponse:
+    """One garment on one day, replaced against that day's stored plan.
+
+    **Every refusal that can be answered from rows in hand is answered first**,
+    which is `POST /looks/suggest`'s order and matters more here: a stale ↻ badge
+    is the commonest failure this endpoint has, and answering it after the model
+    would cost two calls carrying the whole wardrobe to say *that piece is not in
+    this day's look*.
+
+    **It asks no provider but the model.** No geocode — the destination is not
+    re-resolved, because nothing about a swap moves the trip — and no forecast,
+    because `trips.forecast` already holds this day's four numbers, its condition
+    and the rule sentence the model obeyed. So four of `POST /trips/pack`'s seven
+    codes are unreachable here: `trip_too_long`, `destination_not_found`,
+    `geocoding_unavailable` and `forecast_unavailable`. **The bounds are
+    deliberately not rechecked** — a trip that has aged past `today + 14` can no
+    longer be repacked (`DECISIONS.md` 201) and can still have its shoes changed,
+    because the forecast this endpoint reads was taken while the trip was inside
+    the horizon and is stored.
+
+    **`async def` for one awaited call rather than three.** `POST /trips/pack`'s
+    reasoning with two of its reasons removed.
+
+    The response is the whole trip, not the one look: `packing_list` has moved,
+    so `days[]`, the reuse summary and every look are re-read and answered
+    together — `DECISIONS.md` 195's one trip object, and what stops a client
+    reassembling a plan from a fragment.
+    """
+    trip = _owned(db, trip_id, current_user.id)
+    day = _day(trip, request.day)
+
+    rows = _looks(db, trip)
+    hydrated = {look.id: look for look in _hydrate(db, rows)}
+    look_id = _by_day(trip.start_date, [(row.id, row.for_date) for row in rows]).get(request.day)
+    look, replaced = _replaceable(
+        hydrated[look_id] if look_id is not None else None, request.item_id
+    )
+
+    wardrobe = styleable_wardrobe(db, current_user)
+    if len(wardrobe) < MIN_SWAP_WARDROBE_ITEMS:
+        raise ApiError(
+            status.HTTP_400_BAD_REQUEST,
+            "wardrobe_too_small",
+            f"Add at least {MIN_SWAP_WARDROBE_ITEMS} items so I have something to swap in.",
+        )
+
+    context = _swap_context(db, current_user, trip, day, look, replaced, request, wardrobe)
+
+    try:
+        validation = await judged(wardrobe, context)
+    except ValueError as exc:
+        logger.warning("The stylist gave no usable swap", extra={"error": str(exc)})
+        raise stylist_failed() from exc
+    except OpenAIError as exc:
+        logger.warning("The stylist provider did not answer", extra={"error": str(exc)})
+        raise stylist_failed() from exc
+
+    if not validation.ok:
+        logger.warning(
+            "The stylist failed swap validation twice", extra={"violation": validation.violation}
+        )
+        raise stylist_failed()
+
+    # From `validation.response` and never the raw answer: the ids were
+    # upper-cased there, so a row and a lookup cannot disagree about an id's case.
+    # `DECISIONS.md` 164.
+    answer = validation.response.looks[0]
+    known = {item.short_id: item for item in wardrobe}
+    items = [known[item_id] for item_id in answer.item_ids]
+
+    _replace_look(
+        db,
+        current_user,
+        trip,
+        look,
+        answer,
+        items,
+        trip.start_date + datetime.timedelta(days=request.day - 1),
+        context.occasion,
+    )
+
+    # Re-read rather than assembled from what is in hand: the day's look is a new
+    # row, one look may have left the trip entirely, and the packing list is
+    # computed over every look the trip still has. One query answers all three.
+    swapped = _hydrate(db, _looks(db, trip))
+    # Read back through `PackingList` rather than indexed off the column, which
+    # is typed `dict[str, Any] | None`: the shape assertion is the one `_trip`
+    # already makes two functions along, and a hand-written row with a `NULL`
+    # `packing_list` is the same `500` in both places rather than a `KeyError` in
+    # one of them. `DECISIONS.md` 203 refused a `cast` at a read site for this.
+    existing = PackingList.model_validate(trip.packing_list).item_ids
+    item_ids = _swapped_ids([str(item_id) for item_id in existing], swapped)
+    trip.packing_list = {
+        "item_ids": item_ids,
+        # `packing.py`'s own arithmetic, shared rather than reimplemented: its
+        # tie-break is written down so that one plan cannot summarise two ways,
+        # and a second copy here is the one thing that could break that.
+        "reuse_summary": reuse_summary(item_ids, [look.items for look in swapped]),
+    }
+    db.commit()
+
+    rows = _looks(db, trip)
+    return TripDetailResponse(
+        trip=_trip(trip, _by_day(trip.start_date, [(row.id, row.for_date) for row in rows])),
+        looks=swapped,
+    )

@@ -643,8 +643,8 @@ trip objects, and the looks for one of them come from `GET /trips/{id}`.
 
 **This endpoint ships with no caller, and after task 4.6b it is the only one
 here that does.** No Stage 4 task lists trips: 4.5 is the form, 4.6 the packing
-view, 4.6b the repack and delete controls, 4.6a the swap and 4.7 the export, and
-`05-FRONTEND-SPEC.md` §7 describes no trips list screen. It is specified and
+view, 4.6b the repack and delete controls, 4.6a-1 and 4.6a the swap and 4.7 the
+export, and `05-FRONTEND-SPEC.md` §7 describes no trips list screen. It is specified and
 built because this document is authoritative and the heading has been here since
 Stage 0 — the same shape as `GET /me/locations/search` shipping ahead of its
 caller, and recorded rather than quietly dropped (`AUDITS.md` **O-16**'s family).
@@ -750,6 +750,109 @@ trip that is visibly packed. **A failure leaves the trip on screen** rather than
 replacing it, which is the paragraph above rendered: nothing is destroyed until
 `pack_trip` has answered, so a repack that fails costs the user nothing and the
 interface says so. `AUDITS.md` **O-33**, `DECISIONS.md` 207.
+
+### `POST /trips/{trip_id}/swap`
+```json
+→ { "day": 3, "item_id": "uuid", "replace_role": "shoes",
+    "exclude_item_ids": ["uuid"] }
+← 200 { "trip": { …trip object… }, "looks": [ …LookResponse… ] }
+```
+
+One garment on one day, replaced against that day's **stored** plan. The trip
+object comes back whole because `packing_list` has moved, so the day strip, the
+reuse summary and every look are answered together — `GET /trips/{id}`'s shape
+exactly, and no `missing_pieces`: a gap described against one day is not the
+trip's.
+
+**This is not `POST /looks/suggest`, and four things in that endpoint are why.**
+It forecasts the user's **home** coordinates — its body carries none, by
+`DECISIONS.md` 151 and 173 — so a swap routed through it would dress a Berlin
+day for the weather at home. It answers `home_location_missing` for an account
+that can pack a trip perfectly well, since `POST /trips/pack` never reads those
+columns. It persists a look with **no `trip_id`**, so the trip would answer the
+old look on the next read and the swap would live only in the browser. And it
+never touches `trips.packing_list`. What it *does* lend is everything below
+HTTP: this endpoint builds a `StylistContext`, runs the **single-day** rule
+order — 1, 2, 4, 6, 7, 8, 9 — and reuses the same retry loop.
+
+**It asks no provider but the model.** No geocode, because nothing about a swap
+moves the trip; no forecast, because `trips.forecast` already holds this day's
+four numbers, its condition and **the rule sentence the model obeyed**. That
+stored rule is sent rather than rebuilt: `DECISIONS.md` 199 put it in the column
+so a plan cannot re-render under a band table the rest of its days were never
+judged against, and a swap is an edit to one day of that plan. Four of the
+pack's seven codes are therefore unreachable here — `trip_too_long`,
+`destination_not_found`, `geocoding_unavailable` and `forecast_unavailable` —
+and **the 14-day bound is deliberately not rechecked**: a trip that has aged out
+of being repackable (`DECISIONS.md` 201) can still have its shoes changed,
+because the forecast this endpoint reads was taken while it was inside the
+horizon.
+
+**The client sends the role; the server derives the locks.** `locked_item_ids`
+is the day's look minus `item_id`, read off the row rather than sent — a
+client-supplied copy is a second description of a look the server is holding,
+and the two can disagree. `replace_role` is **not** derived, and that asymmetry
+is deliberate: `ROLE_BY_CATEGORY` lives only in the frontend's `enums.ts`
+because this API validates the six values and derives none, so a map on this
+side would be the second copy of a table kept in one place on purpose
+(`AUDITS.md` **O-25**). `replace_role` is **required** here, unlike on
+`POST /looks/suggest`: the ↻ badge always sends one, so requiring it deletes the
+role-without-locks body rather than validating it.
+
+**`exclude_item_ids` accumulates in the client**, across taps on one day, and
+the garment being replaced is appended to it by the server. Rule 8 then refuses
+a look containing an excluded id, which is what makes *the swap that rejected a
+shoe cannot answer with it* a rule rather than a hope. The server cannot derive
+the accumulated half: the looks that carried those rejections have been replaced
+by this endpoint and are gone.
+
+**What happens to the look that was there is `AUDITS.md` O-32 one level down.**
+A look that was saved, rated or worn is **detached** — `trip_id = NULL`, and no
+other column touched — and an unmarked one is deleted. Same three columns, same
+reasoning, and the same predicate the repack uses. Two differences from the
+repack are worth stating: this detach leaves **no gap**, because the new look
+takes the day in the same transaction, and `items.wear_count` is not reversed,
+for the reason it never is. And **the model runs first**: the detach, the
+delete, the new look and the `packing_list` write are one transaction downstream
+of the answer, so a `502` costs the user nothing.
+
+**`packing_list` is recomputed here**, which makes this the column's second
+writer after `POST /trips/pack`. Survivors keep their existing positions, an id
+no look still wears is dropped, and anything new is appended in day then
+`look_items.position` order. The order is load-bearing rather than cosmetic:
+`reuse_summary`'s tie-break is *most days, then first in the packing list*, so a
+list rebuilt from scratch would let one plan summarise two ways. It is computed
+over every look rather than patched around the one that changed, which makes
+*every look item appears in the packing list* true by construction.
+
+`422` with `code: "item_not_in_look"` when `item_id` names no garment in that
+day's look. Its own code rather than `validation_error`, on
+`locked_unavailable`'s reasoning: it is the `422` a **correct** client provokes,
+by holding a look that a repack in another tab has since replaced. **A day with
+no look answers the same code** — there is no look, so the item is not in it —
+rather than earning a twentieth code for a state the screen draws no badge on.
+
+`422` with `code: "validation_error"` when `day` is outside `1..n`. The bound is
+the route's rather than the request schema's, for `trip_too_long`'s reason: the
+schema cannot know how many days a trip has, so a `ge=1` there would answer `0`
+and `99` with two different shapes of one refusal.
+
+`422` with `code: "locked_unavailable"` when another garment in that day's look
+is no longer styleable — archived from a second tab since the trip was packed.
+Reached from the row rather than from the body, and refused here because rule 1
+would otherwise call the id a hallucination two model calls later.
+
+`400` with `code: "wardrobe_too_small"` below **6** usable items — `POST
+/looks/suggest`'s threshold, not this section's eight. A swap builds one look
+for one day and runs the single-day rule order, where rule 11 does not run at
+all; eight would refuse a look the model can build.
+
+`502` with `code: "stylist_failed"` when validation fails twice, or the model
+answers nothing usable, or the provider does not answer. `404` `not_found`,
+`401` `invalid_token`. Unthrottled, like everything else here —
+`DECISIONS.md` 191.
+
+`DECISIONS.md` 209.
 
 ---
 

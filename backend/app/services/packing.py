@@ -203,7 +203,9 @@ def _forecast_column(
     ]
 
 
-def _reuse_summary(item_ids: Sequence[str], looks: Sequence[PackedLook]) -> dict[str, Any]:
+def reuse_summary(
+    item_ids: Sequence[str], outfits: Sequence[Sequence[ItemResponse]]
+) -> dict[str, Any]:
     """The numbers `05-FRONTEND-SPEC.md` §7 prints, and not the sentence.
 
     *"8 items across 5 looks — the jeans appear on 3 days"* is two renderings of
@@ -218,9 +220,18 @@ def _reuse_summary(item_ids: Sequence[str], looks: Sequence[PackedLook]) -> dict
     two runs. It is the packing list's order that decides, not the order the
     days happened to wear things in. `02-DATA-MODEL.md` carries this shape;
     `DECISIONS.md` 193.
+
+    **Public, and taking outfits rather than looks, since task 4.6a-1.** It was
+    `_reuse_summary(item_ids, looks: Sequence[PackedLook])` while `pack_trip`
+    was the only writer of `trips.packing_list`; `POST /trips/{id}/swap` is the
+    second, and it holds `LookResponse`s rather than `PackedLook`s. The tie-break
+    is the reason it is shared rather than copied — a second implementation of it
+    is the one thing that could make one plan summarise two ways — and the
+    parameter narrowed to what this function actually reads, which is a sequence
+    of item lists. `DECISIONS.md` 209.
     """
     worn = Counter(
-        str(item.id) for look in looks for item in {item.id: item for item in look.items}.values()
+        str(item.id) for items in outfits for item in {item.id: item for item in items}.values()
     )
     # `max` returns the **first** element with the maximal key, and `item_ids`
     # is in packing-list order — so iterating it is the whole of the tie-break
@@ -234,7 +245,7 @@ def _reuse_summary(item_ids: Sequence[str], looks: Sequence[PackedLook]) -> dict
     )
     return {
         "item_count": len(item_ids),
-        "look_count": len(looks),
+        "look_count": len(outfits),
         "most_reused": most_reused,
     }
 
@@ -333,7 +344,7 @@ async def pack_trip(
         forecast=_forecast_column(days, forecasts),
         packing_list={
             "item_ids": packed_ids,
-            "reuse_summary": _reuse_summary(packed_ids, looks),
+            "reuse_summary": reuse_summary(packed_ids, [look.items for look in looks]),
         },
         notes=request.notes,
     )

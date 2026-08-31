@@ -103,6 +103,34 @@ Header with destination, dates, item count and look count. A horizontal day stri
 
 The reuse summary — *"8 items across 5 looks — the jeans appear on 3 days"* — goes somewhere prominent. It is the line that makes the feature land.
 
+### 4.6a-1 The swap endpoint
+
+`POST /trips/{trip_id}/swap`. **Added at 4.6a's orientation**, after reading the
+handler that four previous sessions had assumed would serve this: `POST
+/looks/suggest` forecasts the user's *home* coordinates, refuses an account with
+none, persists a look with no `trip_id` and never touches `trips.packing_list`.
+None of that is fixable by a field on the body, so the swap is a trip endpoint —
+and 4.6a, which was framed as frontend, gets the backend it needs first rather
+than inventing a contract it does not own.
+
+It reads the day's stored forecast **including the rule sentence the model
+obeyed**, so it calls no geocoder and no weather provider: one model call and
+nothing else leaves the process. It runs the single-day rule order, detaches or
+deletes the replaced look on `AUDITS.md` O-32's predicate, recomputes
+`packing_list`, and does all of it downstream of the model answering.
+
+**Acceptance criteria — 4.6a-1's own:**
+
+- [x] A swap changes the named day and no other, and survives a reload
+- [x] The stored rule is what reaches the model, and `build_rule` is not called
+- [x] No geocoder and no forecast request is made
+- [x] A saved, rated or worn look is detached with its three columns untouched
+- [x] A stylist failure leaves the day's look and the packing list exactly as they were
+- [x] The packing list keeps its survivors' order and appends what is new
+- [x] A stale badge answers `item_not_in_look` before the model is called
+
+`DECISIONS.md` 209.
+
 ### 4.6a Swap one item on a trip look
 
 The ↻ badge from the look card, on the trip look. Reuses Stage 2's plumbing
@@ -123,6 +151,16 @@ Three properties are what make it a task rather than a wiring job:
 
 Whether the recomputation happens on the server or in the client is this task's
 open question. `trips.packing_list` is a stored `JSONB` column either way.
+*Answered at 4.6a-1: the server recomputes it, in the transaction that writes the
+new look — the tie-break `reuse_summary` documents cannot survive a second
+implementation, and a client-side recompute leaves the stored column wrong until
+the next repack. `DECISIONS.md` 209.*
+
+**This task is now the frontend half only**, and the wire it calls is 4.6a-1's:
+`POST /trips/{trip_id}/swap`, taking `day`, `item_id`, `replace_role` and the
+accumulated `exclude_item_ids`, and answering the whole trip. *This section said
+the swap "reuses Stage 2's plumbing unchanged"; that is true of the rules, the
+context and the retry loop, and it was never true of the endpoint.*
 
 **Acceptance criteria — 4.6a's own**, because this task was inserted after the
 list at the foot of this file was written:
@@ -210,7 +248,7 @@ prose across eleven weeks and five instances, and the number is wrong.
 
 ## Commit checkpoints
 
-`feat(db): trips schema` · `feat(weather): multi-day forecast` · `feat(ai): trip packing orchestration` · `feat(api): trip endpoints` · `feat(web): trip form` · `feat(web): packing view` · `feat(web): swap an item on a trip look` · `feat(web): packing list export` · `feat(web): global navigation`
+`feat(db): trips schema` · `feat(weather): multi-day forecast` · `feat(ai): trip packing orchestration` · `feat(api): trip endpoints` · `feat(web): trip form` · `feat(web): packing view` · `feat(api): swap an item on a trip look` · `feat(web): swap an item on a trip look` · `feat(web): packing list export` · `feat(web): global navigation`
 
 ## Prompt tuning note
 

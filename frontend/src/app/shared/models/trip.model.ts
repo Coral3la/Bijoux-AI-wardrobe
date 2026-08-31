@@ -96,8 +96,11 @@ export interface PackingList {
 // it. DECISIONS.md 195.
 //
 // `days` and `packing_list` are non-null over two nullable columns, which is
-// the server's own typing and rests on `POST /trips/pack` being the only
-// writer. `dest_lat`/`dest_lon` stay nullable, because the destination is what
+// the server's own typing and rests on who writes them. `forecast` has one
+// writer, `POST /trips/pack`; `packing_list` has had two since 4.6a-1, when
+// `POST /trips/{id}/swap` began recomputing it. Both fill the column on every
+// path they can answer 200 from, so the typing holds — it now rests on two
+// functions agreeing rather than on one existing. DECISIONS.md 209. `dest_lat`/`dest_lon` stay nullable, because the destination is what
 // the user typed and the coordinates are what the geocoder made of it.
 export interface Trip {
   readonly id: string;

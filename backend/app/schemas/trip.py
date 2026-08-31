@@ -1,6 +1,6 @@
-"""The wire shapes of the five `/trips` endpoints.
+"""The wire shapes of the six `/trips` endpoints.
 
-**One trip object, answered by all four endpoints that answer a trip**, with the
+**One trip object, answered by all five endpoints that answer a trip**, with the
 looks always a sibling key rather than a field inside it — `DECISIONS.md` 195,
 which is 034's rule applied a fourth time. `TripResponse` is therefore the whole
 of what `04-API-SPEC.md` prints under *The trip object*, and `TripPackResponse`
@@ -24,9 +24,9 @@ import datetime
 import uuid
 from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-from app.enums import Condition, Occasion
+from app.enums import Condition, Occasion, Role
 from app.schemas.look import LookResponse, MissingPieceResponse
 
 
@@ -105,6 +105,42 @@ class TripPackRequest(BaseModel):
         return self
 
 
+class TripSwapRequest(BaseModel):
+    """`POST /trips/{trip_id}/swap`'s body: one day, one garment, one role.
+
+    **`replace_role` is required here where `LookSuggestRequest` makes it
+    optional**, and that narrowing is the point rather than an oversight. That
+    endpoint serves a plain suggestion as well as a swap, so the field is absent
+    on most of its traffic and a validator has to refuse the one body that names
+    a role without locks (`DECISIONS.md` 177). This endpoint does nothing else:
+    the ↻ badge always sends a role, so requiring it deletes the invalid body
+    instead of validating it.
+
+    **The role is the client's and is never derived here.** `ROLE_BY_CATEGORY`
+    lives in `frontend/src/app/shared/models/enums.ts` and has no counterpart in
+    `app/enums.py` — this API validates the six values and derives none — so a
+    map added on this side to turn `item_id` into a role would be the second
+    copy of a table deliberately kept in one place. `AUDITS.md` O-25.
+
+    **`day` carries no `ge=1`**, and the bound is the route's for
+    `trip_too_long`'s reason: the schema cannot know how many days this trip has,
+    so a `ge` here would answer `0` and `99` with two different shapes of the
+    same refusal. One check against the trip's own days, one message.
+
+    `exclude_item_ids` accumulates in the client across taps on one day, which is
+    what stops a second swap of the same role handing back the garment the first
+    one rejected. The server cannot derive it: the looks that carried those
+    rejections were replaced by this endpoint and are gone.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    day: int
+    item_id: uuid.UUID
+    replace_role: Role
+    exclude_item_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
 class ReuseCount(BaseModel):
     """`packing_list.reuse_summary.most_reused`, which is an object or `null`.
 
@@ -174,11 +210,20 @@ class TripResponse(BaseModel):
     **`days` and `packing_list` are typed non-null over two nullable columns.**
     `trips.forecast` and `trips.packing_list` are nullable because migration
     `0005` was written before their shapes were settled (`DECISIONS.md` 189),
-    not because a trip may lack them: `POST /trips/pack` is the only writer and
-    it fills both on every path. This is `schemas/look.py`'s five-column
+    not because a trip may lack them. This is `schemas/look.py`'s five-column
     reliance one table along, and it is named here for the same reason — the
-    guarantee is that there is one writer, and it lasts exactly as long as that
-    stays true.
+    guarantee is about who writes the columns, so it is only worth as much as
+    the census of writers below.
+
+    **The census stopped being one writer at task 4.6a-1**, which is exactly the
+    event this paragraph was written to be checked against. `POST /trips/pack`
+    was the only writer through 4.4; `POST /trips/{id}/swap` is the second, and
+    it writes `packing_list` alone — never `forecast`, which is the stored plan
+    a swap obeys rather than re-derives (`DECISIONS.md` 199, 209). So `forecast`
+    still has one writer and `packing_list` has two, and both of them fill the
+    column on every path they can return `200` from. The typing holds; what
+    changed is that it now rests on two functions agreeing rather than one
+    existing. `DECISIONS.md` 203's trade-off is amended to match.
 
     **`dest_lat` and `dest_lon` are typed nullable**, unlike those two. Their
     column nullability has a reason of its own in `app/models/trip.py` — the
@@ -216,8 +261,20 @@ class TripPackResponse(BaseModel):
 
 
 class TripDetailResponse(BaseModel):
-    # `POST /trips/pack`'s response minus `missing_pieces`, which was never
-    # stored — so a reopened trip cannot carry it.
+    """`GET /trips/{id}` and `POST /trips/{trip_id}/swap`.
+
+    `POST /trips/pack`'s response minus `missing_pieces`, which was never stored
+    — so a reopened trip cannot carry it, and a swap has none to report: it asks
+    the model for one day's look, and a gap in a wardrobe described against one
+    day is not the trip's `missing_pieces`.
+
+    **Two callers, one of which edits**, since task 4.6a-1. A `TripSwapResponse`
+    holding the same two fields was refused on `DECISIONS.md` 182's rule — one
+    row described twice, with nothing keeping the descriptions in step — and the
+    accepted cost is a class called `…DetailResponse` answered by a `POST` that
+    changes the trip. `DECISIONS.md` 209.
+    """
+
     trip: TripResponse
     looks: list[LookResponse]
 
