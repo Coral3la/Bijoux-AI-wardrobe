@@ -15,7 +15,7 @@ import { TagEditor } from './tag-editor';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Button, CloudinaryUrlPipe, RouterLink, TagEditor],
   template: `
-    <main class="mx-auto flex w-full max-w-3xl flex-col gap-6 p-6">
+    <main class="mx-auto flex w-full max-w-3xl flex-col gap-region px-6 py-region">
       <a
         routerLink="/wardrobe"
         class="min-h-11 self-start text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -24,67 +24,83 @@ import { TagEditor } from './tag-editor';
       </a>
 
       @if (item(); as row) {
-        <!-- The detail transform, built from image_public_id. The server sends
-             image_url as a 300px padded thumbnail and nothing else, so this is
-             the first screen in the project that cannot use it. O-10's pipe,
-             at the first caller that needs it. -->
-        <img
-          [src]="row.image_public_id | cloudinaryUrl: 'detail'"
-          [alt]="row.display_name ?? i18n.t('item.untitled')"
-          class="mx-auto aspect-square w-full max-w-md rounded-2xl bg-surface object-contain"
-        />
+        <!-- The garment, its name and the one action that acts on it are one
+             unit: at region distance the name floats away from the
+             photograph it names. DECISIONS.md 212. -->
+        <div class="flex flex-col gap-group">
+          <!-- The detail transform, built from image_public_id. The server sends
+               image_url as a 300px padded thumbnail and nothing else, so this is
+               the first screen in the project that cannot use it. O-10's pipe,
+               at the first caller that needs it. -->
+          <img
+            [src]="row.image_public_id | cloudinaryUrl: 'detail'"
+            [alt]="row.display_name ?? i18n.t('item.untitled')"
+            class="mx-auto aspect-square w-full max-w-md rounded-2xl bg-surface object-contain"
+          />
 
-        <!-- Under the photograph now, and still the body face: display_name is
-             user-entered and may be non-Latin, which Fraunces does not cover.
-             05's rule names this screen as one of four that must apply it
-             deliberately, so the size grows and the family does not (071). -->
-        <h1 class="text-3xl leading-tight">{{ row.display_name ?? i18n.t('item.untitled') }}</h1>
+          <!-- Under the photograph now, and still the body face: display_name is
+               user-entered and may be non-Latin, which Fraunces does not cover.
+               05's rule names this screen as one of four that must apply it
+               deliberately, so the size grows and the family does not (071). -->
+          <h1 class="text-3xl leading-tight">{{ row.display_name ?? i18n.t('item.untitled') }}</h1>
 
-        <!-- The primary action on this screen, and 05-FRONTEND-SPEC.md's
-             instruction is that it is not buried behind edit and delete — so it
-             sits directly under the photograph, above the tags. Only on a ready
-             row: the stylist is shown ready, unarchived items alone, so the
-             button on any other row would navigate to a request the endpoint
-             answers anchor_unavailable to. -->
-        @if (row.status === 'ready') {
-          <a appButton routerLink="/stylist" [queryParams]="{ anchor: row.id }" class="self-start">
-            {{ i18n.t('item.styleAround') }}
-          </a>
-        }
+          <!-- The primary action on this screen, and 05-FRONTEND-SPEC.md's
+               instruction is that it is not buried behind edit and delete — so it
+               sits directly under the photograph, above the tags. Only on a ready
+               row: the stylist is shown ready, unarchived items alone, so the
+               button on any other row would navigate to a request the endpoint
+               answers anchor_unavailable to. -->
+          @if (row.status === 'ready') {
+            <a
+              appButton
+              routerLink="/stylist"
+              [queryParams]="{ anchor: row.id }"
+              class="self-start"
+            >
+              {{ i18n.t('item.styleAround') }}
+            </a>
+          }
+        </div>
 
-        @if (row.user_edited) {
-          <p class="text-sm">
-            <span class="font-medium">{{ i18n.t('item.edited.badge') }}</span>
-            — {{ i18n.t('item.edited.explain') }}
-          </p>
-        }
+        <!-- Both notices are about the tags below them — one says they were
+             set by hand, the other that they are still short — so they are
+             grouped with the editor rather than left three siblings at equal
+             distance. DECISIONS.md 212. -->
+        <div class="flex flex-col gap-group">
+          @if (row.user_edited) {
+            <p class="text-sm">
+              <span class="font-medium">{{ i18n.t('item.edited.badge') }}</span>
+              — {{ i18n.t('item.edited.explain') }}
+            </p>
+          }
 
-        <!-- 116 clears a failed status when a saved row carries every required tag, so
-             a row still marked failed after a save is one that is genuinely
-             short. The message is read off the status the response carried and
-             never off a client-side copy of the required set — naming the
-             missing field would need that copy, which is what B declined. -->
-        @if (row.status === 'failed') {
-          <p class="rounded-xl bg-surface-elevated p-4 text-sm font-medium text-danger">
-            {{ i18n.t('item.incomplete') }}
-          </p>
-        }
+          <!-- 116 clears a failed status when a saved row carries every required tag, so
+               a row still marked failed after a save is one that is genuinely
+               short. The message is read off the status the response carried and
+               never off a client-side copy of the required set — naming the
+               missing field would need that copy, which is what B declined. -->
+          @if (row.status === 'failed') {
+            <p class="rounded-xl bg-surface-elevated p-4 text-sm font-medium text-danger">
+              {{ i18n.t('item.incomplete') }}
+            </p>
+          }
 
-        @if (row.status === 'processing') {
-          <p class="rounded-xl bg-surface-elevated p-4 text-sm text-ink-muted">
-            {{ i18n.t('item.processing') }}
-          </p>
-        } @else {
-          <section class="flex flex-col gap-3">
-            <h2 class="font-display text-xl">{{ i18n.t('item.edit.title') }}</h2>
-            <app-tag-editor
-              [item]="row"
-              [saving]="saving()"
-              [errorKey]="saveError()"
-              (save)="onSave($event)"
-            />
-          </section>
-        }
+          @if (row.status === 'processing') {
+            <p class="rounded-xl bg-surface-elevated p-4 text-sm text-ink-muted">
+              {{ i18n.t('item.processing') }}
+            </p>
+          } @else {
+            <section class="flex flex-col gap-3">
+              <h2 class="font-display text-xl">{{ i18n.t('item.edit.title') }}</h2>
+              <app-tag-editor
+                [item]="row"
+                [saving]="saving()"
+                [errorKey]="saveError()"
+                (save)="onSave($event)"
+              />
+            </section>
+          }
+        </div>
 
         <section class="flex flex-col gap-2">
           <h2 class="font-display text-xl">{{ i18n.t('item.wear.title') }}</h2>
@@ -105,49 +121,53 @@ import { TagEditor } from './tag-editor';
           }
         </section>
 
-        <div class="flex flex-wrap items-center gap-3 border-bs border-line pt-4">
-          <!-- One control, ungated. It sends the unforced retag; the 409 opens
-               the second step. Gating it on user_edited and forcing straight
-               away would mean the 409 is never produced from the UI, and
-               acceptance criterion 6 would stay a route test. 122. -->
-          <button
-            appButton
-            variant="secondary"
-            type="button"
-            (click)="retag()"
-            [disabled]="retagging()"
-            class="disabled:opacity-50"
-          >
-            {{ retagging() ? i18n.t('item.retag.working') : i18n.t('item.retag.action') }}
-          </button>
+        <!-- The armed line is the confirmation for the button directly above
+             it, not a notice about the page. DECISIONS.md 212. -->
+        <div class="flex flex-col gap-group">
+          <div class="flex flex-wrap items-center gap-3 border-bs border-line pt-4">
+            <!-- One control, ungated. It sends the unforced retag; the 409 opens
+                 the second step. Gating it on user_edited and forcing straight
+                 away would mean the 409 is never produced from the UI, and
+                 acceptance criterion 6 would stay a route test. 122. -->
+            <button
+              appButton
+              variant="secondary"
+              type="button"
+              (click)="retag()"
+              [disabled]="retagging()"
+              class="disabled:opacity-50"
+            >
+              {{ retagging() ? i18n.t('item.retag.working') : i18n.t('item.retag.action') }}
+            </button>
 
-          <!-- Two deliberate clicks, not window.confirm and not a modal. The
-               gate's confirm() returns undefined, so a confirm-guarded delete
-               would read as tested and never run — 098 with a sharper edge. A
-               modal was declined on cost: a fourth hand-rolled focus trap,
-               with inert unsupported, to guard a misclick two clicks already
-               guard. DECISIONS.md 126. -->
-          <!-- The armed state stays a class binding rather than a variant swap:
-               the danger variant is what this control looks like unarmed, and
-               arming it fills the button in. -->
-          <button
-            appButton
-            variant="danger"
-            type="button"
-            (click)="onDelete()"
-            (blur)="disarm()"
-            [disabled]="deleting()"
-            class="disabled:opacity-50"
-            [class.bg-danger]="armed()"
-            [class.text-surface]="armed()"
-          >
-            {{ deleteLabel() }}
-          </button>
+            <!-- Two deliberate clicks, not window.confirm and not a modal. The
+                 gate's confirm() returns undefined, so a confirm-guarded delete
+                 would read as tested and never run — 098 with a sharper edge. A
+                 modal was declined on cost: a fourth hand-rolled focus trap,
+                 with inert unsupported, to guard a misclick two clicks already
+                 guard. DECISIONS.md 126. -->
+            <!-- The armed state stays a class binding rather than a variant swap:
+                 the danger variant is what this control looks like unarmed, and
+                 arming it fills the button in. -->
+            <button
+              appButton
+              variant="danger"
+              type="button"
+              (click)="onDelete()"
+              (blur)="disarm()"
+              [disabled]="deleting()"
+              class="disabled:opacity-50"
+              [class.bg-danger]="armed()"
+              [class.text-surface]="armed()"
+            >
+              {{ deleteLabel() }}
+            </button>
+          </div>
+
+          @if (armed()) {
+            <p class="text-sm">{{ i18n.t('item.delete.arm') }}</p>
+          }
         </div>
-
-        @if (armed()) {
-          <p class="text-sm">{{ i18n.t('item.delete.arm') }}</p>
-        }
 
         @if (retagConflict()) {
           <div class="flex flex-col items-start gap-3 rounded-xl bg-surface-elevated p-4">

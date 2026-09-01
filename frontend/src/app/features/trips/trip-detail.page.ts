@@ -109,7 +109,7 @@ function stillWornDays(detail: TripDetail, itemId: string): number[] {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Button, PackingList, TripLook],
   template: `
-    <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
+    <main class="mx-auto flex w-full max-w-2xl flex-col gap-region px-6 pt-hero pb-region">
       @if (detail(); as loaded) {
         <header class="flex flex-col gap-1">
           <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
@@ -137,63 +137,69 @@ function stillWornDays(detail: TripDetail, itemId: string): number[] {
           <p class="text-sm font-medium">{{ headerLine() }}</p>
         </header>
 
-        <!-- Buttons with aria-pressed rather than a tablist, matching the
-             occasion chips one screen over. A real tablist owes the reader
-             arrow-key roving and a tabpanel relationship; this is a filter over
-             one region, which is what the chips are too. -->
-        <div
-          class="flex flex-nowrap gap-2 overflow-x-auto pb-1"
-          role="group"
-          [attr.aria-label]="i18n.t('trip.view.days')"
-        >
-          @for (day of loaded.trip.days; track day.day) {
-            <button
-              type="button"
-              (click)="select(day.day)"
-              [attr.aria-pressed]="selectedDay() === day.day"
-              [class]="tabClass(selectedDay() === day.day)"
-            >
-              <!-- Four lines, and none of them is a weekday: DECISIONS.md
-                   206 refuses a date formatter on this screen, so the day is
-                   named by its number and dated by the ISO string the server
-                   sent. The display face is legal on "Day 3" — it is a word
-                   this project wrote and a numeral (071). -->
-              <span [class]="tabDayClass()">
-                {{ i18n.t('trip.day.legend', { day: day.day }) }}
-              </span>
-              <span [class]="tabDetailClass(selectedDay() === day.day)">{{ day.date }}</span>
-              <span class="text-lg" aria-hidden="true">{{ glyph(day) }}</span>
-              <span [class]="tabDetailClass(selectedDay() === day.day)">
-                {{ i18n.t('trip.view.temp', { temp: temperature(day) }) }}
-              </span>
-              <!-- The glyph above is decoration, so the condition is named
-                   here or it is named nowhere. -->
-              <span class="sr-only">{{ i18n.t('vocabulary.condition.' + day.condition) }}</span>
-            </button>
+        <!-- Grouped: the strip selects what renders under it, which is the
+             label-to-content relationship the group rung is for. At region
+             distance the tabs read as a section rather than as a control.
+             DECISIONS.md 212. -->
+        <div class="flex flex-col gap-group">
+          <!-- Buttons with aria-pressed rather than a tablist, matching the
+               occasion chips one screen over. A real tablist owes the reader
+               arrow-key roving and a tabpanel relationship; this is a filter over
+               one region, which is what the chips are too. -->
+          <div
+            class="flex flex-nowrap gap-2 overflow-x-auto pb-1"
+            role="group"
+            [attr.aria-label]="i18n.t('trip.view.days')"
+          >
+            @for (day of loaded.trip.days; track day.day) {
+              <button
+                type="button"
+                (click)="select(day.day)"
+                [attr.aria-pressed]="selectedDay() === day.day"
+                [class]="tabClass(selectedDay() === day.day)"
+              >
+                <!-- Four lines, and none of them is a weekday: DECISIONS.md
+                     206 refuses a date formatter on this screen, so the day is
+                     named by its number and dated by the ISO string the server
+                     sent. The display face is legal on "Day 3" — it is a word
+                     this project wrote and a numeral (071). -->
+                <span [class]="tabDayClass()">
+                  {{ i18n.t('trip.day.legend', { day: day.day }) }}
+                </span>
+                <span [class]="tabDetailClass(selectedDay() === day.day)">{{ day.date }}</span>
+                <span class="text-lg" aria-hidden="true">{{ glyph(day) }}</span>
+                <span [class]="tabDetailClass(selectedDay() === day.day)">
+                  {{ i18n.t('trip.view.temp', { temp: temperature(day) }) }}
+                </span>
+                <!-- The glyph above is decoration, so the condition is named
+                     here or it is named nowhere. -->
+                <span class="sr-only">{{ i18n.t('vocabulary.condition.' + day.condition) }}</span>
+              </button>
+            }
+          </div>
+
+          @if (selectedLook(); as look) {
+            <!-- The article moved into TripLook at 4.6a, which is where the badge,
+                 the per-tile wait and the still-worn line live. What is passed
+                 down is facts and what comes back is one garment: the page owns
+                 the trip, so it owns the arithmetic over every day of it. -->
+            <app-trip-look
+              [look]="look"
+              [swappingItemId]="swappingItemId()"
+              [stillWorn]="stillWorn()"
+              [errorKey]="swapError()"
+              (swap)="swapItem($event)"
+            />
+          } @else {
+            <!-- A day with no look, which is a real state rather than an error:
+                 a repack detaches a look that was saved, rated or worn instead of
+                 deleting it, and the day it belonged to keeps its forecast and
+                 loses its outfit. AUDITS.md O-32, DECISIONS.md 200. -->
+            <p class="rounded-xl bg-surface-elevated p-5 text-sm text-ink-muted">
+              {{ i18n.t('trip.view.day.noLook') }}
+            </p>
           }
         </div>
-
-        @if (selectedLook(); as look) {
-          <!-- The article moved into TripLook at 4.6a, which is where the badge,
-               the per-tile wait and the still-worn line live. What is passed
-               down is facts and what comes back is one garment: the page owns
-               the trip, so it owns the arithmetic over every day of it. -->
-          <app-trip-look
-            [look]="look"
-            [swappingItemId]="swappingItemId()"
-            [stillWorn]="stillWorn()"
-            [errorKey]="swapError()"
-            (swap)="swapItem($event)"
-          />
-        } @else {
-          <!-- A day with no look, which is a real state rather than an error:
-               a repack detaches a look that was saved, rated or worn instead of
-               deleting it, and the day it belonged to keeps its forecast and
-               loses its outfit. AUDITS.md O-32, DECISIONS.md 200. -->
-          <p class="rounded-xl bg-surface-elevated p-5 text-sm text-ink-muted">
-            {{ i18n.t('trip.view.day.noLook') }}
-          </p>
-        }
 
         <app-packing-list [items]="packingItems()" />
 

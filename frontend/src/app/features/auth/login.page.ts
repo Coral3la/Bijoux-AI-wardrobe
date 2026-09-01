@@ -27,7 +27,9 @@ const DEMO_PASSWORD = 'bijoux-demo-wardrobe';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Button, ReactiveFormsModule, RouterLink],
   template: `
-    <main class="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-6 px-6 py-16">
+    <main
+      class="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-region px-6 py-hero"
+    >
       <h1 class="font-display text-4xl leading-tight tracking-tight">
         {{ i18n.t('login.title') }}
       </h1>

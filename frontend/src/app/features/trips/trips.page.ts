@@ -32,7 +32,7 @@ function toRequest(draft: TripDraft, destination: string): PackRequest {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [TripForm],
   template: `
-    <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
+    <main class="mx-auto flex w-full max-w-2xl flex-col gap-region px-6 pt-hero pb-region">
       <header class="flex flex-col gap-1">
         <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
           {{ i18n.t('trip.caption') }}
