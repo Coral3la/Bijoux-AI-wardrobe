@@ -32,7 +32,7 @@ export interface StillWorn {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ItemCard],
   template: `
-    <article class="flex flex-col gap-4 rounded-lg bg-surface p-5">
+    <article class="flex flex-col gap-4 rounded-2xl bg-surface p-4 shadow-sm">
       <!-- Body face, not font-display: the title is written by the model.
            DECISIONS.md 071, and 4.6's own line unchanged. -->
       <h2 class="text-2xl">{{ look().title }}</h2>
@@ -70,7 +70,7 @@ export interface StillWorn {
                  where the screen has nothing to keep. -->
             @if (swappingItemId() === item.id) {
               <div
-                class="absolute inset-0 flex items-center justify-center rounded-lg bg-surface/80"
+                class="absolute inset-0 flex items-center justify-center rounded-xl bg-surface/80"
                 role="status"
               >
                 <span class="sr-only">{{ i18n.t('trip.swap.doing') }}</span>

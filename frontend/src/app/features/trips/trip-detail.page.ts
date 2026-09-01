@@ -8,6 +8,7 @@ import { Condition, roleOf } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
 import { Look } from '../../shared/models/look.model';
 import { TripDay, TripDetail } from '../../shared/models/trip.model';
+import { Button } from '../../shared/ui/button';
 import { packErrorKey, packStatus } from './pack-wait';
 import { PackingList } from './packing-list';
 import { StillWorn, TripLook } from './trip-look';
@@ -106,17 +107,21 @@ function stillWornDays(detail: TripDetail, itemId: string): number[] {
 @Component({
   selector: 'app-trip-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PackingList, TripLook],
+  imports: [Button, PackingList, TripLook],
   template: `
     <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
       @if (detail(); as loaded) {
         <header class="flex flex-col gap-1">
+          <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+            {{ captionLine() }}
+          </p>
           <!-- Body face, not font-display. The destination is a place name off
                the geocoder, and Fraunces is latin-subset, so a non-Latin one
                would fall back per character and render in two faces on one
-               line. DECISIONS.md 071 names this screen. -->
-          <h1 class="text-3xl">{{ loaded.trip.destination }}</h1>
-          <p class="text-sm">
+               line. DECISIONS.md 071 names this screen, and the spec asserts
+               the absent class rather than trusting the comment. -->
+          <h1 class="text-3xl leading-tight">{{ loaded.trip.destination }}</h1>
+          <p class="font-display text-lg text-ink-muted tabular-nums">
             {{
               i18n.t('trip.view.dates', {
                 start: loaded.trip.start_date,
@@ -148,12 +153,17 @@ function stillWornDays(detail: TripDetail, itemId: string): number[] {
               [attr.aria-pressed]="selectedDay() === day.day"
               [class]="tabClass(selectedDay() === day.day)"
             >
-              <span class="block text-sm font-medium">
+              <!-- Four lines, and none of them is a weekday: DECISIONS.md
+                   206 refuses a date formatter on this screen, so the day is
+                   named by its number and dated by the ISO string the server
+                   sent. The display face is legal on "Day 3" — it is a word
+                   this project wrote and a numeral (071). -->
+              <span [class]="tabDayClass()">
                 {{ i18n.t('trip.day.legend', { day: day.day }) }}
               </span>
-              <span class="block text-xs">{{ day.date }}</span>
-              <span class="block text-lg" aria-hidden="true">{{ glyph(day) }}</span>
-              <span class="block text-sm">
+              <span [class]="tabDetailClass(selectedDay() === day.day)">{{ day.date }}</span>
+              <span class="text-lg" aria-hidden="true">{{ glyph(day) }}</span>
+              <span [class]="tabDetailClass(selectedDay() === day.day)">
                 {{ i18n.t('trip.view.temp', { temp: temperature(day) }) }}
               </span>
               <!-- The glyph above is decoration, so the condition is named
@@ -180,7 +190,7 @@ function stillWornDays(detail: TripDetail, itemId: string): number[] {
                a repack detaches a look that was saved, rated or worn instead of
                deleting it, and the day it belonged to keeps its forecast and
                loses its outfit. AUDITS.md O-32, DECISIONS.md 200. -->
-          <p class="rounded-lg bg-surface p-5 text-sm text-current/70">
+          <p class="rounded-xl bg-surface-elevated p-5 text-sm text-ink-muted">
             {{ i18n.t('trip.view.day.noLook') }}
           </p>
         }
@@ -197,10 +207,12 @@ function stillWornDays(detail: TripDetail, itemId: string): number[] {
         }
 
         @if (repacking()) {
-          <p class="text-sm" role="status" aria-live="polite">{{ i18n.t(statusKey()) }}</p>
+          <p class="text-sm text-ink-muted" role="status" aria-live="polite">
+            {{ i18n.t(statusKey()) }}
+          </p>
         }
 
-        <div class="flex flex-wrap items-center gap-3 border-t border-current/10 pt-4">
+        <div class="flex flex-wrap items-center gap-3 border-bs border-line pt-4">
           <!-- Unguarded, unlike its neighbour, and the asymmetry is the point:
                a repack detaches a look that was saved, rated or worn rather
                than destroying it (DECISIONS.md 200), and /saved filters on
@@ -209,10 +221,12 @@ function stillWornDays(detail: TripDetail, itemId: string): number[] {
                about, and a confirmation step for a reversible act teaches the
                user to click through the one that is not. -->
           <button
+            appButton
+            variant="secondary"
             type="button"
             (click)="repack()"
             [disabled]="repacking() || deleting() || swapping()"
-            class="min-h-11 rounded-md px-3 text-sm underline disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            class="disabled:opacity-50"
           >
             {{ i18n.t('trip.repack.action') }}
           </button>
@@ -223,14 +237,18 @@ function stillWornDays(detail: TripDetail, itemId: string): number[] {
                and never run. The armed label carries the cascade, because
                DELETE /trips/{id} destroys the looks a repack would have kept
                and this is the only place a user could learn that. -->
+          <!-- The variant carries the arming rather than a pair of class
+               bindings over a fixed one: the two-step gate is only visible if
+               the second press looks different from the first, and one owner
+               for that paint cannot fall out of step with the signal. -->
           <button
+            appButton
+            [variant]="armed() ? 'danger' : 'secondary'"
             type="button"
             (click)="onDelete()"
             (blur)="disarm()"
             [disabled]="repacking() || deleting() || swapping()"
-            class="min-h-11 rounded-md px-3 text-sm underline disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            [class.text-danger]="armed()"
-            [class.font-medium]="armed()"
+            class="disabled:opacity-50"
           >
             {{ deleteLabel() }}
           </button>
@@ -361,6 +379,16 @@ export class TripDetailPage {
 
     const reuse = this.reuseClause();
     return reuse === null ? counts : this.i18n.t('trip.view.headerLine', { counts, reuse });
+  });
+
+  // Pluralised because a one-day trip is legal — `tripProblem` refuses an end
+  // before a start and nothing refuses the two being equal — and "Trip · 1 days"
+  // is the sentence a single interpolated key would have shipped.
+  protected readonly captionLine = computed(() => {
+    const days = this.detail()?.trip.days.length ?? 0;
+    return days === 1
+      ? this.i18n.t('trip.view.caption.one')
+      : this.i18n.t('trip.view.caption.other', { days });
   });
 
   protected readonly deleteLabel = computed(() => {
@@ -549,8 +577,22 @@ export class TripDetailPage {
 
   protected tabClass(selected: boolean): string {
     const base =
-      'min-h-11 shrink-0 rounded-lg px-4 py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-    return selected ? `${base} bg-accent text-surface` : `${base} bg-surface`;
+      'flex min-h-11 min-w-[68px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-3 py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+    return selected
+      ? `${base} bg-accent text-surface`
+      : `${base} border border-line-strong bg-surface`;
+  }
+
+  protected tabDayClass(): string {
+    return 'font-display text-lg font-medium';
+  }
+
+  // Faded rather than recoloured on the selected pill: the two detail lines sit
+  // on `bg-accent` there, where an ink token would be unreadable and the
+  // surface colour at full strength would compete with the day number above it.
+  protected tabDetailClass(selected: boolean): string {
+    const base = 'text-[10px] tabular-nums';
+    return selected ? `${base} opacity-80` : `${base} text-ink-muted`;
   }
 
   // Three ways to have no clause and one answer to all of them: nothing is worn

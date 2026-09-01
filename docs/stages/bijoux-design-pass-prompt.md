@@ -251,29 +251,42 @@ The visual half is all DR.4 takes: the per-layer `<h3>` becomes the uppercase ca
 - `frontend/src/app/features/trips/trip-form.ts`
 - `frontend/src/app/features/trips/trip-detail.page.ts`
 - `frontend/src/app/features/trips/trip-look.ts`
-- `frontend/src/app/features/trips/pack-wait.ts`
 - `frontend/src/app/features/trips/packing-list.ts`
 - touched specs updated for markup only
 
 **Behaviour is unchanged.**
 
-**Trip form (`/trips`):** header gets an uppercase caption "Plan a trip" above the h1 (`text-xs font-medium tracking-widest uppercase text-ink-soft`, new i18n key). The occasion chips inside the form use the `Chip` component with `variant="accent"` (multi-select feel).
+**Trip form (`/trips`):** header gets an uppercase caption "Plan a trip" above the h1 (`text-xs font-medium tracking-widest uppercase text-ink-soft`, new i18n key). The occasion chips inside the form use the `Chip` directive with the **default** variant. An earlier draft said `variant="accent"` "(multi-select feel)"; nothing here is multi-select — there is one row per day and one occasion chosen on each, which is the stylist's occasion row exactly, and DR.4 gave that the default variant. Two identical controls one screen apart do not get two looks.
 
-**Pack-wait:** the four status lines render in `text-ink-muted text-sm` and the seven-code error table maps each code to `text-danger text-sm font-medium` with `role="alert"`. If the wait ever spans a real skeleton (it does not today per the code comment — keep the plain sentence).
+**The wait and its errors — in `pack-wait.ts`'s two callers, not in `pack-wait.ts`.** That file has no template: it is `packErrorKey()` and `packStatus()`, a pure module both screens import (`DECISIONS.md` 207), so it has left this task's file list. The four status lines go to `text-ink-muted text-sm` in `trips.page.ts` and `trip-detail.page.ts`; the seven-code error table already renders `text-danger text-sm font-medium` with `role="alert"` on every path, so that half of this bullet was true before the pass began. The wait keeps its plain sentence and gains no skeleton.
 
-**Trip detail:** uppercase "Trip · <N> days" caption above an h1 Fraunces destination name, subtitle date range in `font-display text-lg text-ink-muted tabular-nums`.
+**Trip detail:** uppercase "Trip · <N> days" caption above the h1, subtitle date range in `font-display text-lg text-ink-muted tabular-nums`.
 
-**Reuse sentence:** wrap in `bg-surface-elevated border-inline-start-4 border-accent rounded-md p-3 pl-4`. `text-sm text-ink leading-relaxed`.
+**The destination h1 stays in the body face.** An earlier draft of this plan asked for Fraunces and was wrong for item detail's reason one screen over: the destination is a place name off the geocoder, Fraunces is latin-subset, and `DECISIONS.md` 071 names this screen among the four that must apply the body-face rule deliberately. `trip-detail.page.ts` carries that comment and `trip-detail.page.spec.ts` asserts the absent class outright — `expect(element().querySelector('h1')!.className).not.toContain('font-display')`. A stated floor outranks a plan bullet; a stated floor with a test under it is not a discussion.
 
-**Day strip:** each day pill is a 68px min-width flex-column card. Inactive: `bg-surface border border-line-strong rounded-lg` with weekday label uppercase `text-[10px] tracking-widest text-ink-soft`, day number `font-display text-lg font-medium`, temperature `text-[10px] text-ink-muted`. Active: `bg-accent text-surface` with the same three lines, opacity 0.8 on the labels.
+The caption is pluralised (`trip.view.caption.one` / `.other`): a one-day trip is legal, and one interpolated key would ship "Trip · 1 days".
 
-**Selected day header:** `font-display text-xl font-medium` day name, with an uppercase caption below showing occasion and temperature.
+**The reuse sentence is not touched.** An earlier draft asked to wrap it in a left-bordered callout. It is not an element: `trip.view.reuse` is interpolated *into* `headerLine()` through `trip.view.headerLine` — one string in one `<p>` — and `DECISIONS.md` 206 made it one deliberately, because "a sentence split across two ends of one screen is worse than either placement". Boxing the reuse half means splitting that computed back apart; boxing the whole counts-and-reuse line calls attention to both halves, which is not what a callout is for. (The draft's `border-inline-start-4` was not a class either — Tailwind 4 spells it `border-s-4` — and the `pl-4` beside it was physical, against this pass's own rules. Both die with the bullet.)
 
-**Trip look:** the tile grid inside a day mirrors the stylist look card's layer-grouped layout — wrap in `bg-surface rounded-2xl p-4 shadow-sm`. The swap button ↻ becomes a `<button appButton variant="secondary" [attr.aria-label]="…">` with an inline refresh SVG and compact caller-added padding (`px-3`) — height stays min-h-11 per the 44px floor.
+**Day strip:** each day pill is a 68px min-width flex-column card. Inactive: `bg-surface border border-line-strong rounded-lg`; active: `bg-accent text-surface`, with the detail lines at opacity 0.8.
 
-**Packing list:** wrap in `bg-surface rounded-xl overflow-hidden shadow-sm`. No card border — 05 line 650; the shadow carries it. Each row: 12px vertical padding, 14px horizontal, `border-be border-line` (last row has no border-be) — the row divider IS a line (that is edge definition inside the card, not a card border). 32px thumbnail (`rounded-md`), item name `text-sm`, reuse count on the right in `text-xs text-ink-soft tabular-nums`.
+**Four lines, and none of them is a weekday.** An earlier draft asked for weekday / day number / temperature. There is no weekday anywhere on this screen and there cannot be one: `DECISIONS.md` 206 refused a date formatter, and `day.date` is the ISO string the server sent. The draft also had no slot for the condition glyph, which is the strip's only weather signal and is `aria-hidden` decoration paired with an `sr-only` condition name. The pill keeps what it has: "Day N" in `font-display text-lg font-medium` (project-authored, so 071 permits the display face), the ISO date in `text-[10px] tabular-nums`, the glyph at `text-lg`, and the temperature in `text-[10px] tabular-nums`.
 
-**Trip actions row:** "Repack" is `Button` (secondary), "Delete" is `Button` (danger).
+**There is no selected-day header.** An earlier draft asked for a `font-display text-xl` day name over an occasion-and-temperature caption. Nothing like it exists to re-skin, and every fact in it is already on screen twice — the selected pill carries the day, the date and the temperature, and the look's own h2 sits directly beneath. A heading between them adds a line and no information.
+
+**Trip look:** wrap in `bg-surface rounded-2xl p-4 shadow-sm`.
+
+**The tile grid mirrors nothing and is not restructured.** Two earlier drafts said this grid mirrors the stylist look card — first its "2+3 layout", then, after DR.4, its "layer-grouped layout". Both were wrong, and the second was written without opening the file. `trip-look.ts` arranges `look().items` in `look_items.position` order — the order the model chose — in the four-column grid task 4.6 shipped, and its own header comment says that is not this pass's to change (`DECISIONS.md` 210).
+
+**The ↻ badge stays hand-rolled.** An earlier draft made it `<button appButton variant="secondary">` with `px-3`. The badge is a corner overlay — `absolute end-0 top-0 min-h-11 min-w-11 rounded-full bg-surface/90` — and three of those fight the directive on the same CSS properties: `rounded-full` against its `rounded-md`, `px-3` against its `px-5`, `bg-surface/90` against its `bg-surface`. Same-property conflicts are decided by stylesheet order, not by attribute order, which is not the additive composition DR.2's class-merge test guards. The badge is not a button in a row and does not want a button-in-a-row's shape.
+
+**Packing list:** wrap in `bg-surface rounded-xl overflow-hidden shadow-sm`. No card border — 05 line 650; the shadow carries it. Each row: 12px vertical padding, 14px horizontal, `border-be border-line` (last row has no border-be) — the row divider IS a line (that is edge definition inside the card, not a card border). Rows keep the checkbox and the name they have.
+
+**No thumbnails and no reuse counts.** An earlier draft asked for a 32px thumbnail and a per-row reuse count. The thumbnails would be the third rendering of the same photographs on one screen — `trip-look.ts` puts them on tiles directly above. The reuse count does not exist: `packing-list.ts` receives `[items]` and nothing else, so it is a new input plus arithmetic in `trip-detail.page.ts`, which is a feature and not a re-skin. The group heading takes the pass's section-label treatment (`text-xs font-medium tracking-widest uppercase text-ink-soft`) rather than staying `text-sm font-medium`, so the card reads as one thing.
+
+**Trip actions row:** "Repack" is `Button` (secondary). "Delete" binds its variant — `[variant]="armed() ? 'danger' : 'secondary'"` — rather than taking a fixed `danger`: the delete arms on the first press and fires on the second (`DECISIONS.md` 207, 126), and the colour change *is* the visible half of that gate. A permanently red delete makes the two presses look identical. The variant replaces the `[class.text-danger]` and `[class.font-medium]` bindings it had, so one owner paints the armed state.
+
+The row's `border-t border-current/10` becomes `border-bs border-line`.
 
 **Commit:** `refactor(web): trips visual refresh`
 

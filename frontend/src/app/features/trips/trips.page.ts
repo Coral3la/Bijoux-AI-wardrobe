@@ -33,8 +33,13 @@ function toRequest(draft: TripDraft, destination: string): PackRequest {
   imports: [TripForm],
   template: `
     <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
-      <header>
-        <h1 class="font-display text-3xl">{{ i18n.t('trip.title') }}</h1>
+      <header class="flex flex-col gap-1">
+        <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+          {{ i18n.t('trip.caption') }}
+        </p>
+        <h1 class="font-display text-4xl leading-tight tracking-tight">
+          {{ i18n.t('trip.title') }}
+        </h1>
       </header>
 
       @if (isPacking()) {
@@ -43,7 +48,9 @@ function toRequest(draft: TripDraft, destination: string): PackRequest {
              sentence, and a skeleton of a sentence is a grey bar pretending to
              be progress. The status line is the whole of the wait, and it is
              announced rather than silently replaced. -->
-        <p class="text-sm" role="status" aria-live="polite">{{ i18n.t(statusKey()) }}</p>
+        <p class="text-sm text-ink-muted" role="status" aria-live="polite">
+          {{ i18n.t(statusKey()) }}
+        </p>
       } @else {
         @if (error(); as key) {
           <p class="text-sm font-medium text-danger" role="alert">{{ i18n.t(key) }}</p>

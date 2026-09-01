@@ -13,6 +13,8 @@ import { MeApi } from '../../core/api/me.api';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { LocationResult } from '../../shared/models/location.model';
 import { OCCASIONS, Occasion } from '../../shared/models/enums';
+import { Button } from '../../shared/ui/button';
+import { Chip } from '../../shared/ui/chip';
 import { todayInLocalTime } from '../stylist/look-request-form';
 
 // The product bound, not the provider's. `look-request-form.ts` caps a single
@@ -118,6 +120,7 @@ export function tripProblem(draft: TripDraft): string | null {
 @Component({
   selector: 'app-trip-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Button, Chip],
   template: `
     <form class="flex flex-col gap-6" (submit)="submit($event)">
       <section class="flex flex-col gap-2">
@@ -128,7 +131,7 @@ export function tripProblem(draft: TripDraft): string | null {
                write, and Fraunces is latin-subset — DECISIONS.md 071 names the
                trip screen as one of the four surfaces that has to apply that
                rule deliberately. -->
-          <div class="flex items-center gap-3 rounded-lg bg-surface p-3">
+          <div class="flex items-center gap-3 rounded-xl bg-surface p-3 shadow-sm">
             <p class="text-sm">
               {{
                 i18n.t('trip.destination.result', { name: chosen.name, country: chosen.country })
@@ -234,17 +237,22 @@ export function tripProblem(draft: TripDraft): string | null {
         <!-- One row per day, in day order, which is the order the request
              schema requires: it checks that the numbers arrive as 1..n rather
              than merely being a permutation of them, because pack_trip reads
-             the tuple positionally. -->
+             the tuple positionally.
+
+             No [attr.aria-pressed] on the chips: the Chip directive announces
+             the state from the same input that paints it, and a template
+             binding beside it would win silently and be free to disagree. -->
         @for (occasion of draft().occasions; track $index; let day = $index) {
           <fieldset class="flex flex-col gap-2">
             <legend class="text-sm">{{ i18n.t('trip.day.legend', { day: day + 1 }) }}</legend>
             <div class="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
               @for (candidate of allOccasions; track candidate) {
                 <button
+                  appChip
                   type="button"
-                  [attr.aria-pressed]="occasion === candidate"
+                  [active]="occasion === candidate"
                   (click)="chooseOccasion(day, candidate)"
-                  [class]="chipClass(occasion === candidate)"
+                  class="shrink-0"
                 >
                   {{ i18n.t('vocabulary.occasion.' + candidate) }}
                 </button>
@@ -267,7 +275,7 @@ export function tripProblem(draft: TripDraft): string | null {
           [value]="draft().notes"
           [placeholder]="i18n.t('trip.notes.placeholder')"
           (input)="changeNotes($event)"
-          class="rounded-md border border-current/20 bg-surface p-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          class="rounded-md border border-line-strong bg-surface p-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         ></textarea>
       </div>
 
@@ -276,10 +284,11 @@ export function tripProblem(draft: TripDraft): string | null {
       }
 
       <button
+        appButton
         type="submit"
         [disabled]="problem() !== null"
         [attr.aria-describedby]="problem() === null ? null : 'trip-problem'"
-        class="min-h-11 rounded-md bg-accent px-4 text-surface disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        class="disabled:opacity-50"
       >
         {{ i18n.t('trip.submit') }}
       </button>
@@ -302,7 +311,7 @@ export class TripForm {
   protected readonly allOccasions = OCCASIONS;
   protected readonly horizon = tripHorizon();
   protected readonly fieldClass =
-    'min-h-11 rounded-md border border-current/20 bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+    'min-h-11 rounded-md border border-line-strong bg-surface px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
   // The type-ahead's own state, and the one thing this component does hold.
   // It is deliberately not in the draft: a half-typed query is not part of the
@@ -383,12 +392,6 @@ export class TripForm {
 
   protected changeNotes(event: Event): void {
     this.draftChanged.emit({ ...this.draft(), notes: (event.target as HTMLTextAreaElement).value });
-  }
-
-  protected chipClass(selected: boolean): string {
-    const base =
-      'min-h-11 shrink-0 rounded-full px-4 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-    return selected ? `${base} bg-accent text-surface` : `${base} bg-surface`;
   }
 
   protected submit(event: Event): void {
