@@ -8,9 +8,11 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Params, Router } from '@angular/router';
 
+import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { ItemFilters, WardrobeStore } from '../../core/state/wardrobe.store';
 import { CATEGORIES, COLORS } from '../../shared/models/enums';
+import { AuthoredLine } from '../../shared/ui/authored-line';
 import { Button } from '../../shared/ui/button';
 import { EmptyState } from '../../shared/ui/empty-state';
 import { FilterBar } from './filter-bar';
@@ -31,6 +33,24 @@ function member<T extends string>(value: string | null, vocabulary: readonly T[]
     : undefined;
 }
 
+// 05:00-11:59 morning, 12:00-17:59 afternoon, and the rest of the clock
+// evening. Exported for the spec, which is the only way to pin the boundaries
+// without three tests that each move the system clock. The hour is the
+// browser's own, which is the same clock `todayInLocalTime` reads.
+export function greetingSlot(now: Date): 'morning' | 'afternoon' | 'evening' {
+  const hour = now.getHours();
+  if (hour >= 5 && hour < 12) {
+    return 'morning';
+  }
+  // Both bounds, not `hour < 18`: the small hours never reach the morning
+  // branch, so a single upper bound calls 4am the afternoon. The spec's
+  // boundary test is what found that.
+  if (hour >= 12 && hour < 18) {
+    return 'afternoon';
+  }
+  return 'evening';
+}
+
 // Loose on purpose: the store's setter is what rounds and clamps a scale point,
 // so this only has to refuse what is not a number at all.
 function scale(value: string | null): number | undefined {
@@ -45,6 +65,7 @@ function scale(value: string | null): number | undefined {
   selector: 'app-wardrobe-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AuthoredLine,
     Button,
     EmptyState,
     FilterBar,
@@ -56,13 +77,26 @@ function scale(value: string | null): number | undefined {
   ],
   template: `
     <main class="mx-auto flex w-full max-w-5xl flex-col gap-region px-6 pt-hero pb-region">
-      <header class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h1 class="font-display text-4xl leading-tight tracking-tight">
-          {{ i18n.t('wardrobe.title') }}
-        </h1>
-        @if (!store.isLoading() && store.loadError() === null) {
-          <p class="font-display text-lg text-ink-muted tabular-nums">{{ countLabel() }}</p>
-        }
+      <header class="flex flex-col gap-group">
+        <!-- The first line in the product addressed to the person using it, and
+             the first caller of both DR.9's prose face and 213's split: the
+             sentence is ours and the name is theirs, so the name renders in the
+             content face inside it. Above the title row rather than inside it,
+             so the count keeps the baseline it shares with the heading. -->
+        <app-authored-line
+          class="block font-prose text-base text-ink-muted"
+          [key]="greeting().key"
+          [content]="greeting().content"
+        />
+
+        <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h1 class="font-display text-4xl leading-tight tracking-tight">
+            {{ i18n.t('wardrobe.title') }}
+          </h1>
+          @if (!store.isLoading() && store.loadError() === null) {
+            <p class="font-display text-lg text-ink-muted tabular-nums">{{ countLabel() }}</p>
+          }
+        </div>
       </header>
 
       <!-- Above every branch below rather than inside one: an empty wardrobe, a
@@ -202,10 +236,28 @@ function scale(value: string | null): number | undefined {
 export class WardrobePage {
   protected readonly i18n = inject(I18nService);
   protected readonly store = inject(WardrobeStore);
+  private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
   protected readonly sheetOpen = signal(false);
+
+  // Read once, from the constructor's clock, for the stylist dateline's reason:
+  // the part of the day a screen was opened in does not change under the reader.
+  private readonly slot = greetingSlot(new Date());
+
+  // Deliberately not `userLabel()`. That function falls back to the email
+  // address, which is the right answer for a "signed in as" label and the wrong
+  // one for a greeting — nobody is called coral@example.com. A blank name takes
+  // the nameless key instead, so the line keeps its shape and loses only the
+  // name; an absent parameter would not do, because `t` leaves an unsupplied
+  // placeholder visible on purpose. DECISIONS.md 215.
+  protected readonly greeting = computed(() => {
+    const name = this.auth.currentUser()?.display_name?.trim();
+    return name
+      ? { key: `wardrobe.hello.${this.slot}`, content: { name } }
+      : { key: `wardrobe.hello.nameless.${this.slot}`, content: undefined };
+  });
 
   // There is nothing to filter while the wardrobe is loading, broken or empty,
   // and a bar over the empty state would offer to narrow nothing.

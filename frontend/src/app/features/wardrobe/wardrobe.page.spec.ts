@@ -6,9 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import en from '../../../../public/i18n/en.json';
 import { environment } from '../../../environments/environment';
+import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { Item } from '../../shared/models/item.model';
-import { WardrobePage } from './wardrobe.page';
+import { User } from '../../shared/models/user.model';
+import { WardrobePage, greetingSlot } from './wardrobe.page';
 
 let fixture: ComponentFixture<WardrobePage>;
 let mock: HttpTestingController;
@@ -128,6 +130,10 @@ function sheet(): HTMLElement | null {
   return (fixture.nativeElement as HTMLElement).querySelector('app-upload-sheet');
 }
 
+function greetingLine(): HTMLElement | null {
+  return (fixture.nativeElement as HTMLElement).querySelector('app-authored-line');
+}
+
 function strip(): HTMLElement | null {
   return (fixture.nativeElement as HTMLElement).querySelector('app-pending-strip section');
 }
@@ -192,6 +198,27 @@ function create(): void {
   fixture = TestBed.createComponent(WardrobePage);
   fixture.detectChanges();
   flushStats();
+}
+
+// The greeting reads the signed-in user off AuthService, and every other
+// fixture in this file leaves it null — which is the nameless branch, and is
+// why the existing tests are undisturbed. `acceptProfile` is the same public
+// setter the profile screen writes through after a save.
+function signIn(displayName: string | null): void {
+  TestBed.inject(AuthService).acceptProfile({
+    id: 'user-1',
+    email: 'coral@example.com',
+    display_name: displayName,
+    height_cm: null,
+    size_top: null,
+    size_bottom: null,
+    size_shoe: null,
+    style_notes: null,
+    home_city: null,
+    home_lat: null,
+    home_lon: null,
+    created_at: '2026-08-19T09:00:00Z',
+  } as User);
 }
 
 async function render(items: readonly Item[], total = items.length): Promise<void> {
@@ -743,5 +770,66 @@ describe('WardrobePage', () => {
 
     vi.advanceTimersByTime(60_000);
     mock.expectNone((candidate) => candidate.method === 'GET');
+  });
+
+  // DR.10. The greeting is the first line in the product addressed to the
+  // person using it, and the first caller of both the prose face and 213's
+  // split. DECISIONS.md 215.
+  describe('the greeting', () => {
+    it('greets the signed-in user by name', async () => {
+      vi.setSystemTime(new Date(2026, 8, 1, 9));
+      signIn('Coral');
+      await render([item()]);
+
+      expect(greetingLine()?.textContent).toBe('Good morning, Coral');
+    });
+
+    // The name is theirs and the sentence is ours, so only the name leaves the
+    // prose face. This is what makes the line a caller of 213 rather than a
+    // string with a value in it.
+    it('renders only the name in the content face', async () => {
+      vi.setSystemTime(new Date(2026, 8, 1, 9));
+      signIn('Coral');
+      await render([item()]);
+
+      const faced = [...(greetingLine()?.querySelectorAll('span.font-sans') ?? [])];
+      expect(faced.map((span) => span.textContent)).toEqual(['Coral']);
+    });
+
+    // An account with no display name keeps the line and loses the name.
+    // `userLabel()` would have put an email address here.
+    it('keeps the greeting and drops the name when there is no display name', async () => {
+      vi.setSystemTime(new Date(2026, 8, 1, 9));
+      signIn(null);
+      await render([item()]);
+
+      expect(greetingLine()?.textContent).toBe('Good morning');
+      expect(greetingLine()?.querySelector('span.font-sans')).toBeNull();
+    });
+
+    it('follows the clock into the afternoon and the evening', async () => {
+      vi.setSystemTime(new Date(2026, 8, 1, 15));
+      signIn('Coral');
+      await render([item()]);
+
+      expect(greetingLine()?.textContent).toBe('Good afternoon, Coral');
+    });
+  });
+
+  // The boundaries themselves, pinned once rather than through four rendered
+  // fixtures that each move the system clock.
+  describe('greetingSlot', () => {
+    it('opens the morning at five and closes it at noon', () => {
+      expect(greetingSlot(new Date(2026, 8, 1, 4, 59))).toBe('evening');
+      expect(greetingSlot(new Date(2026, 8, 1, 5))).toBe('morning');
+      expect(greetingSlot(new Date(2026, 8, 1, 11, 59))).toBe('morning');
+      expect(greetingSlot(new Date(2026, 8, 1, 12))).toBe('afternoon');
+    });
+
+    it('closes the afternoon at six', () => {
+      expect(greetingSlot(new Date(2026, 8, 1, 17, 59))).toBe('afternoon');
+      expect(greetingSlot(new Date(2026, 8, 1, 18))).toBe('evening');
+      expect(greetingSlot(new Date(2026, 8, 1, 23, 59))).toBe('evening');
+    });
   });
 });
