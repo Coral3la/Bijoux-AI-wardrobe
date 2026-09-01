@@ -14,6 +14,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { LocationResult } from '../../shared/models/location.model';
 import { UserUpdate } from '../../shared/models/user.model';
+import { Button } from '../../shared/ui/button';
 
 // Mirrored from `02-DATA-MODEL.md`'s own `CHECK (height_cm BETWEEN 120 AND
 // 230)`, which the request schema refuses rather than Postgres. Another of the
@@ -48,88 +49,106 @@ function toWire(value: string): string | null {
 @Component({
   selector: 'app-profile-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule],
+  imports: [Button, ReactiveFormsModule],
   template: `
     <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
-      <h1 class="font-display text-3xl">{{ i18n.t('profile.title') }}</h1>
+      <header class="flex flex-col gap-1">
+        <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+          {{ i18n.t('profile.caption') }}
+        </p>
+        <h1 class="font-display text-4xl leading-tight tracking-tight">
+          {{ i18n.t('profile.title') }}
+        </h1>
+      </header>
 
       <form [formGroup]="form" (ngSubmit)="submit()" novalidate class="flex flex-col gap-6">
-        <label class="flex flex-col gap-1 text-sm">
-          {{ i18n.t('profile.displayName.label') }}
-          <input
-            type="text"
-            id="display_name"
-            formControlName="display_name"
-            [class]="fieldClass"
-          />
-        </label>
+        <!-- Four sections, divided rather than headed: the controls already
+             carry their own labels, and a heading over each would demote every
+             one of them to a subtitle. The first has no border because a rule
+             above the first group draws a line under the header. -->
+        <section class="flex flex-col gap-4">
+          <label class="flex flex-col gap-1 text-sm">
+            {{ i18n.t('profile.displayName.label') }}
+            <input
+              type="text"
+              id="display_name"
+              formControlName="display_name"
+              [class]="fieldClass"
+            />
+          </label>
 
-        <!-- Not a form control, unlike every other field here. The range
-             message is a computed, a computed over a plain form control never
-             recomputes because nothing tells it the value moved, and the number
-             value accessor would then be a second place the string becomes a
-             number. One signal, one coercion, one source for the wire. -->
-        <div class="flex flex-col gap-1">
-          <label for="height_cm" class="text-sm">{{ i18n.t('profile.height.label') }}</label>
-          <input
-            type="number"
-            id="height_cm"
-            [value]="height() ?? ''"
-            (input)="onHeight($event)"
-            [min]="MIN_HEIGHT_CM"
-            [max]="MAX_HEIGHT_CM"
-            [attr.aria-invalid]="heightOutOfRange() ? 'true' : null"
-            [attr.aria-describedby]="heightOutOfRange() ? 'height-error' : null"
-            [class]="fieldClass"
-          />
-          @if (heightOutOfRange()) {
-            <p id="height-error" class="text-sm font-medium text-danger">
-              {{ i18n.t('profile.height.range', { min: MIN_HEIGHT_CM, max: MAX_HEIGHT_CM }) }}
-            </p>
-          }
-        </div>
+          <!-- Not a form control, unlike every other field here. The range
+               message is a computed, a computed over a plain form control never
+               recomputes because nothing tells it the value moved, and the
+               number value accessor would then be a second place the string
+               becomes a number. One signal, one coercion, one source for the
+               wire. -->
+          <div class="flex flex-col gap-1">
+            <label for="height_cm" class="text-sm">{{ i18n.t('profile.height.label') }}</label>
+            <input
+              type="number"
+              id="height_cm"
+              [value]="height() ?? ''"
+              (input)="onHeight($event)"
+              [min]="MIN_HEIGHT_CM"
+              [max]="MAX_HEIGHT_CM"
+              [attr.aria-invalid]="heightOutOfRange() ? 'true' : null"
+              [attr.aria-describedby]="heightOutOfRange() ? 'height-error' : null"
+              [class]="fieldClass"
+            />
+            @if (heightOutOfRange()) {
+              <p id="height-error" class="text-sm font-medium text-danger">
+                {{ i18n.t('profile.height.range', { min: MIN_HEIGHT_CM, max: MAX_HEIGHT_CM }) }}
+              </p>
+            }
+          </div>
+        </section>
 
         <!-- Free text, all three. The size columns are TEXT with no vocabulary
              anywhere — 02-DATA-MODEL.md gives them no CHECK and enums.py no
              members — so a select here would be this screen inventing a
              vocabulary the database does not have. -->
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          @for (size of sizes; track size.name) {
-            <label class="flex flex-col gap-1 text-sm">
-              {{ i18n.t(size.label) }}
-              <input
-                type="text"
-                [id]="size.name"
-                [formControlName]="size.name"
-                [placeholder]="i18n.t(size.placeholder)"
-                [class]="fieldClass"
-              />
-            </label>
-          }
-        </div>
+        <section class="border-bs border-line pt-6">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            @for (size of sizes; track size.name) {
+              <label class="flex flex-col gap-1 text-sm">
+                {{ i18n.t(size.label) }}
+                <input
+                  type="text"
+                  [id]="size.name"
+                  [formControlName]="size.name"
+                  [placeholder]="i18n.t(size.placeholder)"
+                  [class]="fieldClass"
+                />
+              </label>
+            }
+          </div>
+        </section>
 
         <!-- The placeholder teaches by example, which is 05-FRONTEND-SPEC.md §8
              in as many words. This is the whole of the personalisation the
              brief sells: the string reaches the model verbatim, never matched
              or filtered, so an empty one is a USER PROFILE block that does not
              render at all. -->
-        <label class="flex flex-col gap-1 text-sm">
-          {{ i18n.t('profile.styleNotes.label') }}
-          <textarea
-            id="style_notes"
-            rows="3"
-            formControlName="style_notes"
-            [placeholder]="i18n.t('profile.styleNotes.placeholder')"
-            class="rounded-md border border-current/20 bg-surface p-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          ></textarea>
-        </label>
+        <section class="border-bs border-line pt-6">
+          <label class="flex flex-col gap-1 text-sm">
+            {{ i18n.t('profile.styleNotes.label') }}
+            <textarea
+              id="style_notes"
+              rows="3"
+              formControlName="style_notes"
+              [placeholder]="i18n.t('profile.styleNotes.placeholder')"
+              class="rounded-md border border-line-strong bg-surface p-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            ></textarea>
+          </label>
+        </section>
 
-        <section class="flex flex-col gap-2">
+        <section class="flex flex-col gap-2 border-bs border-line pt-6">
           <h2 class="text-sm font-medium">{{ i18n.t('profile.home.label') }}</h2>
-          <p class="text-sm opacity-70">{{ i18n.t('profile.home.hint') }}</p>
+          <p class="text-sm text-ink-muted">{{ i18n.t('profile.home.hint') }}</p>
 
           @if (home(); as chosen) {
-            <div class="flex items-center gap-3 rounded-lg bg-surface p-3">
+            <div class="flex items-center gap-3 rounded-xl bg-surface p-3 shadow-sm">
               <p class="text-sm">{{ chosen.city }}</p>
               <button
                 type="button"
@@ -193,13 +212,16 @@ function toWire(value: string): string | null {
           <p class="text-sm font-medium text-danger">{{ i18n.t('profile.error.save') }}</p>
         }
         @if (saved()) {
-          <p class="text-sm" role="status" aria-live="polite">{{ i18n.t('profile.saved') }}</p>
+          <p class="text-sm text-ink-muted" role="status" aria-live="polite">
+            {{ i18n.t('profile.saved') }}
+          </p>
         }
 
         <button
+          appButton
           type="submit"
           [disabled]="saving()"
-          class="min-h-11 self-start rounded-md bg-accent px-4 text-surface disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          class="self-start disabled:opacity-50"
         >
           {{ saving() ? i18n.t('profile.saving') : i18n.t('profile.save') }}
         </button>
@@ -216,7 +238,7 @@ export class ProfilePage {
   protected readonly MIN_HEIGHT_CM = MIN_HEIGHT_CM;
   protected readonly MAX_HEIGHT_CM = MAX_HEIGHT_CM;
   protected readonly fieldClass =
-    'min-h-11 rounded-md border border-current/20 bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+    'min-h-11 rounded-md border border-line-strong bg-surface px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
   protected readonly sizes = [
     {

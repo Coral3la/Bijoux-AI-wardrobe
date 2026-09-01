@@ -11,6 +11,7 @@ import { finalize } from 'rxjs';
 
 import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { Button } from '../../shared/ui/button';
 
 // Published rather than secret, and the same two strings live in
 // `backend/scripts/seed_demo.py`, which is what creates the account. Nothing
@@ -24,22 +25,32 @@ const DEMO_PASSWORD = 'bijoux-demo-wardrobe';
 @Component({
   selector: 'app-login-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [Button, ReactiveFormsModule, RouterLink],
   template: `
-    <main class="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-6 p-6">
-      <h1 class="font-display text-3xl">{{ i18n.t('login.title') }}</h1>
+    <main class="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-6 px-6 py-16">
+      <h1 class="font-display text-4xl leading-tight tracking-tight">
+        {{ i18n.t('login.title') }}
+      </h1>
 
+      <!-- The panel carries no colour of its own, and that is load-bearing:
+           the paragraph inside it does. One of these notices is danger and the
+           other deliberately is not (DECISIONS.md 057), and a tinted wrapper
+           would blur an asymmetry the spec asserts. -->
       @if (auth.restoreNotice() === 'signed-out') {
-        <p class="text-sm font-medium text-danger">{{ i18n.t('login.notice.signedOut') }}</p>
+        <div class="rounded-md bg-surface-elevated p-3 text-sm">
+          <p class="font-medium text-danger">{{ i18n.t('login.notice.signedOut') }}</p>
+        </div>
       }
       @if (auth.restoreNotice() === 'unreachable') {
-        <div class="flex flex-col items-start gap-2">
-          <p class="text-sm font-medium">{{ i18n.t('login.notice.unreachable') }}</p>
+        <div class="flex flex-col items-start gap-2 rounded-md bg-surface-elevated p-3 text-sm">
+          <p class="font-medium">{{ i18n.t('login.notice.unreachable') }}</p>
           <button
+            appButton
+            variant="ghost"
             type="button"
             (click)="retry()"
             [disabled]="auth.restoring()"
-            class="min-h-11 rounded-md px-3 text-sm underline disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            class="disabled:opacity-50"
           >
             {{ i18n.t('login.notice.retry') }}
           </button>
@@ -68,7 +79,7 @@ const DEMO_PASSWORD = 'bijoux-demo-wardrobe';
             aria-required="true"
             [attr.aria-invalid]="emailError ? 'true' : null"
             [attr.aria-describedby]="emailError ? 'email-error' : null"
-            class="min-h-11 rounded-md border border-ink/15 bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            class="min-h-11 rounded-md border border-line-strong bg-surface px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           />
           @if (emailError) {
             <p id="email-error" class="text-sm font-medium text-danger">{{ emailError }}</p>
@@ -86,7 +97,7 @@ const DEMO_PASSWORD = 'bijoux-demo-wardrobe';
             aria-required="true"
             [attr.aria-invalid]="passwordError ? 'true' : null"
             [attr.aria-describedby]="passwordError ? 'password-error' : null"
-            class="min-h-11 rounded-md border border-ink/15 bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            class="min-h-11 rounded-md border border-line-strong bg-surface px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           />
           @if (passwordError) {
             <p id="password-error" class="text-sm font-medium text-danger">{{ passwordError }}</p>
@@ -97,11 +108,7 @@ const DEMO_PASSWORD = 'bijoux-demo-wardrobe';
           <p class="text-sm font-medium text-danger">{{ message }}</p>
         }
 
-        <button
-          type="submit"
-          [disabled]="submitting()"
-          class="min-h-11 rounded-md bg-accent px-4 text-surface disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
+        <button appButton type="submit" [disabled]="submitting()" class="disabled:opacity-50">
           {{ submitting() ? i18n.t('login.submitting') : i18n.t('login.submit') }}
         </button>
       </form>
@@ -114,14 +121,16 @@ const DEMO_PASSWORD = 'bijoux-demo-wardrobe';
            to save the demo account over somebody's stored login. DECISIONS.md 136. -->
       <div class="flex flex-col gap-1">
         <button
+          appButton
+          variant="secondary"
           type="button"
           (click)="viewDemo()"
           [disabled]="submitting()"
-          class="min-h-11 rounded-md border border-ink/15 px-4 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          class="disabled:opacity-50"
         >
           {{ i18n.t('login.demo.action') }}
         </button>
-        <p class="text-sm opacity-70">{{ i18n.t('login.demo.hint') }}</p>
+        <p class="text-sm text-ink-muted">{{ i18n.t('login.demo.hint') }}</p>
       </div>
 
       <a

@@ -12,6 +12,7 @@ import { finalize } from 'rxjs';
 
 import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { Button } from '../../shared/ui/button';
 
 // Hand-copied from the backend: MIN_PASSWORD_LENGTH in app/schemas/auth.py and
 // MAX_PASSWORD_BYTES in app/core/security.py. Nothing compares the two, and the
@@ -37,10 +38,12 @@ function requiredText(control: AbstractControl): ValidationErrors | null {
 @Component({
   selector: 'app-register-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [Button, ReactiveFormsModule, RouterLink],
   template: `
-    <main class="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-6 p-6">
-      <h1 class="font-display text-3xl">{{ i18n.t('register.title') }}</h1>
+    <main class="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-6 px-6 py-16">
+      <h1 class="font-display text-4xl leading-tight tracking-tight">
+        {{ i18n.t('register.title') }}
+      </h1>
 
       <!-- novalidate, and no native 'required' on any field: both would hand
            submission back to the browser's constraint validation, which blocks
@@ -63,7 +66,7 @@ function requiredText(control: AbstractControl): ValidationErrors | null {
             aria-required="true"
             [attr.aria-invalid]="nameError ? 'true' : null"
             [attr.aria-describedby]="nameError ? 'displayName-error' : null"
-            class="min-h-11 rounded-md border border-ink/15 bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            class="min-h-11 rounded-md border border-line-strong bg-surface px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           />
           @if (nameError) {
             <p id="displayName-error" class="text-sm font-medium text-danger">{{ nameError }}</p>
@@ -83,7 +86,7 @@ function requiredText(control: AbstractControl): ValidationErrors | null {
             aria-required="true"
             [attr.aria-invalid]="emailError ? 'true' : null"
             [attr.aria-describedby]="emailError ? 'email-error' : null"
-            class="min-h-11 rounded-md border border-ink/15 bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            class="min-h-11 rounded-md border border-line-strong bg-surface px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           />
           @if (emailError) {
             <p id="email-error" class="text-sm font-medium text-danger">{{ emailError }}</p>
@@ -101,7 +104,7 @@ function requiredText(control: AbstractControl): ValidationErrors | null {
             aria-required="true"
             [attr.aria-invalid]="passwordError ? 'true' : null"
             [attr.aria-describedby]="passwordError ? 'password-error' : null"
-            class="min-h-11 rounded-md border border-ink/15 bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            class="min-h-11 rounded-md border border-line-strong bg-surface px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           />
           @if (passwordError) {
             <p id="password-error" class="text-sm font-medium text-danger">{{ passwordError }}</p>
@@ -112,11 +115,7 @@ function requiredText(control: AbstractControl): ValidationErrors | null {
           <p class="text-sm font-medium text-danger">{{ message }}</p>
         }
 
-        <button
-          type="submit"
-          [disabled]="submitting()"
-          class="min-h-11 rounded-md bg-accent px-4 text-surface disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
+        <button appButton type="submit" [disabled]="submitting()" class="disabled:opacity-50">
           {{ submitting() ? i18n.t('register.submitting') : i18n.t('register.submit') }}
         </button>
       </form>

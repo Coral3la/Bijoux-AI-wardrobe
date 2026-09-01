@@ -33,10 +33,18 @@ export const NAV_ITEMS = [
              lit on /wardrobe/:id and under ?category=tops, which the grid writes
              on every filter change. An exact option compares query params
              exactly and would switch this off the first time anybody filters. -->
+        <!-- The muted colour is a class binding off the directive's own
+             isActive rather than a second class in the static list: text-accent
+             and text-ink-muted set the same property, and two utilities for one
+             property are settled by the order of the compiled stylesheet, not
+             by the order they are written here. Bound, the inactive colour is
+             simply absent whenever the active one is present. -->
         <a
           [routerLink]="entry.path"
-          routerLinkActive="font-medium text-accent"
+          routerLinkActive="bg-accent-wash font-medium text-accent"
+          #active="routerLinkActive"
           ariaCurrentWhenActive="page"
+          [class.text-ink-muted]="!active.isActive"
           class="inline-flex min-h-11 shrink-0 items-center rounded-md px-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           {{ i18n.t(entry.key) }}

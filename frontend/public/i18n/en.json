@@ -272,6 +272,7 @@
   "item.delete.working": "Deleting…",
   "wardrobe.item.open": "Open {{name}}",
   "wardrobe.item.addManually": "Add tags by hand",
+  "profile.caption": "About you",
   "profile.title": "Profile",
   "profile.displayName.label": "Display name",
   "profile.height.label": "Height (cm)",
