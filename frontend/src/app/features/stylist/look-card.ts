@@ -4,13 +4,7 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { CATEGORIES, Category, LAYERS, Layer, roleOf } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
 import { Feedback, Look, MissingPiece } from '../../shared/models/look.model';
-import { Button } from '../../shared/ui/button';
 import { ItemCard } from '../wardrobe/item-card';
-
-interface LayerGroup {
-  readonly headingKey: string;
-  readonly items: Item[];
-}
 
 // Both ranks send null to the end rather than to the front. A tagged item
 // always carries both — validate_tags requires them — so a null here is a row
@@ -27,92 +21,120 @@ function isCategory(value: string): value is Category {
   return (CATEGORIES as readonly string[]).includes(value);
 }
 
+const ICON_BUTTON =
+  'inline-flex h-11 w-11 items-center justify-center rounded-full border text-base disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+
 @Component({
   selector: 'app-look-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ItemCard],
+  imports: [ItemCard],
   template: `
-    <article class="flex flex-col gap-5 rounded-2xl bg-surface p-5 shadow-md">
+    <!-- No wrapper, no fill, no shadow. The look is the last thing on the page
+         and there is nothing beside it to be separated from, so a card here was
+         a box drawn around the only object in the room. It sits on the canvas
+         the same way the wardrobe grid does. DECISIONS.md 220. -->
+    <article class="flex flex-col gap-4">
       <header class="flex flex-col gap-1">
-        <!-- Body face, not font-display: the title is written by the model, and
-             05-FRONTEND-SPEC.md's "The display face is for chrome we author"
-             reserves Fraunces for what this project wrote. It is also
-             latin-subset, so a non-Latin word in a display heading renders in
-             two faces on one line — true, and the second reason rather than the
-             first. DECISIONS.md 071. -->
-        <h2 class="text-2xl">{{ look().title }}</h2>
+        <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <!-- The content face at a display size, which is 071 read exactly as
+               it is written: the title was composed by the model, so what it
+               gains in a redesign is size and leading and never a face. The
+               picked mockup draws it in Cormorant; the rule is older than the
+               mockup and was reaffirmed on the wardrobe tile caption one commit
+               ago on the same class of string. DECISIONS.md 071, 220. -->
+          <h2 class="font-sans text-[28px] leading-tight tracking-[-0.01em]">
+            {{ look().title }}
+          </h2>
+          <!-- Chrome, and a number: this project counted the items, so it takes
+               the mono face every other number on a converted screen takes. -->
+          <span
+            class="font-mono text-[11px] tracking-[0.18em] text-ink-soft uppercase tabular-nums"
+          >
+            {{ piecesLabel() }}
+          </span>
+        </div>
         @if (message(); as line) {
-          <p class="text-sm">{{ line }}</p>
+          <p class="font-sans text-sm text-ink-muted italic">{{ line }}</p>
         }
       </header>
 
-      @for (group of groups(); track group.headingKey) {
-        <section class="flex flex-col gap-2">
-          <h3 class="text-xs font-medium tracking-widest text-ink-soft uppercase">
-            {{ i18n.t(group.headingKey) }}
-          </h3>
-          <ul class="grid grid-cols-3 gap-3">
-            @for (item of group.items; track item.id) {
-              <li class="relative">
-                <app-item-card [item]="item" />
+      <!-- One strip, no layer headings. Sorted by layer then category still —
+           the order is what 05-FRONTEND-SPEC.md asks for and it survives the
+           grouping being dropped — but the layer is printed under each tile
+           instead of over a section of them. Four headings above four garments
+           was more chrome than the thing it organised. DECISIONS.md 220. -->
+      <ul class="grid grid-cols-2 gap-x-3 gap-y-5 md:grid-cols-4">
+        @for (item of sorted(); track item.id) {
+          <li class="flex flex-col gap-2">
+            <div class="relative">
+              <!-- ItemCard captions itself on the wardrobe grid, where the
+                   second line is the garment's colour. Here it is the layer,
+                   so the card draws its own and turns that one off. -->
+              <app-item-card [item]="item" [caption]="false" />
 
-                <!-- Beside the tile rather than inside ItemCard, which the
-                     wardrobe grid renders too: a badge that only ever appears
-                     in a look does not belong to the component both screens
-                     share. It is a sibling of the tile's link and never inside
-                     it, for item-card.ts's reason — an anchor containing a
-                     button is nested interactive content. -->
-                @if (isSwappable(item)) {
-                  <button
-                    type="button"
-                    (click)="swap.emit(item)"
-                    [disabled]="swappingItemId() !== null"
-                    [attr.aria-label]="i18n.t('stylist.look.swap', { item: name(item) })"
-                    class="absolute end-0 top-0 min-h-11 min-w-11 rounded-full bg-surface/90 text-lg disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  >
-                    ↻
-                  </button>
-                }
+              <!-- Beside the tile rather than inside ItemCard, which the
+                   wardrobe grid renders too: a badge that only ever appears
+                   in a look does not belong to the component both screens
+                   share. It is a sibling of the tile's link and never inside
+                   it, for item-card.ts's reason — an anchor containing a
+                   button is nested interactive content. -->
+              @if (isSwappable(item)) {
+                <button
+                  type="button"
+                  (click)="swap.emit(item)"
+                  [disabled]="swappingItemId() !== null"
+                  [attr.aria-label]="i18n.t('stylist.look.swap', { item: name(item) })"
+                  class="absolute end-1 top-1 inline-flex h-11 w-11 items-center justify-center rounded-full border border-line bg-canvas/90 text-base disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  ↻
+                </button>
+              }
 
-                <!-- Over this tile and nothing else. The card keeps its
-                     layout, its headings and every other garment while one
-                     piece is being replaced. -->
-                @if (swappingItemId() === item.id) {
-                  <div
-                    class="absolute inset-0 flex items-center justify-center rounded-xl bg-surface/80"
-                    role="status"
-                  >
-                    <span class="sr-only">{{ i18n.t('stylist.look.swapping') }}</span>
-                    <span
-                      class="h-6 w-6 animate-spin rounded-full border-2 border-current/30 border-t-current"
-                      aria-hidden="true"
-                    ></span>
-                  </div>
-                }
-              </li>
-            }
-          </ul>
-        </section>
-      }
+              <!-- Over this tile's photograph and nothing else. The strip keeps
+                   its layout, its captions and every other garment while one
+                   piece is being replaced. -->
+              @if (swappingItemId() === item.id) {
+                <div
+                  class="absolute inset-0 flex items-center justify-center rounded-[2px] bg-canvas/80"
+                  role="status"
+                >
+                  <span class="sr-only">{{ i18n.t('stylist.look.swapping') }}</span>
+                  <span
+                    class="h-6 w-6 animate-spin rounded-full border-2 border-current/30 border-t-current"
+                    aria-hidden="true"
+                  ></span>
+                </div>
+              }
+            </div>
 
-      <!-- The label is a <p> rather than an <h3>: the two headings this card
-           does have are the layer groups and the missing-piece list, both of
-           which name a set of things, and a third one over the model's prose
-           would put a section in the outline that has no section under it. -->
-      <div class="flex flex-col gap-2 rounded-xl bg-surface-elevated p-4">
-        <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
-          {{ i18n.t('stylist.look.whyThis') }}
-        </p>
-        <p class="text-sm leading-relaxed">{{ look().reasoning }}</p>
-        <p class="text-sm leading-relaxed">{{ look().weather_note }}</p>
+            <div class="flex flex-col gap-0.5">
+              <span class="font-sans text-sm text-ink">{{ name(item) }}</span>
+              @if (meta(item); as line) {
+                <span class="text-[10px] font-medium tracking-[0.18em] text-ink-soft uppercase">
+                  {{ line }}
+                </span>
+              }
+            </div>
+          </li>
+        }
+      </ul>
+
+      <!-- Two lines and no box. The label this used to carry — a caps eyebrow
+           reading "Why this" — named a section that is one sentence long, and
+           a sentence that has to be introduced is a sentence nobody reads.
+           Both are the model's prose, so both take the content face at the size
+           the direction asks for. DECISIONS.md 071, 220. -->
+      <div class="flex flex-col gap-1">
+        <p class="font-sans text-base leading-relaxed text-ink italic">{{ look().reasoning }}</p>
+        <p class="font-sans text-sm text-ink-muted italic">{{ look().weather_note }}</p>
       </div>
 
       @if (missingPieces().length > 0) {
-        <section class="flex flex-col gap-1 text-sm text-ink-muted">
-          <h3 class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+        <section class="flex flex-col gap-1">
+          <h3 class="text-[10px] font-medium tracking-[0.18em] text-ink-soft uppercase">
             {{ i18n.t('stylist.look.missing') }}
           </h3>
-          <ul class="flex flex-col gap-1">
+          <ul class="flex flex-col gap-1 font-sans text-sm text-ink-muted italic">
             @for (piece of missingPieces(); track $index) {
               <li>{{ pieceLine(piece) }}</li>
             }
@@ -121,22 +143,24 @@ function isCategory(value: string): value is Category {
       }
 
       <!-- 05-FRONTEND-SPEC.md draws [♡ Save] [👍] [👎] [↻ Again] as one row;
-           the two thumbs are 3.3's and land between these. -->
-      <div class="flex items-center gap-3">
+           the two thumbs are 3.3's and land between these. Circles on a
+           hairline now rather than filled pills — three labelled buttons in a
+           row was the loudest object on a screen whose subject is four
+           photographs. They are 44px and not the mockup's 40: the floor is the
+           project's and older than the picture. DECISIONS.md 220. -->
+      <div class="flex items-center gap-2 border-t border-line pt-4">
         <!-- A toggle button with a fixed accessible name, rather than a label
              that swaps between "Save" and "Unsave": aria-pressed already
              carries the state, and changing both means a screen reader
              announces the change twice and disagrees with itself about which
              direction the press goes. -->
         <button
-          appButton
-          variant="secondary"
           type="button"
           (click)="save.emit()"
           [disabled]="busy()"
           [attr.aria-pressed]="look().is_saved"
           [attr.aria-label]="i18n.t('stylist.look.save')"
-          class="disabled:opacity-50"
+          [class]="saveClass()"
         >
           <span aria-hidden="true">{{ look().is_saved ? '♥' : '♡' }}</span>
         </button>
@@ -148,39 +172,38 @@ function isCategory(value: string): value is Category {
              the heart's reason one control along.
 
              The pressed state is a ring rather than a second glyph: emoji have
-             no hollow/filled pair for thumbs the way ♡/♥ are a pair, and the
-             nearest thing — the same thumb with a skin-tone modifier — would
-             encode "off" as a skin tone. aria-pressed is what actually carries
-             the state; the ring is its visible half. -->
+             no hollow/filled pair for thumbs the way the two hearts are a pair,
+             and the nearest thing — the same thumb with a skin-tone modifier —
+             would encode "off" as a skin tone. The heart can fill because it
+             has a filled twin; the thumbs cannot, which is why the two controls
+             do not share a pressed treatment. -->
         <button
-          appButton
-          variant="secondary"
           type="button"
           (click)="rate(1)"
           [disabled]="busy()"
           [attr.aria-pressed]="look().feedback === 1"
           [attr.aria-label]="i18n.t('stylist.look.thumbUp')"
-          [class.ring-2]="look().feedback === 1"
-          class="ring-accent disabled:opacity-50"
+          [class]="thumbClass(look().feedback === 1)"
         >
           <span aria-hidden="true">👍</span>
         </button>
 
         <button
-          appButton
-          variant="secondary"
           type="button"
           (click)="rate(-1)"
           [disabled]="busy()"
           [attr.aria-pressed]="look().feedback === -1"
           [attr.aria-label]="i18n.t('stylist.look.thumbDown')"
-          [class.ring-2]="look().feedback === -1"
-          class="ring-accent disabled:opacity-50"
+          [class]="thumbClass(look().feedback === -1)"
         >
           <span aria-hidden="true">👎</span>
         </button>
 
-        <button appButton variant="ghost" type="button" (click)="tryAgain.emit()" class="ms-auto">
+        <button
+          type="button"
+          (click)="tryAgain.emit()"
+          class="ms-auto inline-flex min-h-11 items-center text-[11px] font-medium tracking-[0.22em] text-accent uppercase underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
           {{ i18n.t('stylist.look.tryAgain') }}
         </button>
       </div>
@@ -209,30 +232,57 @@ export class LookCard {
   // clears it, so the same button emits 1 on one press and null on the next.
   readonly rated = output<Feedback | null>();
 
-  // Sorted by layer then category, then cut into runs — which is the whole of
-  // the grouping, because a run can only break where the layer changes once
-  // the list is in layer order. The headings come from the shared vocabulary
-  // so the card names a layer the same way the tag editor does.
-  protected readonly groups = computed<readonly LayerGroup[]>(() => {
-    const sorted = [...this.look().items].sort(
+  // Sorted by layer then category, and no longer cut into runs. The sort is
+  // 05-FRONTEND-SPEC.md's — the sequence a user's eye and a screen reader both
+  // take — and it outlives the grouping the headings gave it.
+  protected readonly sorted = computed<readonly Item[]>(() =>
+    [...this.look().items].sort(
       (a, b) =>
         layerRank(a.layer) - layerRank(b.layer) ||
         categoryRank(a.category) - categoryRank(b.category),
-    );
+    ),
+  );
 
-    const groups: LayerGroup[] = [];
-    for (const item of sorted) {
-      const headingKey =
-        item.layer === null ? 'stylist.look.layerOther' : `vocabulary.layer.${item.layer}`;
-      const current = groups.at(-1);
-      if (current?.headingKey === headingKey) {
-        current.items.push(item);
-      } else {
-        groups.push({ headingKey, items: [item] });
-      }
-    }
-    return groups;
+  // I18nService has no plural rule (DECISIONS.md 058), so the caller picks the
+  // key. A look of one is reachable — a dress with nothing else that passed the
+  // rules — so the singular is not hypothetical.
+  protected readonly piecesLabel = computed(() => {
+    const count = this.look().items.length;
+    return count === 1
+      ? this.i18n.t('stylist.look.pieces.one')
+      : this.i18n.t('stylist.look.pieces.other', { count });
   });
+
+  // Both halves are our own closed vocabulary, so the line is chrome and the
+  // separator is language and lives in the string table with it. Either half
+  // can be absent on a row the wardrobe never finished tagging, and the key is
+  // only used when both are there — `t()` leaves an unsupplied placeholder
+  // visible on purpose, so half this line would read "Base layer · {{category}}".
+  protected meta(item: Item): string | null {
+    const layer = item.layer === null ? null : this.i18n.t(`vocabulary.layer.${item.layer}`);
+    const category =
+      item.category === null ? null : this.i18n.t(`vocabulary.category.${item.category}`);
+    if (layer !== null && category !== null) {
+      return this.i18n.t('stylist.look.meta', { layer, category });
+    }
+    return layer ?? category;
+  }
+
+  // The heart fills because it has a filled twin; the ring is what the thumbs
+  // get instead. Written out rather than bound class by class because the
+  // pressed heart changes three properties at once and a chain of
+  // [class.x] bindings for one state is harder to read than one string.
+  protected saveClass(): string {
+    return this.look().is_saved
+      ? `${ICON_BUTTON} border-accent bg-accent text-canvas`
+      : `${ICON_BUTTON} border-line text-ink`;
+  }
+
+  protected thumbClass(active: boolean): string {
+    return active
+      ? `${ICON_BUTTON} border-accent text-ink ring-2 ring-accent`
+      : `${ICON_BUTTON} border-line text-ink`;
+  }
 
   // No badge on a dress, and that is the vocabulary rather than the layout:
   // replacing a dress can legally return a top and a bottom, which `04`'s
@@ -250,7 +300,9 @@ export class LookCard {
   }
 
   // The badge's accessible name has to say which garment it replaces: six ↻
-  // buttons on one card are otherwise six identical announcements.
+  // buttons on one card are otherwise six identical announcements. It is also
+  // the caption under the tile now, which is the same string for the same
+  // reason — a garment is named by what it is.
   protected name(item: Item): string {
     return item.display_name ?? this.i18n.t('item.untitled');
   }

@@ -252,61 +252,64 @@ The tag editor is not optional polish. Vision tagging is wrong on roughly 10–2
 
 ### 5. Stylist — `/stylist`
 
+**Rewritten at the Ritual pass.** The three-state screen this section used to describe — ask, wait, look, each replacing the last — is gone. `DECISIONS.md` 220 is why.
+
 ```
-┌────────────────────────────────┐
-│  What's the occasion?          │
-│  [Casual][Work][Evening][Sport]│
-│                                │
-│  When?     [Today ▾]           │
-│  Coat?     [Auto][Yes][No]     │
-│  Notes     [_________________] │
-│                                │
-│  🌤 18°C · light rain later    │
-│                                │
-│        [ Style me ]            │
-└────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│ Stylist                 Clear · 22° / 27°    │  ← h1 + forecast, one rule under
+├──────────────────────────────────────────────┤
+│ ┌── stone panel ───────────────────────────┐ │
+│ │ OCCASION            COAT                 │ │  ← two chip rows, side by side ≥md
+│ │ [CASUAL][WORK][…]   [AUTO][YES][NO]      │ │
+│ │ WHEN     [2026-09-01]                    │ │
+│ │ NOTES    [__________________________]    │ │
+│ │                        [ STYLE ME → ]    │ │
+│ └──────────────────────────────────────────┘ │
+│                                              │
+│  … one slot: skeleton | look | ready line …  │
+└──────────────────────────────────────────────┘
 ```
 
-When arriving with an anchor, the item appears pinned above the form: *"Building around: light blue mom jeans"*, with an × to clear it.
+**The form is permanent.** It sits under the header in every state and is never swapped out — not for the wait, not for the result. Beneath it is **one slot with three states**: a four-tile skeleton with a cycling status line while a request is in flight, the look, or a muted italic *"Ready when you are."* when there is nothing to show.
 
-Submitting swaps the form for a look card. Expect 4–8 seconds — show a skeleton of the look card itself, not a spinner, and cycle two or three short status lines ("Reading the forecast…", "Going through your wardrobe…").
+**The submit label changes with the state and the flow does not.** `stylist.submit` (*Style me*) when no look is on screen, `stylist.submit.restyle` (*Change & restyle*) when one is. The **page** owns that choice and hands the form a key, because only the page knows whether a look exists.
 
-*Amended after task 3.3: the screen has a way out.* A **Back to wardrobe** link
-sits above the heading — `stylist.back`, the same string and the same treatment
-as item detail and profile, so it reads as the application's back link rather
-than this screen's invention. It is deliberately **outside** the three-way branch
-this section describes: that branch replaces everything below the heading, so a
-link inside it would disappear for the four to eight seconds of the wait and
-again for as long as the card is up, which is most of the time anybody spends
-here. A real anchor, not a history call — `/wardrobe` is a place, and the browser
-back button on a screen reached from the weather strip goes somewhere else.
-*This paragraph described a **Back to wardrobe** link and called it "the fourth
-hand-placed navigation control in the application". **Task 4.9 deleted it** along
-with the four other peer-level back links, and the count it quoted was wrong as
-well as stale — the tree held ten such controls, not four, and `AUDITS.md`
-O-29's closing note is the census. What the paragraph argues is still true of
-the navigation that replaced it: the way out of the stylist has to sit outside
-the three-way branch, and the bar does, one level further out than this screen.*
+**Changing a field while a look is on screen does not invalidate the look.** Nothing is re-requested until the button is pressed. The pitch proposed recalculating in place and it was declined: a look that changes while it is being read cannot be compared against the one you would get instead.
+
+**Try again clears the look** and the screen rests on the waiting line. The form never left, so nothing is re-mounted.
+
+**The anchor pin** sits above the form when the screen was reached with `?anchor=`: *"Building around: light blue mom jeans"*, with an × that clears both the pin and the query parameter.
+
+**The forecast is in the header**, beside the `h1`, not inside the form. Two elements: the condition in the authored prose face, the reading in mono — `Clear · 22° / 27°`. It names no day, because the forecast is for whatever date the picker holds. **There is no dateline**; it printed *"Today"* over a line that says it already.
+
+Expect 4–8 seconds. The status lines cycle *"Reading the forecast…"*, *"Going through your wardrobe…"*, *"Putting the look together…"* and rest on the last.
+
+*What this section used to carry, kept because the reasoning outlived the control.* It described a **Back to wardrobe** link and argued it had to sit **outside** the three-way branch, since that branch replaced everything below the heading and a link inside it would vanish for the wait and for as long as the card was up. **Task 4.9 deleted the link** along with the four other peer-level back links; `AUDITS.md` O-29's closing note is the census and `DECISIONS.md` 208 is the entry. The argument still holds and is now answered twice over: the way out is the navigation bar, one level further out than this screen — and there is no branch to fall inside of any more.
 
 ### 6. Look card — the visual payoff
 
 ```
-┌────────────────────────────────┐
-│  Morning meetings              │
-│  ┌──────┐  ┌──────┐            │
-│  │ top  │  │ outer│            │  cut-out images on a neutral card
-│  └──────┘  └──────┘            │
-│  ┌──────┐  ┌──────┐  ┌──────┐  │
-│  │bottom│  │shoes │  │ bag  │  │
-│  └──────┘  └──────┘  └──────┘  │
-│                                │
-│  "The high-rise jean balances  │  ← reasoning
-│   the oversized shirt…"        │
-│  🌤 18°C — the blazer is enough│  ← weather_note
-│                                │
-│  [♡ Save]  [👍]  [👎]  [↻ Again]│  ← feedback is Stage 3
-└────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│ Ease into the day                  4 PIECES  │  ← content face; mono kicker
+│ Warm morning, cooler evening.                │
+│ ┌────┐ ┌────┐ ┌────┐ ┌────┐                  │
+│ │ ↻  │ │ ↻  │ │ ↻  │ │ ↻  │                  │  ← 4 across ≥md, 2 on a phone
+│ └────┘ └────┘ └────┘ └────┘                  │
+│ Cashmere sweater  Wide-leg …                 │
+│ BASE LAYER · TOPS BASE LAYER · BOTTOMS       │
+│                                              │
+│ The trench is your answer for evenings…      │  ← reasoning, one line
+│ Layer up before six.                         │  ← weather_note
+│ ────────────────────────────────────────     │
+│ (♡) (👍) (👎)                    TRY AGAIN   │
+└──────────────────────────────────────────────┘
 ```
+
+**Rewritten at the Ritual pass.** It is **not a card**: no wrapper, no fill, no shadow, no radius. It sits directly on the canvas, because it is the last thing on the page and there is nothing beside it to be separated from. `/saved` renders looks among peers and keeps its own treatment.
+
+**Layer grouping is gone.** Items are still sorted by `layer` then `category` — the sequence a reader and a screen reader both take — but the `<h3>` headings that cut the sort into sections are deleted and the layer prints in each tile's meta line instead: `Base layer · Tops`, or the category alone when the layer is null, or nothing when neither is known. Four headings over four garments was more chrome than the thing it organised.
+
+**The title, the message, the reasoning, the weather note and every garment name are the model's words**, so all five take the content face at the sizes the direction asks for — `DECISIONS.md` 071, applied here against a mockup that drew them in the display serif. The **piece count**, the **tile meta lines**, the **missing-pieces label** and the **action names** are ours and keep the authored treatment.
 
 *Amended at task 3.2: the heart is built. Amended again at 3.3: so are the
 thumbs, and the heart stopped waiting for the server.* All three are **toggle
@@ -315,29 +318,26 @@ me" — with `aria-pressed` carrying the state, rather than labels that swap
 between Save and Unsave: a name that changes with the state announces the change
 twice and disagrees with itself about which way the next press goes.
 
-The heart's glyph (♡ / ♥) is `aria-hidden` decoration. **The thumbs use a ring
-rather than a second glyph**: emoji have no hollow/filled pair for 👍 the way
-♡/♥ are a pair, and the nearest thing — the same thumb with a skin-tone
-modifier — would encode "off" as a skin tone.
+**They are circles on a hairline now**, 44px, in a row above a rule: the heart **fills with the accent** when saved, because ♡ / ♥ are a real pair; the thumbs **take an accent ring**, because emoji have no hollow/filled pair for 👍 and the nearest thing — the same thumb with a skin-tone modifier — would encode "off" as a skin tone. **Try again** is a caps letter-spaced accent link pushed to the end of the row. 44px rather than the mockup's 40, which is the floor winning over the picture for the second time.
 
 **Pressing the thumb that is already on withdraws the rating** rather than
 rewriting it, sending `feedback: null`. The other thumb replaces it. A rating
 that could only be replaced and never withdrawn would make a mis-tap permanent
 in what 3.5 tells the stylist.
 
-**All three are optimistic** and roll back on failure, and the error line above
-the card reads both stores — until 3.3 it read the stylist's alone, so a failed
-heart tap rolled the control back and explained nothing. `DECISIONS.md` 182, 183.
+**All three are optimistic** and roll back on failure, and the error line — one
+for the whole screen, above the result slot — reads both stores.
+`DECISIONS.md` 182, 183.
 
-Items are laid out by `layer` and `category`, not in an arbitrary order. Tapping an item opens its detail page.
+Tapping an item opens its detail page.
 
-**Each item also carries a small ↻ badge.** Tapping it re-requests the same look with every other item locked and only that role replaced, adding the rejected item to `exclude_item_ids`. Show a spinner on that tile alone; the rest of the card stays put.
+**Each item also carries a small ↻ badge**, top-right of its photograph. Tapping it re-requests the same look with every other item locked and only that role replaced, adding the rejected item to `exclude_item_ids`. Show a spinner on that tile's photograph alone; the rest of the strip stays put.
 
-*Amended at task 2.11: **each item that has a role**, which is every garment except a dress.* `replace_role`'s vocabulary has no `dress` — replacing one can legally come back as a top and a bottom, which is a different look rather than a single-item swap — so a dress tile carries no badge and "Try again" is the only reroll for it. `02-DATA-MODEL.md`'s `role` section, `AUDITS.md` **O-25**, `DECISIONS.md` 175.
+*Amended at task 2.11: **each item that has a role**, which is every garment except a dress.* `replace_role`'s vocabulary has no `dress` — replacing one can legally come back as a top *and* a bottom, which is a different look rather than a single-item swap — so a dress tile carries no badge and "Try again" is the only reroll for it. `02-DATA-MODEL.md`'s `role` section, `AUDITS.md` **O-25**, `DECISIONS.md` 175.
 
 This matters more than it looks. Most of the time a suggested look is fine and exactly one piece is wrong — usually the shoes. "Try again" rerolls everything and loses the good parts, which is the single most common frustration with outfit apps. Per-item swap is cheap to build on top of the same endpoint and none of the competing apps offer it.
 
-If `missing_pieces` is non-empty, render a muted note beneath: *"A neutral closed shoe would complete this."*
+If `missing_pieces` is non-empty, render it as a small italic list under a caps label — not a boxed section.
 
 ### 6a. Saved looks — `/saved` *(Stage 3)*
 

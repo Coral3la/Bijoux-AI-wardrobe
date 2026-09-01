@@ -17,6 +17,7 @@ import { WardrobeStore } from '../../core/state/wardrobe.store';
 import { roleOf } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
 import { Feedback, Look, SuggestRequest } from '../../shared/models/look.model';
+import { Weather } from '../../shared/models/weather.model';
 import { Skeleton } from '../../shared/ui/skeleton';
 import { LookCard } from './look-card';
 import { LookDraft, LookRequestForm, todayInLocalTime } from './look-request-form';
@@ -32,20 +33,12 @@ const STATUS_KEYS = [
 
 export const STATUS_INTERVAL_MS = 2000;
 
-// The look card's own shape, five tiles — a skeleton of the thing being built
-// rather than a spinner, which is what §2.8 asks for and what makes the wait
-// read as progress. 05-FRONTEND-SPEC.md draws them 2 + 3; task 2.9 grouped the
-// card by layer instead, so it is the count that carries over, not the shape.
-const SKELETON_TILES = [0, 1, 2, 3, 4] as const;
-
-// The locale is pinned rather than read off the browser: there is one string
-// table and it is `en`, so a browser locale here would print the weekday in a
-// language nothing else on the screen is written in.
-const TODAY_FORMAT = new Intl.DateTimeFormat('en-GB', {
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-});
+// The strip's own shape, four tiles across — a skeleton of the thing being
+// built rather than a spinner, which is what §2.8 asks for and what makes the
+// wait read as progress. It was five while the card grouped by layer and laid
+// them out three to a row; the Ritual strip is four columns, so this is four.
+// DECISIONS.md 220.
+const SKELETON_TILES = [0, 1, 2, 3] as const;
 
 // All three optionals are omitted rather than sent as null. Absent is already
 // what the endpoint defaults them to — `include_outerwear: null` is "let the
@@ -70,40 +63,102 @@ function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [LookCard, LookRequestForm, Skeleton],
   template: `
-    <main class="mx-auto flex w-full max-w-2xl flex-col gap-region px-6 pt-hero pb-region">
-      <header class="flex flex-col gap-1">
-        <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
-          {{ todayLabel() }}
-        </p>
-        <h1 class="font-display text-4xl leading-tight tracking-tight">
+    <main class="mx-auto flex w-full max-w-4xl flex-col gap-region px-6 pt-hero pb-region">
+      <!-- The dateline that stood above this heading is gone with the branch
+           chain. It printed "Today · 1 September" over a forecast line that now
+           sits beside it and says the same word, and 211 built a formatter for
+           nineteen English month and weekday names that reached the screen from
+           outside the string table. The screen loses a fact the date picker two
+           rows down already carries. DECISIONS.md 211, 220. -->
+      <header
+        class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-b border-line pb-4"
+      >
+        <h1 class="font-display text-[40px] leading-none font-light tracking-[-0.02em] md:text-5xl">
           {{ i18n.t('stylist.title') }}
         </h1>
+        <!-- The forecast, moved out of the form. It is context for the whole
+             screen rather than the last thing read before pressing the button,
+             and the form is now permanent, so a line inside it would sit above
+             a look it had already been used to ask for.
+
+             Two elements and one rule, the same as the wardrobe strip: the
+             condition is a word out of our closed vocabulary and takes the
+             authored face, the reading is a number and takes the mono one. The
+             dot that joins them is in the string table with the degrees,
+             because it is punctuation rather than a separator this template
+             invented. DECISIONS.md 218, 220. -->
+        @if (store.weather(); as forecast) {
+          <p
+            class="flex flex-wrap items-baseline gap-x-2 font-prose text-[15px] text-ink-muted italic"
+          >
+            <span>{{ conditionLine(forecast) }}</span>
+            <span class="font-mono text-[13px] text-ink tabular-nums not-italic">
+              {{ readingLine(forecast) }}
+            </span>
+          </p>
+        }
       </header>
+
+      <!-- Pinned above the form, where 05-FRONTEND-SPEC.md puts it. It is not
+           one of the form's controls: the four in LookDraft are what the user
+           sets here, and the anchor is what she arrived carrying.
+
+           Grouped with the form rather than left a sibling of <main>: the pin
+           states what the form below it will build around, and at region
+           distance the two read as unrelated. DECISIONS.md 212. -->
+      <div class="flex flex-col gap-group">
+        @if (anchor(); as item) {
+          <div class="flex items-center gap-3 rounded-sm border border-line p-3">
+            <p class="font-prose text-base text-ink-muted italic">
+              {{ i18n.t('stylist.anchor.pinned', { item: name(item) }) }}
+            </p>
+            <button
+              type="button"
+              (click)="clearAnchor()"
+              [attr.aria-label]="i18n.t('stylist.anchor.clear')"
+              class="ms-auto min-h-11 min-w-11 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              ×
+            </button>
+          </div>
+        }
+
+        <!-- Always on screen, which is the whole of the Ritual direction and the
+             one behaviour change in it: the form was swapped out for the
+             skeleton and then for the look, so every reroll began by getting the
+             controls back. It stays, and the label under it is what changes.
+             DECISIONS.md 220. -->
+        <app-look-request-form
+          [draft]="draft()"
+          [submitLabel]="submitLabel()"
+          (draftChanged)="onDraftChanged($event)"
+          (submitted)="suggest()"
+        />
+      </div>
+
+      <!-- One error line for the whole screen, where there were two. Both
+           stores are read. Until 3.3 this read StylistStore alone, which meant a
+           failed heart tap rolled the control back and said nothing at all —
+           found by the rollback test one task later. -->
+      @if (cardError(); as key) {
+        <p class="text-sm font-medium text-danger">{{ i18n.t(key) }}</p>
+      }
 
       @if (store.isSuggesting()) {
         <section class="flex flex-col gap-group">
-          <div class="grid grid-cols-3 gap-3" aria-hidden="true">
+          <div class="grid grid-cols-2 gap-x-3 gap-y-5 md:grid-cols-4" aria-hidden="true">
             @for (tile of tiles; track tile) {
-              <app-skeleton class="aspect-square" radius="rounded-xl" />
+              <app-skeleton class="aspect-4/5" radius="rounded-[2px]" />
             }
           </div>
           <!-- The status line is the accessible name of the wait: the tiles
                above it are decoration and say so. aria-live so the cycling is
                announced rather than silently replaced under a screen reader. -->
-          <p class="text-sm" role="status" aria-live="polite">{{ i18n.t(statusKey()) }}</p>
+          <p class="font-prose text-base text-ink-muted italic" role="status" aria-live="polite">
+            {{ i18n.t(statusKey()) }}
+          </p>
         </section>
       } @else if (look(); as look) {
-        <!-- Above the card, and only a swap, a save or a rating can put it
-             there: the card is on screen, so the error is about the thing that
-             did not change rather than about a look that never arrived.
-
-             Both stores are read. Until 3.3 this line read StylistStore alone,
-             which meant a failed heart tap rolled the control back and said
-             nothing at all — found by the rollback test one task later. -->
-        @if (cardError(); as key) {
-          <p class="text-sm font-medium text-danger">{{ i18n.t(key) }}</p>
-        }
-
         <app-look-card
           [look]="look"
           [missingPieces]="missingPieces()"
@@ -116,41 +171,13 @@ function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
           (rated)="rate(look, $event)"
         />
       } @else {
-        @if (store.error(); as key) {
-          <p class="text-sm font-medium text-danger">{{ i18n.t(key) }}</p>
-        }
-
-        <!-- Pinned above the form, where 05-FRONTEND-SPEC.md puts it. It is not
-             one of the form's controls: the four in LookDraft are what the user
-             sets here, and the anchor is what she arrived carrying.
-
-             Grouped with the form rather than left a sibling of <main>: the pin
-             states what the form below it will build around, and at region
-             distance the two read as unrelated. DECISIONS.md 212. -->
-        <div class="flex flex-col gap-group">
-          @if (anchor(); as item) {
-            <div class="flex items-center gap-3 rounded-xl bg-surface p-3 shadow-sm">
-              <p class="text-sm">
-                {{ i18n.t('stylist.anchor.pinned', { item: name(item) }) }}
-              </p>
-              <button
-                type="button"
-                (click)="clearAnchor()"
-                [attr.aria-label]="i18n.t('stylist.anchor.clear')"
-                class="ms-auto min-h-11 min-w-11 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
-                ×
-              </button>
-            </div>
-          }
-
-          <app-look-request-form
-            [draft]="draft()"
-            [weather]="store.weather()"
-            (draftChanged)="onDraftChanged($event)"
-            (submitted)="suggest()"
-          />
-        </div>
+        <!-- The third state, and it is a sentence rather than an empty region.
+             Nothing has been asked for yet, or the last look has just been
+             cleared; either way the form above is the whole of what to do next,
+             so this says so and gets out of the way. -->
+        <p class="py-16 text-center font-prose text-[17px] text-ink-muted italic">
+          {{ i18n.t('stylist.ready') }}
+        </p>
       }
     </main>
   `,
@@ -165,12 +192,6 @@ export class StylistPage {
   private readonly wardrobe = inject(WardrobeStore);
 
   protected readonly tiles = SKELETON_TILES;
-
-  // Today, never the date in the picker: this is the screen's dateline rather
-  // than a readout of the form below it, and it is fixed for the visit for the
-  // same reason `horizon` is — the day a screen was opened on does not change
-  // under the reader.
-  private readonly today = TODAY_FORMAT.format(new Date());
 
   // The garment "Style around this" arrived with, or null. Held here rather
   // than in the draft for the same reason the draft is held here rather than in
@@ -196,9 +217,6 @@ export class StylistPage {
   private readonly statusIndex = signal(0);
   private timer: ReturnType<typeof setInterval> | null = null;
 
-  protected readonly todayLabel = computed(() =>
-    this.i18n.t('stylist.today', { date: this.today }),
-  );
   protected readonly statusKey = computed(() => STATUS_KEYS[this.statusIndex()]);
   // The suggested look, unless the heart has since written to it. StylistStore
   // holds what the stylist answered and LooksStore holds what PATCH answered,
@@ -220,6 +238,14 @@ export class StylistPage {
   // which is the point: with both live it would be picking on no principle.
   protected readonly cardError = computed(() => this.store.error() ?? this.looksStore.error());
   protected readonly message = computed(() => this.store.result()?.message ?? '');
+
+  // The form is permanent now, so the button under it has to say which of two
+  // things it does. It is the same flow either way — a look on screen is not
+  // invalidated by a field changing under it, and nothing re-requests until
+  // this is pressed. DECISIONS.md 220.
+  protected readonly submitLabel = computed(() =>
+    this.look() === null ? 'stylist.submit' : 'stylist.submit.restyle',
+  );
   protected readonly missingPieces = computed(() => this.store.result()?.missing_pieces ?? []);
 
   constructor() {
@@ -308,6 +334,25 @@ export class StylistPage {
 
   protected name(item: Item): string {
     return item.display_name ?? this.i18n.t('item.untitled');
+  }
+
+  // Split in two so the numbers can take the mono face without the sentence
+  // being fragmented: the condition is one word out of a closed vocabulary
+  // rather than a clause, so there is no sentence here to reorder and 218's
+  // objection does not apply. Neither half names a day — the forecast is for
+  // whatever date the picker holds, which is not always today.
+  protected conditionLine(weather: Weather): string {
+    return this.i18n.t(`vocabulary.condition.${weather.condition}`);
+  }
+
+  // Both temperatures, not one. `build_rule` reads the maximum (DECISIONS.md
+  // 142) but a person dressing reads the span — 12 to 19 is a different day
+  // from 18 to 19 under the same "partly cloudy".
+  protected readingLine(weather: Weather): string {
+    return this.i18n.t('stylist.weather.reading', {
+      min: Math.round(weather.temp_min_c),
+      max: Math.round(weather.temp_max_c),
+    });
   }
 
   // The parameter goes with the pin. Left in the URL it would come back on a

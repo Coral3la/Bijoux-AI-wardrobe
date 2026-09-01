@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import en from '../../../../public/i18n/en.json';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { OCCASIONS } from '../../shared/models/enums';
-import { Weather } from '../../shared/models/weather.model';
 import { LookDraft, LookRequestForm, forecastHorizon, todayInLocalTime } from './look-request-form';
 
 let fixture: ComponentFixture<LookRequestForm>;
@@ -24,26 +23,15 @@ function draft(overrides: Partial<LookDraft> = {}): LookDraft {
   };
 }
 
-function weather(overrides: Partial<Weather> = {}): Weather {
-  return {
-    date: '2026-08-27',
-    temp_min_c: 12,
-    temp_max_c: 19,
-    precip_mm: 0.2,
-    wind_kph: 14,
-    condition: 'partly_cloudy',
-    rule: 'Outerwear optional.',
-    ...overrides,
-  };
-}
-
-async function render(
-  initial: LookDraft = draft(),
-  forecast: Weather | null = null,
-): Promise<void> {
+// The forecast left this component at DR.20 — it is the page's header line now,
+// so the fixture no longer has one to hand over and stylist.page.spec.ts is
+// where the weather is asserted. DECISIONS.md 220.
+async function render(initial: LookDraft = draft(), submitLabel?: string): Promise<void> {
   fixture = TestBed.createComponent(LookRequestForm);
   fixture.componentRef.setInput('draft', initial);
-  fixture.componentRef.setInput('weather', forecast);
+  if (submitLabel !== undefined) {
+    fixture.componentRef.setInput('submitLabel', submitLabel);
+  }
   fixture.componentInstance.draftChanged.subscribe((next) => emitted.push(next));
   fixture.componentInstance.submitted.subscribe(() => submits++);
   await fixture.whenStable();
@@ -181,20 +169,6 @@ describe('LookRequestForm', () => {
     expect(emitted).toEqual([draft({ notes: 'meeting with a client' })]);
   });
 
-  it('prints both temperatures and the condition above the button', async () => {
-    await render(draft(), weather());
-
-    expect(text()).toContain('12–19°C · Partly cloudy');
-  });
-
-  // Absent rather than apologetic: an account with no home location has no
-  // forecast to print, and the suggest request is what says so.
-  it('prints nothing when there is no forecast', async () => {
-    await render(draft(), null);
-
-    expect(text()).not.toContain('°C');
-  });
-
   it('asks for a look on submit', async () => {
     await render();
 
@@ -202,6 +176,20 @@ describe('LookRequestForm', () => {
     await fixture.whenStable();
 
     expect(submits).toBe(1);
+  });
+
+  // The label is the parent's, because only the parent knows whether a look is
+  // on screen. It is a key rather than a rendered string, so the form keeps its
+  // one rule about strings — everything it prints, it looks up. A default that
+  // rendered the key itself would put "stylist.submit" on the button, which is
+  // the documented miss behaviour and would be visible here. DECISIONS.md 220.
+  it('labels the submit button from the key it was given, defaulting to Style me', async () => {
+    await render();
+    expect(text()).toContain(en['stylist.submit']);
+
+    await render(draft(), 'stylist.submit.restyle');
+    expect(text()).toContain(en['stylist.submit.restyle']);
+    expect(text()).not.toContain(en['stylist.submit']);
   });
 
   // Inside a form an untyped button submits it. Picking an occasion is not

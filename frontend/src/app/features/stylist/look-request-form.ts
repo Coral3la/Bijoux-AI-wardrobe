@@ -2,9 +2,6 @@ import { ChangeDetectionStrategy, Component, inject, input, output } from '@angu
 
 import { I18nService } from '../../core/i18n/i18n.service';
 import { OCCASIONS, Occasion } from '../../shared/models/enums';
-import { Weather } from '../../shared/models/weather.model';
-import { Button } from '../../shared/ui/button';
-import { Chip } from '../../shared/ui/chip';
 
 // Transcribed from 04-API-SPEC.md, which measured it against the provider on
 // 2026-08-26: `today + 15`, sixteen days counting today. It bounds the date
@@ -13,6 +10,20 @@ import { Chip } from '../../shared/ui/chip';
 // no lower bound: nothing in the docs refuses a past date, and inventing a
 // floor here would be this screen deciding something no document has.
 const FORECAST_HORIZON_DAYS = 15;
+
+// The second copy of this pair, and the one that turns the duplication into a
+// standing cost rather than a one-off. `filter-bar.ts` carries the same two
+// constants for the same reason: the shared `appChip` directive sets its font
+// size in the base string every variant shares, so 11px cannot be reached from
+// a call site. Two converted screens now draw an identical chip from two
+// declarations; the third screen to need it should convert the directive
+// instead of copying this again. DECISIONS.md 219, 220.
+const CHIP =
+  'inline-flex min-h-11 shrink-0 items-center rounded-full border px-4 text-[11px] font-medium tracking-[0.18em] uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+const CHIP_STATES = {
+  inactive: 'border-line text-ink-muted',
+  active: 'border-ink bg-ink text-canvas',
+} as const;
 
 // What the four controls hold, named for the wire wherever the wire has a name
 // (DECISIONS.md 059's rule applied to a shape that never goes on it). The
@@ -46,104 +57,136 @@ export function forecastHorizon(now = new Date()): string {
 @Component({
   selector: 'app-look-request-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, Chip],
   template: `
     <!-- A real form, so the return key submits from the date and notes fields
          the way it does on login. The occasion and coat controls are buttons
          with type="button" for the same reason: inside a form an untyped
-         button submits it, and picking "Evening" is not asking for a look. -->
-    <form class="flex flex-col gap-6" (submit)="submit($event)">
-      <fieldset class="flex flex-col gap-2">
-        <legend class="text-sm font-medium">{{ i18n.t('stylist.occasion.legend') }}</legend>
-        <!-- Scrolls rather than wraps, and nothing scrolls it for the user, for
-             the reason filter-bar.ts records: scrollIntoView is undefined in
-             jsdom. Six chips fit a phone where the wardrobe's nine did not.
+         button submits it, and picking "Evening" is not asking for a look.
 
-             No [attr.aria-pressed] here: the Chip directive announces the state
-             from the same input that paints it, and a template binding beside it
-             would win silently and be free to disagree. -->
-        <div class="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
-          @for (occasion of occasions; track occasion) {
-            <button
-              appChip
-              type="button"
-              [active]="draft().occasion === occasion"
-              (click)="chooseOccasion(occasion)"
-              class="shrink-0"
-            >
-              {{ i18n.t('vocabulary.occasion.' + occasion) }}
-            </button>
-          }
-        </div>
-      </fieldset>
+         The stone panel is what makes this read as a standing control rather
+         than a step. It is on screen under the look now, and a form drawn
+         straight onto the canvas beneath a result reads as leftover rather than
+         as the thing that produced it. DECISIONS.md 220. -->
+    <form class="flex flex-col gap-4 rounded-sm bg-surface-elevated p-6" (submit)="submit($event)">
+      <!-- Two dimensions on one row wherever there is width for them: occasion
+           and coat are both short chip rows, and pairing them is what gets the
+           whole control down to three bands from five. -->
+      <div class="grid gap-4 md:grid-cols-2">
+        <fieldset class="flex flex-col gap-2">
+          <legend class="text-[10px] font-medium tracking-[0.18em] text-ink-soft uppercase">
+            {{ i18n.t('stylist.occasion.legend') }}
+          </legend>
+          <!-- Wrapping, where 1.8's row scrolled: nothing ever scrolled it for
+               the user, and the Atelier chip is small enough that six of them
+               wrap to two lines on a phone.
+
+               aria-pressed is bound here rather than left to appChip, which
+               this row no longer uses. One expression paints and announces, so
+               there is nothing for the two to drift apart over. -->
+          <div class="flex flex-wrap items-center gap-1.5">
+            @for (occasion of occasions; track occasion) {
+              <button
+                type="button"
+                [attr.aria-pressed]="draft().occasion === occasion"
+                [class]="chipClass(draft().occasion === occasion)"
+                (click)="chooseOccasion(occasion)"
+              >
+                {{ i18n.t('vocabulary.occasion.' + occasion) }}
+              </button>
+            }
+          </div>
+        </fieldset>
+
+        <fieldset class="flex flex-col gap-2">
+          <legend class="text-[10px] font-medium tracking-[0.18em] text-ink-soft uppercase">
+            {{ i18n.t('stylist.coat.legend') }}
+          </legend>
+          <div class="flex flex-wrap items-center gap-1.5">
+            @for (choice of coatChoices; track choice.key) {
+              <button
+                type="button"
+                [attr.aria-pressed]="draft().include_outerwear === choice.value"
+                [class]="chipClass(draft().include_outerwear === choice.value)"
+                (click)="chooseCoat(choice.value)"
+              >
+                {{ i18n.t(choice.key) }}
+              </button>
+            }
+          </div>
+        </fieldset>
+      </div>
 
       <div class="flex flex-col gap-2">
-        <label for="look-date" class="text-sm font-medium">
-          {{ i18n.t('stylist.date.label') }}
-        </label>
+        <label
+          for="look-date"
+          class="text-[10px] font-medium tracking-[0.18em] text-ink-soft uppercase"
+          >{{ i18n.t('stylist.date.label') }}</label
+        >
         <input
           id="look-date"
           type="date"
           [value]="draft().date"
           [max]="horizon"
           (change)="chooseDate($event)"
-          class="min-h-11 rounded-md border border-line-strong bg-surface px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          class="min-h-11 rounded-sm border border-line bg-canvas px-3 py-2 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         />
       </div>
 
-      <fieldset class="flex flex-col gap-2">
-        <legend class="text-sm font-medium">{{ i18n.t('stylist.coat.legend') }}</legend>
-        <div class="flex items-center gap-2">
-          @for (choice of coatChoices; track choice.key) {
-            <button
-              appChip
-              type="button"
-              [active]="draft().include_outerwear === choice.value"
-              (click)="chooseCoat(choice.value)"
-              class="shrink-0"
-            >
-              {{ i18n.t(choice.key) }}
-            </button>
-          }
-        </div>
-      </fieldset>
-
       <div class="flex flex-col gap-2">
-        <label for="look-notes" class="text-sm font-medium">
-          {{ i18n.t('stylist.notes.label') }}
-        </label>
+        <label
+          for="look-notes"
+          class="text-[10px] font-medium tracking-[0.18em] text-ink-soft uppercase"
+          >{{ i18n.t('stylist.notes.label') }}</label
+        >
         <textarea
           id="look-notes"
-          rows="3"
+          rows="2"
           [value]="draft().notes"
           [placeholder]="i18n.t('stylist.notes.placeholder')"
           (input)="changeNotes($event)"
-          class="rounded-md border border-line-strong bg-surface p-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          class="rounded-sm border border-line bg-canvas px-3 py-2 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         ></textarea>
       </div>
 
-      <!-- Above the button, where 05-FRONTEND-SPEC.md's mockup puts it: it is
-           the last thing read before committing to a day. Absent rather than
-           apologetic when there is no forecast — see StylistStore.loadWeather. -->
-      @if (weather(); as forecast) {
-        <p class="text-sm">{{ weatherLine(forecast) }}</p>
-      }
-
-      <button appButton type="submit">{{ i18n.t('stylist.submit') }}</button>
+      <!-- The label is the parent's, because only the parent knows whether a
+           look is on screen: this is "Style me" on an empty screen and "Change
+           and restyle" under a result, and both press the same flow. The form
+           has no opinion about which, and holding one here would mean giving
+           the form a second input that says the same thing as the first.
+           DECISIONS.md 220. -->
+      <button
+        type="submit"
+        class="ms-auto inline-flex min-h-11 items-center gap-x-2 rounded-full border border-ink bg-ink px-6 text-[11px] font-medium tracking-[0.22em] text-canvas uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        {{ i18n.t(submitLabel()) }}
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="h-3 w-3"
+          aria-hidden="true"
+        >
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        </svg>
+      </button>
     </form>
   `,
 })
 export class LookRequestForm {
   protected readonly i18n = inject(I18nService);
 
-  // The draft is the page's, not this component's, and that is what makes a
-  // rejected request survivable: the form is unmounted while the skeleton is
-  // up, and state held here would take the user's notes down with it every
-  // time the endpoint answered 400. Same arrangement as FilterBar, for a
-  // different reason — there it was one owner for the URL, here it is one
-  // owner that outlives the control.
+  // The draft is the page's, not this component's. That was load-bearing until
+  // DR.20, when the form stopped unmounting: state held here used to go down
+  // with the skeleton and take the user's notes with it. It stays the page's
+  // because the page is what composes the request and what decides the submit
+  // label from the look — one owner, still, for a different reason.
   readonly draft = input.required<LookDraft>();
-  readonly weather = input<Weather | null>(null);
+  // An i18n key rather than a rendered string, so the form keeps its one rule
+  // about strings: everything it prints, it looks up.
+  readonly submitLabel = input('stylist.submit');
 
   readonly draftChanged = output<LookDraft>();
   readonly submitted = output<void>();
@@ -157,15 +200,8 @@ export class LookRequestForm {
     { key: 'stylist.coat.no', value: false },
   ] as const;
 
-  // Both temperatures, not one. `build_rule` reads the maximum (DECISIONS.md
-  // 142) but a person dressing reads the span — 12 to 19 is a different day
-  // from 18 to 19 under the same "partly cloudy".
-  protected weatherLine(weather: Weather): string {
-    return this.i18n.t('stylist.weather', {
-      min: Math.round(weather.temp_min_c),
-      max: Math.round(weather.temp_max_c),
-      condition: this.i18n.t(`vocabulary.condition.${weather.condition}`),
-    });
+  protected chipClass(active: boolean): string {
+    return `${CHIP} ${active ? CHIP_STATES.active : CHIP_STATES.inactive}`;
   }
 
   // Not single-valued the way the category chips are: tapping the selected

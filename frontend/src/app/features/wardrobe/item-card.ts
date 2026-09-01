@@ -105,7 +105,12 @@ import { Item } from '../../shared/models/item.model';
            separately: a tagged row may carry a name and a null colour. No
            backtick in this comment, which lives inside the template literal.
            DECISIONS.md 218. -->
-      @if (name() !== null || meta() !== null) {
+      <!-- Off on the look card, which captions its tiles itself: a garment in a
+           look is named beside its layer, not beside its colour, and two
+           captions under one photograph is the shape this input exists to
+           prevent. Defaulted on, so the wardrobe grid says nothing.
+           DECISIONS.md 220. -->
+      @if (caption() && (name() !== null || meta() !== null)) {
         <div class="flex flex-col gap-0.5">
           @if (name(); as garment) {
             <!-- The content face, and the picked mockup drew it in the display
@@ -136,6 +141,7 @@ export class ItemCard {
   readonly retrying = input(false);
   readonly errorKey = input<string | null>(null);
   readonly stoppedWaiting = input(false);
+  readonly caption = input(true);
 
   readonly retry = output<void>();
 

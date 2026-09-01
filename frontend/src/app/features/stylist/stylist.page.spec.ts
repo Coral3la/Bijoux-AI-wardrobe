@@ -342,14 +342,16 @@ describe('StylistPage', () => {
     expect(text()).toContain('Rain');
   });
 
-  // §2.8: a skeleton of the look card, never a bare spinner. The form goes
-  // while it is up — 05-FRONTEND-SPEC.md's "submitting swaps the form".
-  it('shows the look-card skeleton instead of the form while it waits', async () => {
+  // §2.8: a skeleton of the look strip, never a bare spinner — four tiles now,
+  // because the strip is four columns. The form stays: DR.20 replaced the
+  // three-way branch with a form that never leaves, so the wait happens under
+  // the controls rather than instead of them. DECISIONS.md 220.
+  it('shows the look-strip skeleton under the form while it waits', async () => {
     await render();
     await submit();
 
-    expect(skeletonTiles()).toHaveLength(5);
-    expect(form()).toBeNull();
+    expect(skeletonTiles()).toHaveLength(4);
+    expect(form()).not.toBeNull();
     expect(status()).toBe(en['stylist.waiting.forecast']);
 
     suggestRequest().flush(response());
@@ -412,13 +414,37 @@ describe('StylistPage', () => {
     expect(text()).toContain('Morning meetings');
     expect(text()).toContain('A casual outfit for a warm day.');
     expect(skeletonTiles()).toHaveLength(0);
-    expect(form()).toBeNull();
+    // The form is still there, and its button has changed what it says: the
+    // same press asks for another look rather than the first one.
+    expect(form()).not.toBeNull();
+    expect(text()).toContain(en['stylist.submit.restyle']);
+    expect(text()).not.toContain(en['stylist.ready']);
   });
 
-  // The card's "Try again" hands the form back rather than re-firing the last
-  // request, so the forecast has to be asked for again — reset() clears it
-  // along with the look, and an unanswered request here would fail verify().
-  it('brings the form back when another look is asked for', async () => {
+  // The behaviour DR.20 is for, and the one a later tidy of this template could
+  // silently undo: a field changed under a look does not invalidate it. Nothing
+  // is re-requested until the button is pressed, so the look on screen is the
+  // one that was asked for and not a stale render of a newer draft.
+  it('keeps the look on screen when the draft changes underneath it', async () => {
+    await render();
+    await submit();
+    suggestRequest().flush(response());
+    await fixture.whenStable();
+
+    await press('Evening');
+    await type('dinner, walking there');
+
+    mock.expectNone(`${environment.apiUrl}/looks/suggest`);
+    expect(text()).toContain('Morning meetings');
+  });
+
+  // "Try again" clears the look rather than re-firing the last request: the
+  // draft is on screen above it and the reroll a user wants is usually the one
+  // with the notes changed. The form never left, so what comes back is the
+  // waiting line — nothing is re-mounted. reset() clears the forecast along
+  // with the look, so the date is re-asked for; an unanswered request here
+  // would fail verify(). DECISIONS.md 220.
+  it('clears the look and rests on the waiting line when another is asked for', async () => {
     await render();
     await submit();
     suggestRequest().flush(response());
@@ -430,6 +456,8 @@ describe('StylistPage', () => {
 
     expect(form()).not.toBeNull();
     expect(text()).not.toContain('Morning meetings');
+    expect(text()).toContain(en['stylist.ready']);
+    expect(text()).toContain(en['stylist.submit']);
   });
 
   it('says what went wrong and brings the form back', async () => {
@@ -469,7 +497,7 @@ describe('StylistPage', () => {
     await fixture.whenStable();
 
     mock.expectNone((candidate) => candidate.url === `${environment.apiUrl}/weather`);
-    expect(text()).not.toContain('°C');
+    expect(text()).not.toContain('°');
     expect(form()).not.toBeNull();
   });
 
@@ -646,10 +674,10 @@ describe('StylistPage', () => {
     await fixture.whenStable();
 
     expect(text()).toContain(en['stylist.error.lockedUnavailable']);
-    // The card is still there, badge and all: nothing changed, so nothing on
+    // The look is still there, badge and all: nothing changed, so nothing on
     // screen should have.
     expect(swapBadge('loafers')).not.toBeNull();
-    expect(form()).toBeNull();
+    expect(form()).not.toBeNull();
   });
 
   it('forgets the exclusions when the user starts over', async () => {

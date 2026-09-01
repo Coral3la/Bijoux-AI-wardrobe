@@ -126,8 +126,13 @@ function text(): string {
   return element().textContent ?? '';
 }
 
-function headings(): string[] {
-  return [...element().querySelectorAll('h3')].map((node) => node.textContent?.trim() ?? '');
+// The caption under each tile, in DOM order. The layer headings this file used
+// to read are gone: the layer is printed per tile now, so what was a heading
+// over a group is a line under a garment. DECISIONS.md 220.
+function metas(): string[] {
+  return [...element().querySelectorAll('li > div:last-child > span:nth-child(2)')].map(
+    (node) => node.textContent?.trim() ?? '',
+  );
 }
 
 // DOM order across the whole card, not per group: the point of the sort is the
@@ -180,18 +185,15 @@ describe('LookCard', () => {
       ]),
     );
 
-    expect(headings()).toEqual([
-      en['vocabulary.layer.base'],
-      en['vocabulary.layer.outer'],
-      en['vocabulary.layer.standalone'],
-    ]);
     expect(itemsInOrder()).toEqual(['shirt', 'jeans', 'blazer', 'loafers', 'tote']);
   });
 
   // An untagged row cannot lead the card. Nothing on the wire promises a layer
-  // — item.model.ts types it nullable — so the sort sends null to the end and
-  // the heading says so rather than filing it under a layer it is not in.
-  it('puts an item with no layer last, under its own heading', async () => {
+  // — item.model.ts types it nullable — so the sort sends null to the end, and
+  // the caption prints what the garment actually has rather than filing it
+  // under a layer it is not in. With neither layer nor category there is
+  // nothing true to print, so the line is absent instead of empty.
+  it('puts an item with no layer last, and captions it with what it has', async () => {
     await render(
       look([
         item({ id: 'a', category: null, layer: null, display_name: 'unknown' }),
@@ -199,17 +201,27 @@ describe('LookCard', () => {
       ]),
     );
 
-    expect(headings()).toEqual([en['vocabulary.layer.base'], en['stylist.look.layerOther']]);
     expect(itemsInOrder()).toEqual(['shirt', 'unknown']);
+    expect(metas()).toEqual([`${en['vocabulary.layer.base']} · ${en['vocabulary.category.top']}`]);
   });
 
-  it('renders the title, the message, the reasoning and the weather note', async () => {
+  it('renders the title, the count, the message, the reasoning and the weather note', async () => {
     await render(look([item()]), [], 'A work outfit for a mild day.');
 
     expect(text()).toContain('Morning meetings');
+    // The kicker beside the title, which the Ritual strip added: one piece, so
+    // the singular key. I18nService has no plural rule, so a card that reached
+    // for one key would read "1 pieces" here. DECISIONS.md 058, 220.
+    expect(text()).toContain(en['stylist.look.pieces.one']);
     expect(text()).toContain('A work outfit for a mild day.');
     expect(text()).toContain('The high-rise jean balances the oversized shirt.');
     expect(text()).toContain('Mild at 18°C — the blazer is enough.');
+  });
+
+  it('counts the pieces in the plural once there is more than one', async () => {
+    await render(look([item({ id: 'a' }), item({ id: 'b' })]));
+
+    expect(text()).toContain('2 pieces');
   });
 
   it('names the missing pieces from the shared vocabulary, and only when there are any', async () => {
