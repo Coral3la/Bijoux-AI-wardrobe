@@ -6,8 +6,14 @@ import { LooksStore } from '../../core/state/looks.store';
 import { Look } from '../../shared/models/look.model';
 import { Button } from '../../shared/ui/button';
 import { EmptyState } from '../../shared/ui/empty-state';
+import { Skeleton } from '../../shared/ui/skeleton';
 import { todayInLocalTime } from '../stylist/look-request-form';
 import { ItemCard } from '../wardrobe/item-card';
+
+// Two, not a guess at how many looks are saved: the skeleton promises the
+// shape of the screen, and a stack of two says "a stack" without claiming a
+// length the response has not arrived to confirm.
+const LOADING_CARDS = [0, 1] as const;
 
 // Deliberately not LookCard. That component is the stylist's payoff — it groups
 // by layer, carries a ↻ badge on every garment and ends in "Try again", none of
@@ -19,7 +25,7 @@ import { ItemCard } from '../wardrobe/item-card';
 @Component({
   selector: 'app-saved-looks-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, EmptyState, ItemCard, RouterLink],
+  imports: [Button, EmptyState, ItemCard, RouterLink, Skeleton],
   template: `
     <main class="mx-auto flex w-full max-w-2xl flex-col gap-region px-6 pt-hero pb-region">
       <header>
@@ -33,9 +39,20 @@ import { ItemCard } from '../wardrobe/item-card';
       }
 
       @if (store.isLoading()) {
-        <p class="text-sm text-ink-muted" role="status" aria-live="polite">
-          {{ i18n.t('saved.loading') }}
-        </p>
+        <!-- Two cards rather than a list-length guess: this screen's shape is a
+             stack of look cards, and two is enough to say so. The tiles carry no
+             aria-hidden of their own — Skeleton's host has it — so the status
+             line is the whole of what is announced. DECISIONS.md 217. -->
+        <div class="animate-deferred flex flex-col gap-group">
+          <div class="flex flex-col gap-4">
+            @for (card of loadingCards; track card) {
+              <app-skeleton class="h-48" radius="rounded-2xl" />
+            }
+          </div>
+          <p class="font-prose text-base text-ink-muted" role="status" aria-live="polite">
+            {{ i18n.t('saved.loading') }}
+          </p>
+        </div>
       } @else if (store.looks().length === 0) {
         <!-- The same component the wardrobe's two empties use, which is what
              gives every empty state in the product one identity. The CTA is an
@@ -117,6 +134,8 @@ import { ItemCard } from '../wardrobe/item-card';
 export class SavedLooksPage {
   protected readonly i18n = inject(I18nService);
   protected readonly store = inject(LooksStore);
+
+  protected readonly loadingCards = LOADING_CARDS;
 
   constructor() {
     // Reset before loading, for StylistPage's reason: the store is

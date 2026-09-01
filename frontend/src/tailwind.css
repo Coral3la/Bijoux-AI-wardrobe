@@ -70,6 +70,33 @@
   --spacing-region: 2.5rem;
   --spacing-group: 0.75rem;
 
+  /* The show-delay on a wait. A response that beats 250ms renders content with
+     no skeleton at all, which is the whole point: a skeleton that appears and
+     vanishes inside a quarter-second is worse than the caption it replaced.
+     Applied to the loading *region* rather than to a skeleton, because the
+     status line has to defer with it — deferring only the tiles produces text,
+     then text and tiles, then content: three states where there was one.
+
+     Opacity and never visibility, which is DECISIONS.md 066 read the other way
+     round. 066 avoided opacity because an opacity-0 element stays in the
+     accessibility tree and would be announced immediately; here that is exactly
+     what is wanted, so a screen reader is told the screen is loading at once
+     while a sighted reader sees nothing until the wait proves real.
+
+     No base `opacity: 0`: the fill mode supplies the from-state, so an
+     environment that suppresses animations shows the skeleton immediately
+     rather than never. DECISIONS.md 217. */
+  --animate-deferred: deferred 120ms ease-out 250ms both;
+
+  @keyframes deferred {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
   /* radii — these override Tailwind 4's built-in --radius-sm/md/lg/xl/2xl
      deliberately; the resulting shift across the ~75 existing rounded-*
      call sites is the intended re-anchoring of the visual language, not

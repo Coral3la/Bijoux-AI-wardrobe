@@ -262,7 +262,14 @@ function stillWornDays(detail: TripDetail, itemId: string): number[] {
       } @else if (errorKey(); as key) {
         <p class="text-sm font-medium text-danger" role="alert">{{ i18n.t(key) }}</p>
       } @else {
-        <p class="text-sm" role="status" aria-live="polite">{{ i18n.t('trip.view.loading') }}</p>
+        <!-- Prose, not a skeleton, and that is the decision rather than the
+             leftover: this screen's shape depends on the response — how many
+             days, whether each has a look — so a skeleton would promise a
+             layout the trip may not have. It defers like the other two.
+             DECISIONS.md 217. -->
+        <p class="animate-deferred font-prose text-base" role="status" aria-live="polite">
+          {{ i18n.t('trip.view.loading') }}
+        </p>
       }
     </main>
   `,

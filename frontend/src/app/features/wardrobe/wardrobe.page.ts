@@ -15,6 +15,7 @@ import { CATEGORIES, COLORS } from '../../shared/models/enums';
 import { AuthoredLine } from '../../shared/ui/authored-line';
 import { Button } from '../../shared/ui/button';
 import { EmptyState } from '../../shared/ui/empty-state';
+import { Skeleton } from '../../shared/ui/skeleton';
 import { FilterBar } from './filter-bar';
 import { ItemCard } from './item-card';
 import { PendingStrip } from './pending-strip';
@@ -32,6 +33,11 @@ function member<T extends string>(value: string | null, vocabulary: readonly T[]
     ? (value as T)
     : undefined;
 }
+
+// Six, not a screenful. A skeleton is a promise about what is coming, and
+// filling the viewport promises a warehouse to an account with four garments —
+// two rows on a phone and just over one on a desktop is enough to say "a grid".
+const LOADING_TILES = [0, 1, 2, 3, 4, 5] as const;
 
 // 05:00-11:59 morning, 12:00-17:59 afternoon, and the rest of the clock
 // evening. Exported for the spec, which is the only way to pin the boundaries
@@ -71,6 +77,7 @@ function scale(value: string | null): number | undefined {
     FilterBar,
     ItemCard,
     PendingStrip,
+    Skeleton,
     UploadSheet,
     WardrobeInsights,
     WeatherStrip,
@@ -131,7 +138,21 @@ function scale(value: string | null): number | undefined {
       }
 
       @if (store.isLoading()) {
-        <p class="text-sm">{{ i18n.t('wardrobe.loading') }}</p>
+        <!-- The grid's own shape, which is what makes this read as progress
+             rather than as a spinner — the stylist's wait proved that at 2.8.
+             The tiles need no aria-hidden of their own: Skeleton's host carries
+             it, so what is announced here is the status line and nothing else.
+             DECISIONS.md 217. -->
+        <div class="animate-deferred flex flex-col gap-group">
+          <div class="grid grid-cols-3 gap-3 md:grid-cols-5">
+            @for (tile of loadingTiles; track tile) {
+              <app-skeleton class="aspect-square" radius="rounded-xl" />
+            }
+          </div>
+          <p class="font-prose text-base" role="status" aria-live="polite">
+            {{ i18n.t('wardrobe.loading') }}
+          </p>
+        </div>
       } @else if (store.loadError(); as key) {
         <div class="flex flex-col items-start gap-2">
           <p class="text-sm font-medium text-danger">{{ i18n.t(key) }}</p>
@@ -240,6 +261,7 @@ export class WardrobePage {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
+  protected readonly loadingTiles = LOADING_TILES;
   protected readonly sheetOpen = signal(false);
 
   // Read once, from the constructor's clock, for the stylist dateline's reason:

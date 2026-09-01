@@ -136,6 +136,19 @@ describe('SavedLooksPage', () => {
     listRequest().flush({ looks: [], total: 0 });
   });
 
+  // A stack of two, which says "a stack of look cards" without claiming a
+  // length the response has not arrived to confirm. DECISIONS.md 217.
+  it('draws the stack shape while the list is loading', async () => {
+    await render();
+
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('app-skeleton')).toHaveLength(2);
+
+    listRequest().flush({ looks: [], total: 0 });
+    await fixture.whenStable();
+
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('app-skeleton')).toHaveLength(0);
+  });
+
   it('offers a way to the stylist when nothing is saved', async () => {
     // The empty state is the likeliest first visit: the heart is one task old
     // and no account has used it. A dead end here would be the screen's whole

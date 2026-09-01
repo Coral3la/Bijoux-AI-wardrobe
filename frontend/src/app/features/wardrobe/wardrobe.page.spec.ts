@@ -130,6 +130,14 @@ function sheet(): HTMLElement | null {
   return (fixture.nativeElement as HTMLElement).querySelector('app-upload-sheet');
 }
 
+function skeletons(): HTMLElement[] {
+  return [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('app-skeleton')];
+}
+
+function statusLine(): HTMLElement | null {
+  return (fixture.nativeElement as HTMLElement).querySelector('[role="status"]');
+}
+
 function greetingLine(): HTMLElement | null {
   return (fixture.nativeElement as HTMLElement).querySelector('app-authored-line');
 }
@@ -363,6 +371,33 @@ describe('WardrobePage', () => {
 
     expect(text()).not.toContain('Your wardrobe is empty');
     expect(text()).toContain('Loading your wardrobe');
+    listRequest().flush({ items: [], total: 0 });
+    await fixture.whenStable();
+  });
+
+  // The grid's own shape rather than a caption on a blank page, which is what
+  // makes the wait read as progress. The count is deliberate: six suggests a
+  // grid without promising a screenful to an account with four garments.
+  // DECISIONS.md 217.
+  it('draws the grid shape while the first load is in flight', async () => {
+    create();
+
+    expect(skeletons()).toHaveLength(6);
+
+    listRequest().flush({ items: [], total: 0 });
+    await fixture.whenStable();
+
+    expect(skeletons()).toHaveLength(0);
+  });
+
+  // The tiles announce nothing — Skeleton's host is aria-hidden — so the wait
+  // is only reachable to a screen reader through this line. It was the one
+  // loading caption of three carrying no role at all before DR.11b.
+  it('announces the wait', async () => {
+    create();
+
+    expect(statusLine()?.textContent).toContain('Loading your wardrobe');
+
     listRequest().flush({ items: [], total: 0 });
     await fixture.whenStable();
   });
