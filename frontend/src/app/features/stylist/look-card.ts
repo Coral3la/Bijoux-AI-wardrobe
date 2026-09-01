@@ -35,9 +35,11 @@ function isCategory(value: string): value is Category {
     <article class="flex flex-col gap-5 rounded-2xl bg-surface p-5 shadow-md">
       <header class="flex flex-col gap-1">
         <!-- Body face, not font-display: the title is written by the model, and
-             05-FRONTEND-SPEC.md line 290 reserves Fraunces for chrome we
-             author — it is latin-subset, so a non-Latin word in a display
-             heading renders in two faces on one line. DECISIONS.md 071. -->
+             05-FRONTEND-SPEC.md's "The display face is for chrome we author"
+             reserves Fraunces for what this project wrote. It is also
+             latin-subset, so a non-Latin word in a display heading renders in
+             two faces on one line — true, and the second reason rather than the
+             first. DECISIONS.md 071. -->
         <h2 class="text-2xl">{{ look().title }}</h2>
         @if (message(); as line) {
           <p class="text-sm">{{ line }}</p>

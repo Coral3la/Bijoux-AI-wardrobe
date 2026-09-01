@@ -7,9 +7,10 @@ export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 // disabled and every aria attribute a screen needs, and a wrapper element would
 // have to re-expose each of them as a passthrough input.
 //
-// There is deliberately no size input. 05-FRONTEND-SPEC.md line 652 makes 44px
-// a floor rather than a default, so a compact button comes from the ghost
-// variant or from the caller's own padding — never from a shorter height.
+// There is deliberately no size input. 05-FRONTEND-SPEC.md's "Every interactive
+// element ≥ 44px tall" makes 44px a floor rather than a default, so a compact
+// button comes from the ghost variant or from the caller's own padding — never
+// from a shorter height.
 const BASE =
   'min-h-11 inline-flex items-center justify-center rounded-md px-5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 

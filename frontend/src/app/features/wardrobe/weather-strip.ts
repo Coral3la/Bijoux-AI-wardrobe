@@ -20,9 +20,10 @@ import { todayInLocalTime } from '../stylist/look-request-form';
       <!-- Two lines rather than one sentence, and the split is what makes the
            display face legal here. The reading is a rounded number and a word
            from our own vocabulary, so Fraunces may have it; the city is a name
-           the user chose off the geocoder and may be non-Latin, which Fraunces
-           does not cover — the rule 05-FRONTEND-SPEC.md line 646 names this
-           strip in. It stays in the body face at any size. DECISIONS.md 071. -->
+           the user chose off the geocoder and content rather than chrome — the
+           rule 05-FRONTEND-SPEC.md's "The display face is for chrome we author"
+           names this strip in. It stays in the body face at any size, and it
+           would even if Fraunces covered Hebrew. DECISIONS.md 071. -->
       @if (forecastLines(); as lines) {
         <div class="flex flex-col gap-1">
           <p class="font-display text-2xl leading-tight">{{ lines.reading }}</p>

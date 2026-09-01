@@ -23,9 +23,9 @@ interface CategoryGroup {
       <h2 class="font-display text-xl">{{ i18n.t('trip.view.packingList') }}</h2>
 
       <!-- One card, and the dividers inside it are edge definition rather than
-           card borders: 05-FRONTEND-SPEC.md line 650 governs the outside, where
-           the shadow carries the separation, and overflow-hidden is what stops
-           a full-bleed divider running past the corner radius. -->
+           card borders: 05-FRONTEND-SPEC.md's "No card borders" governs the
+           outside, where the shadow carries the separation, and overflow-hidden
+           is what stops a full-bleed divider running past the corner radius. -->
       <div class="overflow-hidden rounded-xl bg-surface shadow-sm">
         @for (group of groups(); track group.headingKey) {
           <section>
