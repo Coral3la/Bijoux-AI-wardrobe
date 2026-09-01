@@ -290,6 +290,7 @@ Expect 4–8 seconds. The status lines cycle *"Reading the forecast…"*, *"Goin
 
 ```
 ┌──────────────────────────────────────────────┐
+│ CASUAL · TUE 1 SEPT · AUTO COAT              │  ← what the look answers
 │ Ease into the day                  4 PIECES  │  ← content face; mono kicker
 │ Warm morning, cooler evening.                │
 │ ┌────┐ ┌────┐ ┌────┐ ┌────┐                  │
@@ -306,6 +307,8 @@ Expect 4–8 seconds. The status lines cycle *"Reading the forecast…"*, *"Goin
 ```
 
 **Rewritten at the Ritual pass.** It is **not a card**: no wrapper, no fill, no shadow, no radius. It sits directly on the canvas, because it is the last thing on the page and there is nothing beside it to be separated from. `/saved` renders looks among peers and keeps its own treatment.
+
+**The card heads with the parameters the look was built for** — occasion, date, coat — in the mono face at 11px above the title. It comes from a **snapshot of the draft taken when the request went out**, not from the live form, so a card cannot relabel itself when a chip is tapped. **The kicker and the form are allowed to disagree, and that is the point**: it is how a reader tells a look built for Tuesday from a form now set to Wednesday, and it is why *Change & restyle* is a press rather than an effect. Notes are excluded — free text, and the line is three short fields. The input is optional and the kicker is silent without it, because a look does not know what was asked for it; only the screen that asked does.
 
 **Layer grouping is gone.** Items are still sorted by `layer` then `category` — the sequence a reader and a screen reader both take — but the `<h3>` headings that cut the sort into sections are deleted and the layer prints in each tile's meta line instead: `Base layer · Tops`, or the category alone when the layer is null, or nothing when neither is known. Four headings over four garments was more chrome than the thing it organised.
 

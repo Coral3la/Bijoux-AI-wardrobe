@@ -5,6 +5,7 @@ import { CATEGORIES, Category, LAYERS, Layer, roleOf } from '../../shared/models
 import { Item } from '../../shared/models/item.model';
 import { Feedback, Look, MissingPiece } from '../../shared/models/look.model';
 import { ItemCard } from '../wardrobe/item-card';
+import { LookDraft } from './look-request-form';
 
 // Both ranks send null to the end rather than to the front. A tagged item
 // always carries both — validate_tags requires them — so a null here is a row
@@ -21,6 +22,27 @@ function isCategory(value: string): value is Category {
   return (CATEGORIES as readonly string[]).includes(value);
 }
 
+// The locale is pinned rather than read off the browser: there is one string
+// table and it is `en`, so a browser locale here would print the weekday in a
+// language nothing else on the screen is written in. This is 211's formatter
+// coming back after 220 retired it from the header, and it earns its place this
+// time: the date it prints is the one the look was built for, which is the one
+// fact on this screen that is nowhere else once the picker has moved off it.
+// Short forms, because the line is three fields wide and set at 11px — en-GB
+// abbreviates September to "Sept", which is the locale's answer and not a typo.
+const ANSWERED_FORMAT = new Intl.DateTimeFormat('en-GB', {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+});
+
+function coatKey(includeOuterwear: boolean | null): string {
+  if (includeOuterwear === null) {
+    return 'stylist.look.coat.auto';
+  }
+  return includeOuterwear ? 'stylist.look.coat.yes' : 'stylist.look.coat.no';
+}
+
 const ICON_BUTTON =
   'inline-flex h-11 w-11 items-center justify-center rounded-full border text-base disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
@@ -35,6 +57,15 @@ const ICON_BUTTON =
          the same way the wardrobe grid does. DECISIONS.md 220. -->
     <article class="flex flex-col gap-4">
       <header class="flex flex-col gap-1">
+        <!-- What the look answers, above the title it answers with. The form
+             below stays editable while this is on screen, so the two can
+             disagree — and that disagreement is the point: it is how a reader
+             tells a look built for Tuesday from a form now set to Wednesday.
+             Silent when the card was handed no parameters, which is every
+             caller that is not the stylist. DECISIONS.md 220. -->
+        @if (answeredLine(); as line) {
+          <p class="font-mono text-[11px] tracking-[0.14em] text-ink-soft uppercase">{{ line }}</p>
+        }
         <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <!-- The content face at a display size, which is 071 read exactly as
                it is written: the title was composed by the model, so what it
@@ -214,6 +245,10 @@ export class LookCard {
   protected readonly i18n = inject(I18nService);
 
   readonly look = input.required<Look>();
+  // The request this look came back from, or null. Optional because the card
+  // renders a look and a look does not know what was asked for it — only the
+  // screen that asked does.
+  readonly answered = input<LookDraft | null>(null);
   readonly missingPieces = input<readonly MissingPiece[]>([]);
   readonly message = input('');
   readonly swappingItemId = input<string | null>(null);
@@ -242,6 +277,25 @@ export class LookCard {
         categoryRank(a.category) - categoryRank(b.category),
     ),
   );
+
+  // Notes are left out on purpose: they are free text and can run to a
+  // paragraph, where this line is three short fields at 11px. What is here is
+  // what the request narrowed, and the notes are what widened it.
+  //
+  // The date is parsed at local midnight, never bare: `new Date('2026-09-01')`
+  // is UTC midnight, which is the previous day west of Greenwich — the same
+  // trap `todayInLocalTime` was written to avoid one file over.
+  protected readonly answeredLine = computed(() => {
+    const answered = this.answered();
+    if (answered === null) {
+      return null;
+    }
+    return this.i18n.t('stylist.look.answered', {
+      occasion: this.i18n.t(`vocabulary.occasion.${answered.occasion}`),
+      date: ANSWERED_FORMAT.format(new Date(`${answered.date}T00:00:00`)),
+      coat: this.i18n.t(coatKey(answered.include_outerwear)),
+    });
+  });
 
   // I18nService has no plural rule (DECISIONS.md 058), so the caller picks the
   // key. A look of one is reachable — a dress with nothing else that passed the

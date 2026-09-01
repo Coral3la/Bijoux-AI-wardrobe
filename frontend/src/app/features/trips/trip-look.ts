@@ -18,9 +18,11 @@ export interface StillWorn {
 // Not `LookCard`, for the third time and on the same three grounds: that card
 // ends in *Try again*, which has no request behind a trip look; it carries a
 // heart and two thumbs, which belong to `/saved` and not to a day of a trip; and
-// it groups by layer, where this arranges by `look_items.position` — the order
-// the model chose, which is what 4.6 shipped and what this task does not get to
-// change. `saved-looks.page.ts` refused the same reuse at 3.2.
+// it sorts by layer then category, where this arranges by `look_items.position`
+// — the order the model chose, which is what 4.6 shipped and what this task does
+// not get to change. The third ground was written as "it groups by layer"; DR.20
+// deleted the grouping and kept the sort, so the sentence moved and the
+// conclusion did not. `saved-looks.page.ts` refused the same reuse at 3.2.
 //
 // Its own component rather than the page's inline `<article>`, which is where
 // 4.6 left it, because it now owns three things the page has no business

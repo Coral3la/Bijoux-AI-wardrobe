@@ -15,11 +15,13 @@ import { ItemCard } from '../wardrobe/item-card';
 // length the response has not arrived to confirm.
 const LOADING_CARDS = [0, 1] as const;
 
-// Deliberately not LookCard. That component is the stylist's payoff — it groups
-// by layer, carries a ↻ badge on every garment and ends in "Try again", none of
-// which a saved look can do: there is no request behind it to re-run. What a
-// list needs is the title, the garments in the model's own order, and the heart
-// that takes it back out. Reusing the card would have meant two inputs whose
+// Deliberately not LookCard. That component is the stylist's payoff — it heads
+// with the parameters the request carried, puts a ↻ badge on every garment and
+// ends in "Try again", none of which a saved look can do: there is no request
+// behind it to re-run. It grouped by layer too until DR.20 dropped the grouping,
+// which retires one of the grounds and leaves the rest. What a list needs is the
+// title, the garments in the model's own order, and the heart that takes it
+// back out. Reusing the card would have meant two inputs whose
 // only job is to switch its own features off. 05-FRONTEND-SPEC.md draws no
 // screen for this at all — the amendment in the same commit is what adds it.
 @Component({

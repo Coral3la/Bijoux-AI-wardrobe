@@ -149,6 +149,14 @@ function suggestRequest() {
   return mock.expectOne(`${environment.apiUrl}/looks/suggest`);
 }
 
+// The look card's parameter line. Scoped to the card, so the occasion chips in
+// the form above cannot answer for it.
+function kicker(): string | null {
+  return (
+    element().querySelector('app-look-card header > p:first-child')?.textContent?.trim() ?? null
+  );
+}
+
 function anchorPin(): string | null {
   const pinned = [...element().querySelectorAll('p')].find((candidate) =>
     candidate.textContent?.includes('Building around'),
@@ -436,6 +444,14 @@ describe('StylistPage', () => {
 
     mock.expectNone(`${environment.apiUrl}/looks/suggest`);
     expect(text()).toContain('Morning meetings');
+    // And the card still says what it is the answer to. The snapshot is taken
+    // when the request goes out, so the kicker and the form disagreeing is how
+    // a reader tells a look built for Casual from a form now set to Evening —
+    // a card reading `draft()` live would relabel itself on the tap above.
+    // DECISIONS.md 220.
+    expect(kicker()).toContain(en['vocabulary.occasion.casual']);
+    expect(kicker()).toContain(en['stylist.look.coat.auto']);
+    expect(kicker()).not.toContain(en['vocabulary.occasion.evening']);
   });
 
   // "Try again" clears the look rather than re-firing the last request: the
@@ -458,6 +474,9 @@ describe('StylistPage', () => {
     expect(text()).not.toContain('Morning meetings');
     expect(text()).toContain(en['stylist.ready']);
     expect(text()).toContain(en['stylist.submit']);
+    // The snapshot goes with the look it described, so the next one cannot
+    // inherit the last request's parameters.
+    expect(kicker()).toBeNull();
   });
 
   it('says what went wrong and brings the form back', async () => {

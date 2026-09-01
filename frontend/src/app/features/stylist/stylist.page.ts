@@ -161,6 +161,7 @@ function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
       } @else if (look(); as look) {
         <app-look-card
           [look]="look"
+          [answered]="answered()"
           [missingPieces]="missingPieces()"
           [message]="message()"
           [swappingItemId]="store.swappingItemId()"
@@ -198,6 +199,14 @@ export class StylistPage {
   // the form: it outlives the control that renders it, and the skeleton
   // unmounts that control on every submit.
   protected readonly anchor = signal<Item | null>(null);
+
+  // What the look on screen is the answer to, snapshotted when the request went
+  // out rather than read live off the draft. The draft is a control and this is
+  // a record: the form stays editable under a look now, so reading `draft()`
+  // here would relabel a look with parameters it was never built from the
+  // moment a chip is tapped. Cleared with the look, never with the form.
+  // DECISIONS.md 220.
+  protected readonly answered = signal<LookDraft | null>(null);
 
   // Every garment rejected on this look, oldest first. Held beside the anchor
   // rather than in the draft for the same reason: it is not something the form
@@ -296,6 +305,7 @@ export class StylistPage {
 
   protected suggest(): void {
     this.excluded.set([]);
+    this.answered.set(this.draft());
     this.looksStore.clearError();
     this.store.suggest(toRequest(this.draft(), this.anchor()));
   }
@@ -311,6 +321,8 @@ export class StylistPage {
   // No anchor. Every garment the anchor was protecting is locked here anyway,
   // and on the anchored tile itself the two fields would contradict: rule 7
   // requires the item and rule 8 forbids it, which is a 502 by construction.
+  // `answered` is deliberately untouched: a swap is the same request with one
+  // role replaced, so the parameters the look answers have not changed.
   protected swapItem(item: Item): void {
     this.looksStore.clearError();
     const look = this.look();
@@ -398,6 +410,7 @@ export class StylistPage {
   // calls and the same order the constructor makes them.
   protected startOver(): void {
     this.excluded.set([]);
+    this.answered.set(null);
     this.store.reset();
     this.store.loadWeather(this.draft().date);
   }

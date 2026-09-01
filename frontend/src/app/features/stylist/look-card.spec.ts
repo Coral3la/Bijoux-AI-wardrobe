@@ -9,6 +9,7 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { Item } from '../../shared/models/item.model';
 import { Feedback, Look, MissingPiece } from '../../shared/models/look.model';
 import { LookCard } from './look-card';
+import { LookDraft } from './look-request-form';
 
 let fixture: ComponentFixture<LookCard>;
 let mock: HttpTestingController;
@@ -66,15 +67,30 @@ function look(items: readonly Item[], overrides: Partial<Look> = {}): Look {
   };
 }
 
+// 2026-09-01 is a Tuesday, transcribed rather than derived: an expectation that
+// formatted its own date with the formatter under test would agree with a broken
+// one. DECISIONS.md 220.
+function answeredDraft(overrides: Partial<LookDraft> = {}): LookDraft {
+  return {
+    occasion: 'casual',
+    date: '2026-09-01',
+    include_outerwear: null,
+    notes: 'something long enough to be left out of the kicker',
+    ...overrides,
+  };
+}
+
 async function render(
   value: Look,
   missingPieces: readonly MissingPiece[] = [],
   message = '',
   swappingItemId: string | null = null,
   busy = false,
+  answered: LookDraft | null = null,
 ): Promise<void> {
   fixture = TestBed.createComponent(LookCard);
   fixture.componentRef.setInput('look', value);
+  fixture.componentRef.setInput('answered', answered);
   fixture.componentRef.setInput('missingPieces', missingPieces);
   fixture.componentRef.setInput('message', message);
   fixture.componentRef.setInput('swappingItemId', swappingItemId);
@@ -120,6 +136,13 @@ function badges(): HTMLButtonElement[] {
 
 function element(): HTMLElement {
   return fixture.nativeElement as HTMLElement;
+}
+
+// The header's first child when it is there at all, which is what makes its
+// absence assertable: matched structurally rather than by class, so a restyle
+// does not silently retarget this at the message below it.
+function kicker(): string | null {
+  return element().querySelector('header > p:first-child')?.textContent?.trim() ?? null;
 }
 
 function text(): string {
@@ -216,6 +239,38 @@ describe('LookCard', () => {
     expect(text()).toContain('A work outfit for a mild day.');
     expect(text()).toContain('The high-rise jean balances the oversized shirt.');
     expect(text()).toContain('Mild at 18°C — the blazer is enough.');
+  });
+
+  // The card is self-describing: the parameters are above the title the model
+  // gave, so a look can be read without scrolling back to the form. Notes are
+  // excluded — free text, and this line is three fields at 11px.
+  it('prints the parameters the look was built for', async () => {
+    await render(look([item()]), [], '', null, false, answeredDraft());
+
+    expect(kicker()).toBe('Casual · Tue 1 Sept · Auto coat');
+    expect(kicker()).not.toContain('something long enough');
+  });
+
+  // Every caller that is not the stylist has no request to describe, and the
+  // input is optional for exactly that. The selector only ever matches a
+  // paragraph that leads the header, so with no kicker there is nothing above
+  // the title and the message keeps its place below it.
+  it('says nothing above the title when it was given no parameters', async () => {
+    await render(look([item()]), [], 'A work outfit for a mild day.');
+
+    expect(kicker()).toBeNull();
+    expect(text()).toContain('A work outfit for a mild day.');
+  });
+
+  it('names the coat override in the three ways the request can carry it', async () => {
+    await render(look([item()]), [], '', null, false, answeredDraft());
+    expect(kicker()).toContain(en['stylist.look.coat.auto']);
+
+    await render(look([item()]), [], '', null, false, answeredDraft({ include_outerwear: true }));
+    expect(kicker()).toContain(en['stylist.look.coat.yes']);
+
+    await render(look([item()]), [], '', null, false, answeredDraft({ include_outerwear: false }));
+    expect(kicker()).toContain(en['stylist.look.coat.no']);
   });
 
   it('counts the pieces in the plural once there is more than one', async () => {
