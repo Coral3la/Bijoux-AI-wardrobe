@@ -54,7 +54,7 @@ describe('Chip', () => {
     const chip = await render(false);
 
     expect(chip.getAttribute('aria-pressed')).toBe('false');
-    expect(chip.classList.contains('border-line-strong')).toBe(true);
+    expect(chip.classList.contains('border-line')).toBe(true);
 
     fixture.componentRef.setInput('active', true);
     await fixture.whenStable();

@@ -147,8 +147,23 @@ function header(): string {
   return element().querySelector('header')?.textContent ?? '';
 }
 
-function tabs(): HTMLButtonElement[] {
-  return [...element().querySelectorAll<HTMLButtonElement>('[role="group"] button')];
+// One per day, in the order they are drawn. The child combinator is
+// load-bearing: an ItemCard's own root is an <article> too, so a descendant
+// query would count every garment tile in the itinerary as a day.
+function daySections(): HTMLElement[] {
+  return [...element().querySelectorAll<HTMLElement>('main > article')];
+}
+
+function dayText(index: number): string {
+  return daySections()[index]?.textContent ?? '';
+}
+
+// The day's head alone — its number, its date and its forecast — read apart
+// from the look beneath it. The model's weather note says things like "Mild at
+// 18°C", so a section-wide assertion about a temperature can be answered by
+// prose rather than by the reading the head prints.
+function dayHead(index: number): string {
+  return daySections()[index]?.firstElementChild?.textContent ?? '';
 }
 
 function tripRequest() {
@@ -172,18 +187,25 @@ function swapRequest() {
 // The packing list below names every garment in the trip, so a page-wide
 // assertion cannot tell "not in this day's look" from "not in the suitcase",
 // and the first is what a day-local swap has to be asked.
-function lookItems(): string[] {
-  return [...element().querySelectorAll('app-trip-look img')].map(
+function lookItems(index: number): string[] {
+  return [...daySections()[index].querySelectorAll('app-trip-look img')].map(
     (image) => image.getAttribute('alt') ?? '',
   );
+}
+
+// The wait, per day. Every day is on screen at once, so a swap on Monday that
+// spins on Thursday is a mutation the old page could not have: `swappingItemId`
+// is an item id, and the shirt is worn on both. DECISIONS.md 222.
+function spinners(index: number): number {
+  return daySections()[index].querySelectorAll('app-trip-look [role="status"]').length;
 }
 
 // The badges, and only the badges: the packing list's rows are labels around
 // checkboxes, so a `button` inside an `li` on this screen is a ↻ and nothing
 // else. Scoped to the component anyway, so that stops being a fact this helper
 // relies on the day something else grows a list.
-function badges(): HTMLButtonElement[] {
-  return [...element().querySelectorAll<HTMLButtonElement>('app-trip-look li button')];
+function badges(index = 0): HTMLButtonElement[] {
+  return [...daySections()[index].querySelectorAll<HTMLButtonElement>('app-trip-look li button')];
 }
 
 // Found by the words on it rather than by a class or a position, so the label
@@ -280,12 +302,33 @@ describe('TripDetailPage', () => {
     expect(element().querySelector('h1')!.className).not.toContain('font-display');
   });
 
-  it('carries the counts and the reuse sentence on one header line', async () => {
+  // Two sentences in one paragraph rather than one composed string, and they
+  // are asserted apart because the gap between them is a flex gap: sibling
+  // elements have their whitespace-only text node collapsed away, so nothing
+  // joins the two in textContent. DECISIONS.md 213, 222.
+  it('carries the counts and the reuse sentence in the header', async () => {
     await loaded();
 
-    expect(header()).toContain(
-      "8 items · 4 looks · You'll wear the white oversized shirt on 3 days",
-    );
+    expect(header()).toContain('Packed 8 pieces across 4 looks.');
+    expect(header()).toContain("You'll wear the white oversized shirt on 3 days.");
+  });
+
+  // The garment leaves the prose face and nothing else does. AuthoredLine cuts
+  // the key at its own placeholder, so a translation that puts the name first
+  // still wraps the name and only the name. DECISIONS.md 071, 213.
+  it('prints the reused garment in the content face inside the prose line', async () => {
+    await loaded();
+
+    const spans = [...element().querySelectorAll('header app-authored-line span')];
+    const garment = spans.find((span) => span.textContent === 'white oversized shirt');
+
+    expect(garment?.classList.contains('font-sans')).toBe(true);
+    expect(spans.some((span) => span.textContent?.includes("You'll wear"))).toBe(true);
+    expect(
+      spans
+        .find((span) => span.textContent?.includes("You'll wear"))
+        ?.classList.contains('font-sans'),
+    ).toBe(false);
   });
 
   it('says one look rather than 1 looks on a one-day trip', async () => {
@@ -298,7 +341,7 @@ describe('TripDetailPage', () => {
       }),
     });
 
-    expect(text()).toContain('4 items · 1 look');
+    expect(text()).toContain('Packed 4 pieces across 1 look.');
     expect(text()).not.toContain('1 looks');
   });
 
@@ -314,7 +357,7 @@ describe('TripDetailPage', () => {
       }),
     });
 
-    expect(header()).toContain('8 items · 4 looks');
+    expect(header()).toContain('Packed 8 pieces across 4 looks.');
     expect(header()).not.toContain("You'll wear");
   });
 
@@ -353,18 +396,52 @@ describe('TripDetailPage', () => {
       }),
     });
 
-    expect(header()).toContain('8 items · 4 looks');
+    expect(header()).toContain('Packed 8 pieces across 4 looks.');
     expect(header()).not.toContain("You'll wear");
   });
 
-  it('draws one tab per day with its own temperature and condition', async () => {
+  // No tabs. Every day is a section of its own, in date order, and the fixture's
+  // two days differ in every field a head prints so no assertion about one can
+  // pass by reading the other. DECISIONS.md 222.
+  it('draws one section per day with its own date, temperature and condition', async () => {
     await loaded();
 
-    expect(tabs()).toHaveLength(2);
-    expect(tabs()[0].textContent).toContain('12°C');
-    expect(tabs()[0].textContent).toContain(en['vocabulary.condition.rain']);
-    expect(tabs()[1].textContent).toContain('17°C');
-    expect(tabs()[1].textContent).toContain(en['vocabulary.condition.clear']);
+    expect(daySections()).toHaveLength(2);
+    expect(dayHead(0)).toContain('Day 1 · 2026-03-14');
+    expect(dayHead(0)).toContain('12°C');
+    expect(dayHead(0)).toContain(en['vocabulary.condition.rain']);
+    expect(dayHead(1)).toContain('Day 2 · 2026-03-15');
+    expect(dayHead(1)).toContain('17°C');
+    expect(dayHead(1)).toContain(en['vocabulary.condition.clear']);
+  });
+
+  // The occasion is what the day was dressed for and the tab strip had no room
+  // for it. It is closed vocabulary, so it is read through the table rather
+  // than printed raw.
+  it('names the occasion each day was dressed for', async () => {
+    await loaded({
+      trip: trip({
+        days: [day(), day({ day: 2, date: '2026-03-15', occasion: 'evening', look_id: 'look-2' })],
+      }),
+    });
+
+    expect(dayHead(0)).toContain(en['vocabulary.occasion.work']);
+    expect(dayHead(1)).toContain(en['vocabulary.occasion.evening']);
+  });
+
+  // The dot between the condition and the occasion is punctuation a developer
+  // could have typed into the join, and en.json's own value renders identically
+  // either way. A second table with a different separator is the only assertion
+  // that can tell a lookup from a literal.
+  it('takes the weather line from the string table rather than from the code', async () => {
+    const loading = TestBed.inject(I18nService).load();
+    mock
+      .expectOne('/i18n/en.json')
+      .flush({ ...en, 'trip.view.day.weather': '{{condition}} / {{occasion}}' });
+    await loading;
+    await loaded();
+
+    expect(dayHead(0)).toContain('Rain / Work');
   });
 
   // The day's high, rounded, which is what weather-strip.ts prints and what
@@ -373,26 +450,17 @@ describe('TripDetailPage', () => {
   it('shows the day high rather than the low', async () => {
     await loaded();
 
-    expect(tabs()[0].textContent).toContain('12°C');
-    expect(tabs()[0].textContent).not.toContain('8°C');
+    expect(dayHead(0)).toContain('12°C');
+    expect(dayHead(0)).not.toContain('8°C');
   });
 
-  it('opens on day 1', async () => {
+  // The whole trip at once, which is the direction: nothing is selected and
+  // nothing is hidden, so a five-day trip is read rather than clicked through.
+  it('draws every day of the trip at once, in date order', async () => {
     await loaded();
 
-    expect(tabs()[0].getAttribute('aria-pressed')).toBe('true');
-    expect(text()).toContain('Morning meetings');
-  });
-
-  it('swaps the look when another day is tapped', async () => {
-    await loaded();
-
-    tabs()[1].click();
-    fixture.detectChanges();
-
-    expect(text()).toContain('Dinner out');
-    expect(text()).not.toContain('Morning meetings');
-    expect(tabs()[1].getAttribute('aria-pressed')).toBe('true');
+    expect(dayText(0)).toContain('Morning meetings');
+    expect(dayText(1)).toContain('Dinner out');
   });
 
   // The join is by look_id and not by position. days[1] carries looks[1] here
@@ -403,8 +471,8 @@ describe('TripDetailPage', () => {
       looks: [look({ id: 'look-2', title: 'Dinner out', items: [item({ id: 'item-2' })] }), look()],
     });
 
-    expect(text()).toContain('Morning meetings');
-    expect(text()).not.toContain('Dinner out');
+    expect(dayText(0)).toContain('Morning meetings');
+    expect(dayText(1)).toContain('Dinner out');
   });
 
   it('renders the look reasoning and the weather note', async () => {
@@ -422,7 +490,7 @@ describe('TripDetailPage', () => {
     });
 
     expect(text()).toContain(en['trip.view.day.noLook']);
-    expect(tabs()).toHaveLength(2);
+    expect(daySections()).toHaveLength(2);
   });
 
   // The type permits an id the response did not hydrate even though this
@@ -433,14 +501,15 @@ describe('TripDetailPage', () => {
     expect(text()).toContain(en['trip.view.day.noLook']);
   });
 
-  // Day 1 stays selected even when it is the empty one: an opening selection
-  // that depended on which days kept a look would leave the reader working out
-  // why day 2 is the one lit up.
-  it('opens on day 1 even when day 1 is the gap', async () => {
+  // A gap keeps its head, and that is what the head being the page's buys: the
+  // day still has a forecast and an occasion, and only the outfit is missing.
+  it('keeps the head of a day whose look was detached', async () => {
     await loaded({ trip: trip({ days: [day({ look_id: null }), day({ day: 2 })] }) });
 
-    expect(text()).toContain(en['trip.view.day.noLook']);
-    expect(tabs()[0].getAttribute('aria-pressed')).toBe('true');
+    expect(dayHead(0)).toContain('Day 1 · 2026-03-14');
+    expect(dayHead(0)).toContain('12°C');
+    expect(dayText(0)).toContain(en['trip.view.day.noLook']);
+    expect(dayText(1)).toContain('Morning meetings');
   });
 
   it('hydrates the packing list from the items the looks carry', async () => {
@@ -573,24 +642,23 @@ describe('TripDetailPage', () => {
       fixture.detectChanges();
 
       expect(header()).toContain('Lisbon');
-      expect(text()).toContain('Warmer plan');
+      expect(dayText(0)).toContain('Warmer plan');
       expect(text()).not.toContain('Morning meetings');
     });
 
-    // D: the dates cannot change, so the ordinal stays valid and continuity
-    // beats a jump back to day 1.
-    it('keeps the selected day across the repack', async () => {
+    // D asked that the selected day survive a repack; there is no selection to
+    // survive it now, so what the criterion becomes is that every day comes back
+    // — a repack that rendered only the first would be the tab strip's failure
+    // with nothing to reveal it. DECISIONS.md 222.
+    it('re-renders every day of the trip the repack answered with', async () => {
       await loaded();
-      tabs()[1].click();
-      fixture.detectChanges();
 
       press(en['trip.repack.action']);
       repackRequest().flush(repacked());
       fixture.detectChanges();
 
-      expect(text()).toContain('Second warmer plan');
-      expect(text()).not.toContain('Warmer plan · ');
-      expect(tabs()[1].getAttribute('aria-pressed')).toBe('true');
+      expect(daySections()).toHaveLength(2);
+      expect(dayText(1)).toContain('Second warmer plan');
     });
 
     it('moves through the status lines while the repack runs', async () => {
@@ -887,7 +955,7 @@ describe('TripDetailPage', () => {
       swapRequest().flush(bootsSwapped());
       fixture.detectChanges();
 
-      expect(lookItems()).toEqual(['white shirt', 'grey trainers']);
+      expect(lookItems(0)).toEqual(['white shirt', 'grey trainers']);
       expect(text()).toContain('grey trainers');
       expect(text()).not.toContain('brown boots');
       expect(text()).not.toContain(RAW_DETAIL);
@@ -903,20 +971,17 @@ describe('TripDetailPage', () => {
       swapRequest().flush(bootsSwapped());
       fixture.detectChanges();
 
-      tabs()[1].click();
-      fixture.detectChanges();
-
-      expect(text()).toContain('Dinner out');
-      expect(lookItems()).toEqual(['white shirt', 'black heels']);
+      expect(lookItems(0)).toEqual(['white shirt', 'grey trainers']);
+      expect(lookItems(1)).toEqual(['white shirt', 'black heels']);
     });
 
-    // The day on the wire is the day on screen, not the day the page opened on.
-    it('swaps on the selected day rather than on the first', async () => {
+    // The day on the wire is the section the badge sits in. There is no
+    // selection any more, so the page is handed the day by the loop that drew
+    // the badge rather than reading one off a signal. DECISIONS.md 222.
+    it('sends the day whose section the badge was pressed in', async () => {
       await loaded(packed());
-      tabs()[1].click();
-      fixture.detectChanges();
 
-      badges()[1].click();
+      badges(1)[1].click();
       fixture.detectChanges();
 
       expect(swapRequest().request.body).toMatchObject({ day: 2, item_id: 'item-3' });
@@ -949,9 +1014,7 @@ describe('TripDetailPage', () => {
       swapRequest().flush(bootsSwapped());
       fixture.detectChanges();
 
-      tabs()[1].click();
-      fixture.detectChanges();
-      badges()[0].click();
+      badges(1)[0].click();
       fixture.detectChanges();
 
       expect(swapRequest().request.body).toEqual({
@@ -1003,17 +1066,18 @@ describe('TripDetailPage', () => {
       expect(text()).not.toContain('still wear');
     });
 
-    it('drops the still-worn line when the reader moves to another day', async () => {
+    // Under the day the garment left and under no other. The sentence is held
+    // with the day it belongs to, because every day is on screen and a line
+    // without one would print under all of them. DECISIONS.md 222.
+    it('draws the still-worn line under the day that was swapped alone', async () => {
       await loaded(packed());
       badges()[0].click();
       fixture.detectChanges();
       swapRequest().flush(shirtSwapped());
       fixture.detectChanges();
 
-      tabs()[1].click();
-      fixture.detectChanges();
-
-      expect(text()).not.toContain('still wear');
+      expect(dayText(0)).toContain('still wear');
+      expect(dayText(1)).not.toContain('still wear');
     });
 
     it("locks the trip's own actions while a swap is running", async () => {
@@ -1022,8 +1086,27 @@ describe('TripDetailPage', () => {
       fixture.detectChanges();
 
       expect(badges()[0].disabled).toBe(true);
+      // The other day's badges too: one request is in flight at a time across
+      // the whole itinerary, so a badge that still depressed would be a press
+      // with nowhere to go.
+      expect(badges(1)[0].disabled).toBe(true);
       expect(button(en['trip.repack.action']).disabled).toBe(true);
       expect(button(en['trip.delete.idle']).disabled).toBe(true);
+      swapRequest().flush(shirtSwapped());
+    });
+
+    // The shirt is worn on both days, and the spinner belongs to the tile that
+    // was pressed. An id held without its day puts a wait on a garment nobody
+    // touched, which is the failure the itinerary invented and the tab strip
+    // could not have had. DECISIONS.md 222.
+    it('draws the wait on the pressed day alone when the garment is worn twice', async () => {
+      await loaded(packed());
+
+      badges()[0].click();
+      fixture.detectChanges();
+
+      expect(spinners(0)).toBe(1);
+      expect(spinners(1)).toBe(0);
       swapRequest().flush(shirtSwapped());
     });
 
@@ -1116,17 +1199,17 @@ describe('TripDetailPage', () => {
       expect(text()).toContain(en['trip.error.swapGeneral']);
     });
 
-    // The message is about a look the reader has left.
-    it('clears the failure when the reader moves to another day', async () => {
+    // The message is about one day's look, so it is drawn under that day and
+    // under no other — which is what the page's actionError above the buttons
+    // would have said instead.
+    it('shows the failure under the day the swap was asked for', async () => {
       await loaded(packed());
       badges()[0].click();
       fixture.detectChanges();
       fail('stylist_failed', 502);
 
-      tabs()[1].click();
-      fixture.detectChanges();
-
-      expect(text()).not.toContain(en['trip.error.swapStylistFailed']);
+      expect(dayText(0)).toContain(en['trip.error.swapStylistFailed']);
+      expect(dayText(1)).not.toContain(en['trip.error.swapStylistFailed']);
     });
 
     it('clears the failure when the next swap is asked for', async () => {

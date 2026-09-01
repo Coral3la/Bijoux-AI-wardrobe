@@ -33,11 +33,16 @@ function toRequest(draft: TripDraft, destination: string): PackRequest {
   imports: [TripForm],
   template: `
     <main class="mx-auto flex w-full max-w-2xl flex-col gap-region px-6 pt-hero pb-region">
-      <header class="flex flex-col gap-1">
-        <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+      <!-- The wardrobe's and the stylist's header, one caption line taller: a
+           mono eyebrow, the title in the display serif at 300, and a rule under
+           the pair. This screen is where a trip is asked for, so the title is
+           ours and takes the authored face — the destination the answer is
+           headed with is not, and does not. DECISIONS.md 071, 222. -->
+      <header class="flex flex-col gap-1 border-b border-line pb-4">
+        <p class="font-mono text-[11px] tracking-[0.18em] text-ink-soft uppercase">
           {{ i18n.t('trip.caption') }}
         </p>
-        <h1 class="font-display text-4xl leading-tight tracking-tight">
+        <h1 class="font-display text-[40px] leading-none font-light tracking-[-0.02em] md:text-5xl">
           {{ i18n.t('trip.title') }}
         </h1>
       </header>
@@ -47,8 +52,9 @@ function toRequest(draft: TripDraft, destination: string): PackRequest {
              the look card because the form becomes one; this form becomes a
              sentence, and a skeleton of a sentence is a grey bar pretending to
              be progress. The status line is the whole of the wait, and it is
-             announced rather than silently replaced. -->
-        <p class="text-sm text-ink-muted" role="status" aria-live="polite">
+             announced rather than silently replaced. It is a sentence this
+             project wrote, so it takes the prose face. -->
+        <p class="font-prose text-base text-ink-muted italic" role="status" aria-live="polite">
           {{ i18n.t(statusKey()) }}
         </p>
       } @else {

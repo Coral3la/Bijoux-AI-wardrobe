@@ -435,16 +435,26 @@ than the one action a new account must take.
 is closed and the sentence that used to stand here — *nothing links to this
 screen* — went with it.
 
-### 7. Trips — `/trips` *(Stage 4)*
+### 7. Trips — `/trips` and `/trips/:id` *(Stage 4)*
 
-**Form:** destination (autocomplete via `/me/locations/search`), date range, then one occasion chip row per day, defaulting to `casual`.
+**Built at tasks 4.5, 4.6, 4.6a and 4.6b. Rewritten at the Atelier pass**, from
+the picked mockup: the direction is **The Itinerary** and `DECISIONS.md` 222 is
+why. The form is `/trips`; the packed trip is `/trips/:id`.
 
-**Built at task 4.5, and the line above is one field short.** `STAGE-4` 4.5 asks
-for *"an optional notes field"* and this section never drew one. The form has it,
-and it is **unbounded** — `TripPackRequest.notes` is stripped and not
-length-checked, so a counter or a cap here would be a refusal the API does not
-make. Five more things the sentence above does not say, each settled at 4.5's
-orientation:
+#### The form — `/trips`
+
+Destination (autocomplete via `/me/locations/search`), date range, one occasion
+chip row per day defaulting to `casual`, and an optional notes field. The whole
+control sits in **one stone panel** — `bg-surface-elevated`, `rounded-sm`,
+`p-6` — which is the treatment the stylist's form took at its own pass and the
+only raised object on either trip screen. Every label is a 10px caps eyebrow,
+every field is a hairline box on the canvas colour, the chip rows **wrap** where
+they used to scroll, and the submit is the caps pill with the arrow that ends
+the stylist's form. The header above it is the wardrobe's: a mono caption, the
+title in the display serif at 300, a rule under the pair.
+
+Five things the form does, each settled at 4.5's orientation and none of them
+changed by the restyle:
 
 - **The destination is *picked*, never typed.** The wire takes one string and
   the endpoint geocodes it again for itself (`DECISIONS.md` 202), so the picker's
@@ -452,7 +462,9 @@ orientation:
   the geocoder returned is one it will match. The chip prints `name, country` to
   tell the two Berlins apart, and the country is display text that never leaves
   the browser, which is `DECISIONS.md` 153 biting a third time: both Berlins send
-  `"Berlin"`. The submit button is disabled until a place has been chosen.
+  `"Berlin"`. The submit button is disabled until a place has been chosen. The
+  results are rows on a hairline rather than a stack of filled tiles — five
+  raised objects inside a panel is three levels of surface in one control.
 - **The dates are capped at `today + 14` and floored at nothing.** The cap is
   `DECISIONS.md` 190's, and the missing floor is 201's: a lower bound on the
   server's calendar day is a refusal a browser east of UTC earns by its timezone,
@@ -464,95 +476,118 @@ orientation:
   so a day already set to *work* survives extending the trip. The rows are built
   in day order because the request schema requires the numbers to arrive as
   `1..n` *in* order rather than as a permutation of them.
+- **The notes field is unbounded.** `TripPackRequest.notes` is stripped and not
+  length-checked, so a counter or a cap here would be a refusal the API does not
+  make.
 - **The wait is four cycling status lines and no skeleton.** The stylist draws
   the outline of the look card because its form *becomes* one; this form becomes
   a sentence, and a skeleton of a sentence is a grey bar pretending to be
   progress. The lines name the four steps the server takes — geocode, forecast,
   wardrobe, assemble — and **none of them names a duration**, because nobody has
-  measured this call.
-- **Success is a confirmation panel, not a navigation.** `/trips/:id` is 4.6's
-  and does not exist, so 4.5 ends at *"Berlin is packed. 8 items · 4 looks"*,
-  built from `packing_list.reuse_summary` — which is this section's own header
-  line, word for word. Task 4.6 replaces the panel with a `router.navigate` and
-  the counts move up to the header they were written for. The destination is
-  rendered in the **body face**, per `DECISIONS.md` 071, which names this screen.
+  measured this call. They are set in the prose italic, because they are
+  sentences this project wrote.
 
-**Result — packing view:**
+**Success is a navigation, not a panel.** 4.5 ended at a confirmation panel
+because `/trips/:id` did not exist yet; 4.6 replaced it with a
+`router.navigate` and moved its counts into the header they were written for.
+
+**The chips come from the shared `appChip` directive**, which this pass converted
+to Atelier rather than copying a third time — the trip form is the third screen
+to want the treatment and the directive's only remaining caller. `DECISIONS.md`
+220, 222.
+
+#### The packed trip — `/trips/:id`
 
 ```
-┌────────────────────────────────────────────┐
-│  Berlin                                    │
-│  2026-03-14 – 2026-03-17                   │
-│  8 items · 4 looks · You'll wear the       │
-│  white oversized shirt on 3 days           │
-├────────────────────────────────────────────┤
-│ [Day 1][Day 2][Day 3][Day 4]               │  ← horizontal day strip
-│  12°C   14°C   17°C   15°C                 │
-│   🌧      ☁      ☀      ☁                  │
-├────────────────────────────────────────────┤
-│  (the selected day's look)                 │
-├────────────────────────────────────────────┤
-│  Packing list                              │
-│  Tops (3) ────────────────                 │
-│   ▢ white oversized shirt                  │  ← checkable, local state only
-│   ▢ black knit sweater                     │
-│  Bottoms (2) ─────────────                 │
-│   …                                        │
-├────────────────────────────────────────────┤
-│  Re-pack with today's forecast   Delete    │  ← 4.6b, added below the list
-└────────────────────────────────────────────┘
+  TRIP · 5 DAYS
+  Milan
+  2026-09-10 – 2026-09-14
+  Packed 12 pieces across 5 looks. You'll wear the camel trousers on 3 days.
+  ──────────────────────────────────────────────────────────────────────────
+  DAY 1 · 2026-09-10   Arrival day.            ⛅ 24°C partly cloudy · Casual
+  ┌────┐┌────┐┌────┐┌────┐
+  │    ││   ↻││    ││    │
+  └────┘└────┘└────┘└────┘
+  Cashmere sweater   Wide-leg trousers   Leather sneakers   Trench coat
+  TOP                TROUSERS            SHOES              OUTERWEAR
+  Traveling comfort with room for the evening.
+  The trench catches the airplane chill.
+  ──────────────────────────────────────────────────────────────────────────
+  DAY 2 · 2026-09-11   Meetings and dinner.            ☀ 26°C clear · Work
+  …
+  ──────────────────────────────────────────────────────────────────────────
+
+  Before you go
+
+  TOPS · 3 ───────────────        TROUSERS · 2 ───────────
+   ☑ cream cashmere sweater        ▢ camel wide-leg trousers
+   ▢ white silk shirt              ▢ black wool trousers
+  ──────────────────────────────────────────────────────────────────────────
+  ( RE-PACK WITH TODAY'S FORECAST → )                     ( DELETE TRIP )
 ```
 
-The reuse summary is the line that makes the feature land. Show it prominently.
+**There are no day tabs.** Every day is a section, in date order, one flowing
+into the next, separated by a hairline and by nothing else — and the last one
+closes on a heavier rule before *Before you go*. The page is 820px. This is the
+one behaviour change the direction is made of, and what it deletes is a piece of
+view state: there is no selected day, so there is no opening selection to defend,
+nothing to clear when the reader moves, and nothing for a repack to preserve.
 
-**Built at task 4.6, and the box above is redrawn rather than annotated** —
-four things in it were wrong or unbuildable, each settled at that task's
-orientation.
+**The day head belongs to the page, not to the look.** A mono kicker naming the
+day and its date, the look's title beside it on the same baseline, and the
+forecast on the far end as italic prose with a mono reading and a decorative
+glyph: `⛅ 24°C partly cloudy · Casual`. The head renders for **every** day,
+including one whose look a repack detached — which is why the title is drawn
+here rather than inside `TripLook`, and why the condition and the occasion are
+one authored key with the dot inside it.
 
-- **The reuse sentence moved into the header**, which is where it now sits with
-  the two counts on one line. This document drew it at the *foot* of the packing
-  list and `STAGE-4` 4.6 drew it inline with the counts —
-  *"8 items across 5 looks — the jeans appear on 3 days"* — and a sentence
-  split across two ends of one screen is worse than either placement. The
-  counts half is 4.5's confirmation panel word for word, which is what settles
-  which end it joins; that panel is **deleted** by this task, and `/trips`
-  navigates here instead. `DECISIONS.md` 206.
-- **"The jeans appear on 3 days" cannot be written from one template.**
-  `display_name` is model-written text whose grammatical number is unknowable
-  in the browser, so *the jeans appear* and *the blazer appears* cannot both
-  come out of one string. The verb after *you'll* is invariant, which is the
-  whole reason for the rewording. The clause is **omitted entirely** when
-  `most_reused` is null, when the garment has no `display_name`, and when the
-  item is in none of the response's looks — never rendered as *Untitled item*.
-- **The dates are printed as they arrive.** `14–17 March` needs a month name
-  and a range collapser, and this project formats no date anywhere:
-  `item.wear.last` prints `last_worn_at` raw. A formatter would either
-  hard-code English months against `CONVENTIONS.md` line 77 or take them from
-  `Intl` and the browser's locale, while every other string on the screen came
-  from `en.json`. Neither is worth a date range, so the ISO dates stand.
-- **It is not the look card.** That component ends in *Try again*, which has no
-  request behind a trip look, and carries the ↻ badge on every garment — which
-  is **4.6a's** and must not appear a task early. What is drawn is the saved
-  list's arrangement: the title, the garments in `look_items.position` order,
-  the reasoning and the weather note. `saved-looks.page.ts` refused the same
-  reuse for the same reason at 3.2.
+**The dates are printed as they arrive.** `10–14 September` needs a month name
+and a range collapser, and this project formats no date on this screen:
+`DECISIONS.md` 206 refused a formatter here and the refusal stands, so the header
+range and every day kicker carry the ISO string the server sent.
 
-**A day can have no look, and it renders as a gap rather than as an error.**
+**The look sits flat on the canvas**: a four-column strip of `ItemCard` with
+`caption=false` (two columns on a phone), each tile captioned underneath with the
+garment's name in the content face and its category as a caps meta line, then the
+still-worn line, the reasoning and the weather note. The garments are in
+`look_items.position` order — the model's own — and there is no layer grouping.
+**It is still not the look card**, for the three grounds 4.6 recorded and 4.6a
+re-recorded: that card ends in *Try again*, carries a heart and two thumbs, and
+sorts by layer.
+
+**A day can have no look, and it renders as a quiet line rather than an error.**
 `days[].look_id` is nullable because a repack detaches a look that was saved,
 rated or worn (`AUDITS.md` **O-32**, `DECISIONS.md` 200), so the day keeps its
-forecast and loses its outfit. Every day gets a tab either way — the tab is
-built from the forecast, not from the look — and **day 1 is selected on arrival
-even when day 1 is the gap**, because an opening selection that depended on
-which days kept a look would leave the reader working out why day 3 is the one
-lit up.
+forecast and loses its outfit. It is italic prose on the canvas, not a raised
+card: a gap in an itinerary is a quiet day, not an object.
 
-**The repack and the delete are task 4.6b's**, added in a footer row under the
-packing list — the shape `item-detail.page.ts` uses for its own two actions, and
-the last thing on the screen rather than the first. 4.6 shipped without them
-deliberately: `STAGE-4` 4.6 asks for a header, a day strip, a look and a list,
-and neither endpoint had an owning task anywhere in the stage, which `AUDITS.md`
-**O-33** opened and 4.6b closes. Five things about the pair, settled at 4.6b's
-orientation.
+**The header is four lines**: a mono caption (`Trip · 5 days`), the destination
+at 56px in the **content face** — `DECISIONS.md` 071 names this screen, and a
+geocoded place name in a latin-subset serif falls back per character — the ISO
+date range in mono, and the summary. **The summary is two whole sentences**,
+*"Packed 8 pieces across 4 looks."* and *"You'll wear the white oversized shirt
+on 3 days."*, set in italic prose with the garment name rendered through
+`AuthoredLine` so that it, and only it, takes the content face. The reuse
+sentence is the line that makes the feature land, and it is **omitted entirely**
+when `most_reused` is null, when the garment has no `display_name`, and when the
+item is in none of the response's looks — never rendered as *Untitled item*.
+*"The jeans appear on 3 days"* cannot be written from one template, because
+`display_name` is model-written text whose grammatical number is unknowable in
+the browser; the verb after *you'll* is invariant, which is the whole reason for
+the rewording.
+
+**The packing list is headed *Before you go*** and sits flat on the canvas: group
+headings are mono caps kickers on a hairline (`TOPS · 3`), rows are a checkbox
+inside its own label, ticked rows are struck through in place, and the groups run
+two columns above `md`. The heading names the moment rather than the object,
+because the itinerary above it is read at the desk and this is read at the
+wardrobe on the morning of. The state is **local to the browser** — there is no
+column for it, and a tick that survived a reload would be a claim the server
+cannot answer for.
+
+**The repack and the delete are the last row**, under a rule, as caps pills.
+Five things about the pair, settled at 4.6b's orientation and unchanged by the
+restyle:
 
 - **The repack is one press and the delete is two**, and the asymmetry is the
   feature rather than an inconsistency. `DECISIONS.md` 200 has a repack
@@ -562,17 +597,21 @@ orientation.
   step in front of a reversible act is training for clicking through the one in
   front of the irreversible act next to it. The delete cascades, and its armed
   label says so: *"Tap again to delete. Saved looks from this trip go too."*
-  That sentence is the only place in the product where the cascade is named.
+  That sentence is the only place in the product where the cascade is named, and
+  it is why the armed pill is wide.
 - **Two presses, not `window.confirm` and not a modal**, which is
   `DECISIONS.md` 126 transposed one screen along — the gate's `confirm()`
   returns `undefined`, so a confirm-guarded delete reads as tested and never
-  runs. It disarms on blur and when the repack is pressed.
+  runs. It disarms on blur, when the repack is pressed, and when a ↻ badge on
+  **any** day is pressed. Idle is the danger colour on a hairline; armed is the
+  same token filled, because the gate is only a gate if the second press looks
+  different from the first.
 - **The repack wait is the pack's wait**, four cycling status lines and the same
-  three-second interval, because `DECISIONS.md` 202 has the endpoint re-geocode
-  the stored destination rather than reuse the columns — so even *"Finding your
+  interval, because `DECISIONS.md` 202 has the endpoint re-geocode the stored
+  destination rather than reuse the columns — so even *"Finding your
   destination…"* is true of it. The lines, the interval, the interval's teardown
-  and the seven-code error table now live in `pack-wait.ts` and are imported by
-  both screens rather than written twice (`DECISIONS.md` 207).
+  and the seven-code error table live in `pack-wait.ts` and are imported by both
+  screens rather than written twice (`DECISIONS.md` 207).
 - **A failed repack keeps the trip on screen** and puts its message above the
   actions row. `pack_trip` runs before anything is detached or deleted, so the
   failure costs the user nothing, and a screen blanked by it would say the
@@ -584,34 +623,29 @@ orientation.
   pack request. This does **not** add to `AUDITS.md` **O-29**'s count: that
   item counts bespoke controls a user can see and press, and this is a
   redirect after an action, the same shape `item-detail.page.ts` has had since
-  1.9 and which was never counted either. *The last sentence here said the
-  screen's own **Back to wardrobe** link "is the fifth control and remains the
-  only one on it"; task 4.9 deleted that link, and it was the tenth control
-  rather than the fifth — see `AUDITS.md` O-29's closing census. The redirect
-  described above is unaffected and still uncounted.*
+  1.9 and which was never counted either.
 
-**The ↻ badge is task 4.6a's, and it is the last thing this screen gained.** It
-sits on every garment in the day's look that has a `replace_role` — so not on a
-dress, because replacing one can legally return a top *and* a bottom, which is
-not the single-item swap the field names (`AUDITS.md` **O-25**). One tap replaces
-that garment on that day, spends one model call, and re-renders the whole trip
-from the response: the look, the packing list and the reuse line. Six things
-about it, settled at that task's orientation.
+**The ↻ badge is task 4.6a's**, and the Itinerary changes what it is scoped to
+rather than what it does. It sits on every garment in a day's look that has a
+`replace_role` — so not on a dress, because replacing one can legally return a
+top *and* a bottom, which is not the single-item swap the field names
+(`AUDITS.md` **O-25**). One tap replaces that garment on that day, spends one
+model call, and re-renders the whole trip from the response: every look, the
+packing list and the reuse line. Six things about it, five from 4.6a's
+orientation and one the Itinerary added:
 
-- **The look moved into its own component**, `trip-look.ts`, and it is still
-  **not** the stylist's `LookCard` — the third refusal, on the three grounds 4.6
-  already recorded: that card ends in *Try again*, which has no request behind a
-  trip look; it carries a heart and two thumbs, which belong to `/saved`; and it
-  groups by layer where this arranges by `look_items.position`. What changed is
-  that the block now owns per-tile interaction, so it is a component rather than
-  a page's `<article>` — `packing-list.ts`'s reasoning, one section up. It is not
-  in `shared/ui/`: one caller, and **O-15** stays at zero.
 - **The wait is a spinner over the tapped tile and nothing else** — no status
   cycle, no `packStatus`. The pack's four lines exist because that screen has
-  nothing to show for twenty seconds; this one has the whole look, and covering
+  nothing to show for twenty seconds; this one has the whole trip, and covering
   it would throw away the only thing that makes a four-to-eight second wait
-  legible. Every badge disables while one swap is in flight, because the store
-  behind this takes one request at a time.
+  legible.
+- **The waiting tile is matched to its day before it is drawn, and this is the
+  Itinerary's addition.** `swappingItemId` is an item id, and a garment worn on
+  Monday and Thursday is the same id on both — so with every day on screen, one
+  press would have spun two tiles. `TripLook` is handed a day-scoped id for the
+  spinner and a separate **`busy`** flag for the badges, because every badge in
+  the trip locks while one request is in flight and the day it is locking for may
+  have nothing waiting on it. `DECISIONS.md` 222.
 - **There is no preview and no confirmation, and there is no undo.** The swap
   *is* the answer, and a second tap on the tile that came back is the user
   saying *not that one either* — which is what makes the exclusions a
@@ -625,23 +659,23 @@ about it, settled at that task's orientation.
   swaps that rejected them — and a repack clears them, because it rebuilds every
   day against a forecast the rejections were never judged against.
 - **Where the garment that left is still worn, the screen names the days**, under
-  the tile grid and above the model's own prose: *"You'll still wear the white
-  shirt on Day 2."* This is `STAGE-4` 4.6a's third property and the reason the
-  feature is not a wiring job — without it, taking the jeans off Tuesday reads as
-  taking them out of the suitcase while Thursday still wears them. The days are
-  joined with `trip.swap.daysSeparator` and there is **no "and"**: `Intl` would
-  write one and take the browser's locale with it, on a screen whose every other
-  word came from `en.json`, which is `DECISIONS.md` 206's refusal of a date
-  formatter one sentence along.
-- **A failed swap says so inside the look**, at the foot of the article, not in
-  the page's `actionError` under the packing list — that line means *the whole
-  trip's action failed*, and a swap that fails costs one day nothing. The day's
-  look stays exactly as it was. **Two of the pack's messages could not be
-  reused**: `wardrobe_too_small` says *eight* and the swap threshold is **six**,
-  and the pack's `stylist_failed` says *"We couldn't pack this trip"* in answer
-  to a tap on one shoe. Both got keys of their own, which is `DECISIONS.md` 207's
-  finding a second time. `validation_error` is deliberately given no message and
-  falls to the general line.
+  the tile grid of **the day it left** and above that day's prose: *"You'll still
+  wear the white shirt on Day 2."* This is `STAGE-4` 4.6a's third property and
+  the reason the feature is not a wiring job — without it, taking the jeans off
+  Tuesday reads as taking them out of the suitcase while Thursday still wears
+  them. The days are joined with `trip.swap.daysSeparator` and there is **no
+  "and"**: `Intl` would write one and take the browser's locale with it, on a
+  screen whose every other word came from `en.json`, which is `DECISIONS.md`
+  206's refusal of a date formatter one sentence along.
+- **A failed swap says so under the day it was asked for**, not in the page's
+  `actionError` above the actions row — that line means *the whole trip's action
+  failed*, and a swap that fails costs one day nothing. The day's look stays
+  exactly as it was. **Two of the pack's messages could not be reused**:
+  `wardrobe_too_small` says *eight* and the swap threshold is **six**, and the
+  pack's `stylist_failed` says *"We couldn't pack this trip"* in answer to a tap
+  on one shoe. Both got keys of their own, which is `DECISIONS.md` 207's finding
+  a second time. `validation_error` is deliberately given no message and falls to
+  the general line.
 
 ### 8. Profile — `/profile`
 
@@ -683,7 +717,7 @@ One decision, made once, applied everywhere: **the clothes are the design.** Eve
 
 **The direction is Atelier** — the vocabulary of an Aesop store or a COS catalogue. A warm paper ground, one thin serif, chrome that nearly disappears, and a great deal of air. It was picked from three whole-screen mockups rather than assembled from properties, and every rule below is read off the picked mockup rather than argued from first principles.
 
-**A screen is converted whole, in one commit, from a picked mockup.** The wardrobe is converted; the stylist, saved looks, profile, trips and the auth pair are pitched and converted one at a time after it.
+**A screen is converted whole, in one commit, from a picked mockup.** Converted so far, in order: the **wardrobe** (Atelier, `DECISIONS.md` 219), the **stylist** (the Ritual, 220), **saved looks** (the Shelf, 221) and **trips** (the Itinerary, 222). Still to be pitched: **profile** and the **auth pair**.
 
 **The palette is global and follows through immediately; everything else is per-screen.** The tokens below are the application's only palette — there is no second, prefixed set — so every screen is on Atelier's colours from the day the wardrobe lands. What each screen's own pitch decides is its **typography, layout, states and copy**. Until the last pitch lands the unconverted screens are therefore half-converted, and that is deliberate: a palette is the substrate a design is drawn on, not the design.
 

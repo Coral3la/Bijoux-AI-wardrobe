@@ -13,7 +13,6 @@ import { MeApi } from '../../core/api/me.api';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { LocationResult } from '../../shared/models/location.model';
 import { OCCASIONS, Occasion } from '../../shared/models/enums';
-import { Button } from '../../shared/ui/button';
 import { Chip } from '../../shared/ui/chip';
 import { todayInLocalTime } from '../stylist/look-request-form';
 
@@ -35,6 +34,12 @@ const MIN_QUERY_LENGTH = 2;
 export const SEARCH_DEBOUNCE_MS = 300;
 
 const DAY_MS = 86_400_000;
+
+// The caps eyebrow every label on a converted screen is set in. Written once
+// here because this form carries six of them — `look-request-form.ts` declares
+// the same treatment inline for the three it has, and neither is worth a shared
+// export until something outside a form wants one.
+const LABEL = 'text-[10px] font-medium tracking-[0.18em] text-ink-soft uppercase';
 
 // What the four controls hold. `destination` is the whole geocoder result
 // rather than its name, because the chip has to print "Berlin, Germany" to tell
@@ -120,19 +125,24 @@ export function tripProblem(draft: TripDraft): string | null {
 @Component({
   selector: 'app-trip-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, Chip],
+  imports: [Chip],
   template: `
-    <form class="flex flex-col gap-6" (submit)="submit($event)">
+    <!-- The stone panel the stylist's form took at the Ritual pass, for the same
+         reason one screen along: this is a standing control rather than a step,
+         and a form drawn straight onto the canvas under a page title reads as
+         leftover. It is the one raised object on either trip screen — everything
+         the detail page draws sits flat. DECISIONS.md 220, 222. -->
+    <form class="flex flex-col gap-5 rounded-sm bg-surface-elevated p-6" (submit)="submit($event)">
       <section class="flex flex-col gap-2">
-        <h2 class="text-sm font-medium">{{ i18n.t('trip.destination.label') }}</h2>
+        <h2 [class]="label">{{ i18n.t('trip.destination.label') }}</h2>
 
         @if (draft().destination; as chosen) {
-          <!-- The place, in the body face. It is a name this project did not
-               write, and Fraunces is latin-subset — DECISIONS.md 071 names the
-               trip screen as one of the four surfaces that has to apply that
-               rule deliberately. -->
-          <div class="flex items-center gap-3 rounded-xl bg-surface p-3 shadow-sm">
-            <p class="text-sm">
+          <!-- The place, in the content face. It is a name this project did not
+               write and Cormorant Garamond is latin-subset — DECISIONS.md 071
+               names the trip screen as one of the four surfaces that has to
+               apply that rule deliberately. -->
+          <div class="flex items-center gap-3 rounded-sm border border-line bg-canvas p-3">
+            <p class="font-sans text-sm">
               {{
                 i18n.t('trip.destination.result', { name: chosen.name, country: chosen.country })
               }}
@@ -141,7 +151,7 @@ export function tripProblem(draft: TripDraft): string | null {
               type="button"
               (click)="clearDestination()"
               [attr.aria-label]="i18n.t('trip.destination.clear')"
-              class="ms-auto min-h-11 min-w-11 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              class="ms-auto min-h-11 min-w-11 rounded-sm text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               ×
             </button>
@@ -164,7 +174,7 @@ export function tripProblem(draft: TripDraft): string | null {
           />
 
           @if (searching()) {
-            <p class="text-sm" role="status" aria-live="polite">
+            <p class="font-prose text-sm text-ink-muted italic" role="status" aria-live="polite">
               {{ i18n.t('trip.destination.searching') }}
             </p>
           }
@@ -172,16 +182,21 @@ export function tripProblem(draft: TripDraft): string | null {
             <p class="text-sm font-medium text-danger">{{ i18n.t('trip.destination.error') }}</p>
           }
           @if (noMatches()) {
-            <p class="text-sm">{{ i18n.t('trip.destination.noResults') }}</p>
+            <p class="font-prose text-sm text-ink-muted italic">
+              {{ i18n.t('trip.destination.noResults') }}
+            </p>
           }
 
-          <ul class="flex flex-col gap-1">
+          <!-- Rows on a hairline rather than a stack of filled buttons: the
+               results are a list to read down, and five raised tiles inside a
+               panel is three levels of surface in one control. -->
+          <ul class="flex flex-col">
             @for (result of results(); track result.lat + ':' + result.lon) {
-              <li>
+              <li class="border-b border-line last:border-b-0">
                 <button
                   type="button"
                   (click)="chooseDestination(result)"
-                  class="min-h-11 w-full rounded-md bg-surface px-3 text-start text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  class="min-h-11 w-full text-start font-sans text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 >
                   {{
                     i18n.t('trip.destination.result', {
@@ -197,8 +212,8 @@ export function tripProblem(draft: TripDraft): string | null {
       </section>
 
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div class="flex flex-col gap-1">
-          <label for="trip_start" class="text-sm font-medium">
+        <div class="flex flex-col gap-2">
+          <label for="trip_start" [class]="label">
             {{ i18n.t('trip.startDate.label') }}
           </label>
           <!-- Capped at today + 14 and deliberately not floored. DECISIONS.md
@@ -216,8 +231,8 @@ export function tripProblem(draft: TripDraft): string | null {
           />
         </div>
 
-        <div class="flex flex-col gap-1">
-          <label for="trip_end" class="text-sm font-medium">
+        <div class="flex flex-col gap-2">
+          <label for="trip_end" [class]="label">
             {{ i18n.t('trip.endDate.label') }}
           </label>
           <input
@@ -232,27 +247,33 @@ export function tripProblem(draft: TripDraft): string | null {
       </div>
 
       <section class="flex flex-col gap-3">
-        <h2 class="text-sm font-medium">{{ i18n.t('trip.occasions.legend') }}</h2>
+        <h2 [class]="label">{{ i18n.t('trip.occasions.legend') }}</h2>
 
         <!-- One row per day, in day order, which is the order the request
              schema requires: it checks that the numbers arrive as 1..n rather
              than merely being a permutation of them, because pack_trip reads
              the tuple positionally.
 
+             Wrapping, where this row scrolled: nothing ever scrolled it for the
+             user, and the Atelier chip is small enough that six of them wrap to
+             two lines on a phone. Fourteen scrolling rows was the shape that
+             made the argument.
+
              No [attr.aria-pressed] on the chips: the Chip directive announces
              the state from the same input that paints it, and a template
              binding beside it would win silently and be free to disagree. -->
         @for (occasion of draft().occasions; track $index; let day = $index) {
           <fieldset class="flex flex-col gap-2">
-            <legend class="text-sm">{{ i18n.t('trip.day.legend', { day: day + 1 }) }}</legend>
-            <div class="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+            <legend class="font-mono text-[10px] tracking-[0.18em] text-ink-soft uppercase">
+              {{ i18n.t('trip.day.legend', { day: day + 1 }) }}
+            </legend>
+            <div class="flex flex-wrap items-center gap-1.5">
               @for (candidate of allOccasions; track candidate) {
                 <button
                   appChip
                   type="button"
                   [active]="occasion === candidate"
                   (click)="chooseOccasion(day, candidate)"
-                  class="shrink-0"
                 >
                   {{ i18n.t('vocabulary.occasion.' + candidate) }}
                 </button>
@@ -263,7 +284,7 @@ export function tripProblem(draft: TripDraft): string | null {
       </section>
 
       <div class="flex flex-col gap-2">
-        <label for="trip_notes" class="text-sm font-medium">
+        <label for="trip_notes" [class]="label">
           {{ i18n.t('trip.notes.label') }}
         </label>
         <!-- No length limit, and no counter. TripPackRequest.notes is
@@ -275,7 +296,7 @@ export function tripProblem(draft: TripDraft): string | null {
           [value]="draft().notes"
           [placeholder]="i18n.t('trip.notes.placeholder')"
           (input)="changeNotes($event)"
-          class="rounded-md border border-line-strong bg-surface p-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          class="rounded-sm border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         ></textarea>
       </div>
 
@@ -283,14 +304,29 @@ export function tripProblem(draft: TripDraft): string | null {
         <p id="trip-problem" class="text-sm font-medium text-danger">{{ i18n.t(key) }}</p>
       }
 
+      <!-- The Atelier pill, the same one the stylist's form ends in, arrow and
+           all. It is written out here rather than taken from appButton for
+           221's reason: converting that directive reaches every screen in the
+           product. DECISIONS.md 222. -->
       <button
-        appButton
         type="submit"
         [disabled]="problem() !== null"
         [attr.aria-describedby]="problem() === null ? null : 'trip-problem'"
-        class="disabled:opacity-50"
+        class="ms-auto inline-flex min-h-11 items-center gap-x-2 rounded-full border border-ink bg-ink px-6 text-[11px] font-medium tracking-[0.22em] text-canvas uppercase disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         {{ i18n.t('trip.submit') }}
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="h-3 w-3"
+          aria-hidden="true"
+        >
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        </svg>
       </button>
     </form>
   `,
@@ -310,8 +346,9 @@ export class TripForm {
 
   protected readonly allOccasions = OCCASIONS;
   protected readonly horizon = tripHorizon();
+  protected readonly label = LABEL;
   protected readonly fieldClass =
-    'min-h-11 rounded-md border border-line-strong bg-surface px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+    'min-h-11 rounded-sm border border-line bg-canvas px-3 py-2 font-sans text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
   // The type-ahead's own state, and the one thing this component does hold.
   // It is deliberately not in the draft: a half-typed query is not part of the

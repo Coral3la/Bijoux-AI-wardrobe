@@ -3,12 +3,12 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { TripsApi } from '../../core/api/trips.api';
-import { I18nService } from '../../core/i18n/i18n.service';
+import { I18nService, Params } from '../../core/i18n/i18n.service';
 import { Condition, roleOf } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
 import { Look } from '../../shared/models/look.model';
 import { TripDay, TripDetail } from '../../shared/models/trip.model';
-import { Button } from '../../shared/ui/button';
+import { AuthoredLine } from '../../shared/ui/authored-line';
 import { packErrorKey, packStatus } from './pack-wait';
 import { PackingList } from './packing-list';
 import { StillWorn, TripLook } from './trip-look';
@@ -28,6 +28,14 @@ const CONDITION_GLYPH: Readonly<Record<Condition, string>> = {
   snow: '❄',
   thunderstorm: '⛈',
 };
+
+// The Atelier pill, the third one written out at a call site rather than taken
+// from `appButton` — `look-request-form.ts` has the first and
+// `saved-looks.page.ts` the second. 221 recorded why the shared directive is
+// still pre-Atelier: converting it reaches every screen in the product, and a
+// trips pass is not the commit that gets to do that. DECISIONS.md 221, 222.
+const ACTION =
+  'inline-flex min-h-11 items-center justify-center gap-x-2 rounded-full border px-6 text-center text-[11px] font-medium tracking-[0.22em] uppercase disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
 // Two branches and no table, unlike the pack path's seven. `GET /trips/{id}`
 // documents one code of its own — 404 `not_found`, which is the same answer for
@@ -87,6 +95,39 @@ export function swapErrorKey(error: unknown): string {
   return 'trip.error.swapGeneral';
 }
 
+// The three things the itinerary holds *per day* rather than per trip, and they
+// are three separate types because they answer at three different moments: the
+// swap in flight, the sentence a finished swap left behind, and the message a
+// failed one did. Every one of them carries the day it belongs to, because every
+// day is on screen at once and a value held without its day would print under
+// all of them. DECISIONS.md 222.
+interface DaySwap {
+  readonly day: number;
+  readonly itemId: string;
+}
+
+interface DayStillWorn extends StillWorn {
+  readonly day: number;
+}
+
+interface DaySwapError {
+  readonly day: number;
+  readonly key: string;
+}
+
+// One day of the itinerary, already joined to its look and already matched to
+// whichever of the three per-day signals is about it. Computed rather than
+// resolved by four method calls in the template: the matching is one rule and it
+// is written once here, where the alternative is the same comparison spelled out
+// beside four bindings inside a loop.
+interface ItineraryDay {
+  readonly day: TripDay;
+  readonly look: Look | null;
+  readonly swappingItemId: string | null;
+  readonly stillWorn: StillWorn | null;
+  readonly errorKey: string | null;
+}
+
 // Which days still wear the garment that just left one, read off the response
 // rather than off what was on screen a moment ago: the swap answers the whole
 // trip, so this is the same list the packing list below is built from and the
@@ -107,21 +148,33 @@ function stillWornDays(detail: TripDetail, itemId: string): number[] {
 @Component({
   selector: 'app-trip-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, PackingList, TripLook],
+  imports: [AuthoredLine, PackingList, TripLook],
   template: `
-    <main class="mx-auto flex w-full max-w-2xl flex-col gap-region px-6 pt-hero pb-region">
+    <!-- 820px and no gap on the column. The Itinerary is a page read top to
+         bottom rather than a stack of regions, so the rhythm is carried by each
+         day's own padding and the hairline that closes it — a container gap
+         would add a second distance between a rule and the section under it.
+         DECISIONS.md 222. -->
+    <main class="mx-auto flex w-full max-w-[820px] flex-col px-6 pt-hero pb-region md:px-14">
       @if (detail(); as loaded) {
-        <header class="flex flex-col gap-1">
-          <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+        <header class="flex flex-col gap-1.5 border-b border-line pb-5">
+          <p class="font-mono text-[11px] tracking-[0.18em] text-ink-soft uppercase">
             {{ captionLine() }}
           </p>
-          <!-- Body face, not font-display. The destination is a place name off
-               the geocoder, and Fraunces is latin-subset, so a non-Latin one
-               would fall back per character and render in two faces on one
-               line. DECISIONS.md 071 names this screen, and the spec asserts
-               the absent class rather than trusting the comment. -->
-          <h1 class="text-3xl leading-tight">{{ loaded.trip.destination }}</h1>
-          <p class="font-display text-lg text-ink-muted tabular-nums">
+          <!-- The content face, not font-display, and the picked mockup drew it
+               in the serif. The destination is a place name off the geocoder and
+               Cormorant Garamond is latin-subset exactly as Fraunces was, so a
+               non-Latin one would fall back per character and render in two
+               faces on one line. What content gains in a redesign is size and
+               leading, never a face — so it is 56px at the widths that hold it.
+               DECISIONS.md 071 names this screen; the spec asserts the absent
+               class rather than trusting this comment. -->
+          <h1
+            class="font-sans text-[40px] leading-[1] font-light tracking-[-0.02em] md:text-[56px]"
+          >
+            {{ loaded.trip.destination }}
+          </h1>
+          <p class="font-mono text-[13px] tracking-[0.06em] text-ink-muted tabular-nums">
             {{
               i18n.t('trip.view.dates', {
                 start: loaded.trip.start_date,
@@ -129,135 +182,167 @@ function stillWornDays(detail: TripDetail, itemId: string): number[] {
               })
             }}
           </p>
-          <!-- The line the feature lands on, and it is here rather than under
-               the packing list where 05-FRONTEND-SPEC.md first drew it: the
-               counts are the confirmation sentence 4.5 already wrote, word for
-               word, and splitting one sentence across two ends of a screen
-               costs more than either placement gains. -->
-          <p class="text-sm font-medium">{{ headerLine() }}</p>
+          <!-- The line the feature lands on, and it is two sentences rather than
+               one composed string. The first is ours throughout and is looked up
+               whole; the second names a garment the model wrote, so it goes
+               through AuthoredLine and only the name leaves the prose face. The
+               gap between them is the flex row's, not a text node — sibling
+               elements have their whitespace collapsed away. DECISIONS.md 071,
+               213, 222. -->
+          <p
+            class="mt-2 flex max-w-[60ch] flex-wrap items-baseline gap-x-2 font-prose text-base text-ink italic"
+          >
+            <span>{{ summaryLine() }}</span>
+            @if (reuseLine(); as clause) {
+              <app-authored-line
+                key="trip.view.reuse"
+                [params]="clause.params"
+                [content]="clause.content"
+              />
+            }
+          </p>
         </header>
 
-        <!-- Grouped: the strip selects what renders under it, which is the
-             label-to-content relationship the group rung is for. At region
-             distance the tabs read as a section rather than as a control.
-             DECISIONS.md 212. -->
-        <div class="flex flex-col gap-group">
-          <!-- Buttons with aria-pressed rather than a tablist, matching the
-               occasion chips one screen over. A real tablist owes the reader
-               arrow-key roving and a tabpanel relationship; this is a filter over
-               one region, which is what the chips are too. -->
-          <div
-            class="flex flex-nowrap gap-2 overflow-x-auto pb-1"
-            role="group"
-            [attr.aria-label]="i18n.t('trip.view.days')"
+        <!-- Every day, in date order, one section each. The tab strip that stood
+             here selected one of them and hid the rest, which made a five-day
+             trip four things the reader had to go and find; the trip is a
+             journey and it now reads as one. DECISIONS.md 222. -->
+        @for (entry of itinerary(); track entry.day.day) {
+          <article
+            class="flex flex-col gap-4 border-b border-line py-10 last-of-type:border-line-strong"
           >
-            @for (day of loaded.trip.days; track day.day) {
-              <button
-                type="button"
-                (click)="select(day.day)"
-                [attr.aria-pressed]="selectedDay() === day.day"
-                [class]="tabClass(selectedDay() === day.day)"
-              >
-                <!-- Four lines, and none of them is a weekday: DECISIONS.md
+            <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+              <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                <!-- The kicker carries the date the tab used to. DECISIONS.md
                      206 refuses a date formatter on this screen, so the day is
                      named by its number and dated by the ISO string the server
-                     sent. The display face is legal on "Day 3" — it is a word
-                     this project wrote and a numeral (071). -->
-                <span [class]="tabDayClass()">
-                  {{ i18n.t('trip.day.legend', { day: day.day }) }}
+                     sent — and both are numerals, which is what puts the whole
+                     line in the mono face. -->
+                <span class="font-mono text-[11px] tracking-[0.18em] text-ink-soft uppercase">
+                  {{ i18n.t('trip.view.day.kicker', { day: entry.day.day, date: entry.day.date }) }}
                 </span>
-                <span [class]="tabDetailClass(selectedDay() === day.day)">{{ day.date }}</span>
-                <span class="text-lg" aria-hidden="true">{{ glyph(day) }}</span>
-                <span [class]="tabDetailClass(selectedDay() === day.day)">
-                  {{ i18n.t('trip.view.temp', { temp: temperature(day) }) }}
+                @if (entry.look; as look) {
+                  <!-- The look's own title, written by the model, so the content
+                       face at the direction's size. It is the page's to draw
+                       rather than the look component's because it shares a
+                       baseline with the day number and the weather, and that row
+                       has to exist for a day whose look was detached.
+                       DECISIONS.md 071, 222. -->
+                  <h2 class="font-sans text-[26px] leading-tight">{{ look.title }}</h2>
+                }
+              </div>
+              <!-- The glyph is decoration and says so; the condition and the
+                   occasion are both closed vocabulary this project wrote, so
+                   they are one authored key with the dot inside it rather than
+                   two spans and a separator this template invented. The reading
+                   leaves the italic for the mono face, which is the rule every
+                   converted screen applies to a number. DECISIONS.md 218, 222. -->
+              <p
+                class="flex flex-wrap items-baseline gap-x-2 font-prose text-[15px] text-ink-muted italic"
+              >
+                <span class="text-base not-italic" aria-hidden="true">{{ glyph(entry.day) }}</span>
+                <span class="font-mono text-[13px] text-ink tabular-nums not-italic">
+                  {{ i18n.t('trip.view.temp', { temp: temperature(entry.day) }) }}
                 </span>
-                <!-- The glyph above is decoration, so the condition is named
-                     here or it is named nowhere. -->
-                <span class="sr-only">{{ i18n.t('vocabulary.condition.' + day.condition) }}</span>
-              </button>
-            }
-          </div>
+                <span>{{ weatherLine(entry.day) }}</span>
+              </p>
+            </div>
 
-          @if (selectedLook(); as look) {
-            <!-- The article moved into TripLook at 4.6a, which is where the badge,
-                 the per-tile wait and the still-worn line live. What is passed
-                 down is facts and what comes back is one garment: the page owns
-                 the trip, so it owns the arithmetic over every day of it. -->
-            <app-trip-look
-              [look]="look"
-              [swappingItemId]="swappingItemId()"
-              [stillWorn]="stillWorn()"
-              [errorKey]="swapError()"
-              (swap)="swapItem($event)"
-            />
-          } @else {
-            <!-- A day with no look, which is a real state rather than an error:
-                 a repack detaches a look that was saved, rated or worn instead of
-                 deleting it, and the day it belonged to keeps its forecast and
-                 loses its outfit. AUDITS.md O-32, DECISIONS.md 200. -->
-            <p class="rounded-xl bg-surface-elevated p-5 text-sm text-ink-muted">
-              {{ i18n.t('trip.view.day.noLook') }}
+            @if (entry.look; as look) {
+              <!-- What is passed down is facts and what comes back is one
+                   garment: the page owns the trip, so it owns the arithmetic
+                   over every day of it — including which day each of the three
+                   per-day signals is about. -->
+              <app-trip-look
+                [look]="look"
+                [swappingItemId]="entry.swappingItemId"
+                [busy]="isSwapping()"
+                [stillWorn]="entry.stillWorn"
+                [errorKey]="entry.errorKey"
+                (swap)="swapItem(entry.day.day, $event)"
+              />
+            } @else {
+              <!-- A day with no look, which is a real state rather than an error:
+                   a repack detaches a look that was saved, rated or worn instead
+                   of deleting it, and the day it belonged to keeps its forecast
+                   and loses its outfit. Flat prose on the canvas rather than a
+                   raised card — a gap in an itinerary is a quiet day, not an
+                   object. AUDITS.md O-32, DECISIONS.md 200, 222. -->
+              <p class="font-prose text-base text-ink-muted italic">
+                {{ i18n.t('trip.view.day.noLook') }}
+              </p>
+            }
+          </article>
+        }
+
+        <app-packing-list class="block pt-hero" [items]="packingItems()" />
+
+        <div class="mt-region flex flex-col gap-group">
+          <!-- Above the actions rather than in place of the trip, which is
+               DECISIONS.md 200's ordering made visible: pack_trip runs before
+               anything is detached or deleted, so a repack that fails costs
+               nothing and the trip the user is looking at is still the trip they
+               have. A screen blanked by the failure would say the opposite. -->
+          @if (actionError(); as key) {
+            <p class="text-sm font-medium text-danger" role="alert">{{ i18n.t(key) }}</p>
+          }
+
+          @if (repacking()) {
+            <p class="font-prose text-base text-ink-muted italic" role="status" aria-live="polite">
+              {{ i18n.t(statusKey()) }}
             </p>
           }
-        </div>
 
-        <app-packing-list [items]="packingItems()" />
+          <div class="flex flex-wrap items-center gap-3 border-t border-line pt-5">
+            <!-- Unguarded, unlike its neighbour, and the asymmetry is the point:
+                 a repack detaches a look that was saved, rated or worn rather
+                 than destroying it (DECISIONS.md 200), and /saved filters on
+                 is_saved alone — so a saved look survives this button and is
+                 still on the screen that lists it. There is nothing to warn
+                 about, and a confirmation step for a reversible act teaches the
+                 user to click through the one that is not. -->
+            <button
+              type="button"
+              (click)="repack()"
+              [disabled]="repacking() || deleting() || isSwapping()"
+              [class]="repackClass"
+            >
+              {{ i18n.t('trip.repack.action') }}
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="h-3 w-3"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </button>
 
-        <!-- Above the actions rather than in place of the trip, which is
-             DECISIONS.md 200's ordering made visible: pack_trip runs before
-             anything is detached or deleted, so a repack that fails costs
-             nothing and the trip the user is looking at is still the trip they
-             have. A screen blanked by the failure would say the opposite. -->
-        @if (actionError(); as key) {
-          <p class="text-sm font-medium text-danger" role="alert">{{ i18n.t(key) }}</p>
-        }
-
-        @if (repacking()) {
-          <p class="text-sm text-ink-muted" role="status" aria-live="polite">
-            {{ i18n.t(statusKey()) }}
-          </p>
-        }
-
-        <div class="flex flex-wrap items-center gap-3 border-bs border-line pt-4">
-          <!-- Unguarded, unlike its neighbour, and the asymmetry is the point:
-               a repack detaches a look that was saved, rated or worn rather
-               than destroying it (DECISIONS.md 200), and /saved filters on
-               is_saved alone — so a saved look survives this button and is
-               still on the screen that lists it. There is nothing to warn
-               about, and a confirmation step for a reversible act teaches the
-               user to click through the one that is not. -->
-          <button
-            appButton
-            variant="secondary"
-            type="button"
-            (click)="repack()"
-            [disabled]="repacking() || deleting() || swapping()"
-            class="disabled:opacity-50"
-          >
-            {{ i18n.t('trip.repack.action') }}
-          </button>
-
-          <!-- Two deliberate clicks, not window.confirm and not a modal, as
-               item-detail.page.ts does it — DECISIONS.md 126 records why the
-               gate's confirm() makes a confirm-guarded delete read as tested
-               and never run. The armed label carries the cascade, because
-               DELETE /trips/{id} destroys the looks a repack would have kept
-               and this is the only place a user could learn that. -->
-          <!-- The variant carries the arming rather than a pair of class
-               bindings over a fixed one: the two-step gate is only visible if
-               the second press looks different from the first, and one owner
-               for that paint cannot fall out of step with the signal. -->
-          <button
-            appButton
-            [variant]="armed() ? 'danger' : 'secondary'"
-            type="button"
-            (click)="onDelete()"
-            (blur)="disarm()"
-            [disabled]="repacking() || deleting() || swapping()"
-            class="disabled:opacity-50"
-          >
-            {{ deleteLabel() }}
-          </button>
+            <!-- Two deliberate clicks, not window.confirm and not a modal, as
+                 item-detail.page.ts does it — DECISIONS.md 126 records why the
+                 gate's confirm() makes a confirm-guarded delete read as tested
+                 and never run. The armed label carries the cascade, because
+                 DELETE /trips/{id} destroys the looks a repack would have kept
+                 and this is the only place a user could learn that. -->
+            <!-- The paint carries the arming, and it has to: the two-step gate
+                 is only visible if the second press looks different from the
+                 first. Idle is the danger colour on a hairline and armed is the
+                 same colour filled — one token, two weights, and the token
+                 itself is untouched by this pass. -->
+            <button
+              type="button"
+              (click)="onDelete()"
+              (blur)="disarm()"
+              [disabled]="repacking() || deleting() || isSwapping()"
+              [class]="deleteClass()"
+            >
+              {{ deleteLabel() }}
+            </button>
+          </div>
         </div>
       } @else if (errorKey(); as key) {
         <p class="text-sm font-medium text-danger" role="alert">{{ i18n.t(key) }}</p>
@@ -267,7 +352,11 @@ function stillWornDays(detail: TripDetail, itemId: string): number[] {
              days, whether each has a look — so a skeleton would promise a
              layout the trip may not have. It defers like the other two.
              DECISIONS.md 217. -->
-        <p class="animate-deferred font-prose text-base" role="status" aria-live="polite">
+        <p
+          class="animate-deferred font-prose text-base text-ink-muted italic"
+          role="status"
+          aria-live="polite"
+        >
           {{ i18n.t('trip.view.loading') }}
         </p>
       }
@@ -299,15 +388,18 @@ export class TripDetailPage {
   // A third error signal, and the reasoning that split the first two applies
   // again: `errorKey` is a screen with nothing on it, `actionError` is a line
   // above a trip whose repack or delete failed, and this one is a line inside
-  // the look whose swap failed. Rendering a failed swap under the packing list
+  // the day whose swap failed. Rendering a failed swap under the actions row
   // would say the trip's action failed when one day's did.
-  protected readonly swapError = signal<string | null>(null);
+  protected readonly swapError = signal<DaySwapError | null>(null);
 
-  // The id of the tile waiting, not a boolean — the wait is drawn on one tile.
-  protected readonly swappingItemId = signal<string | null>(null);
-  protected readonly swapping = computed(() => this.swappingItemId() !== null);
+  // The day and the garment, not a boolean — the wait is drawn on one tile of
+  // one section. It was the id alone until the Itinerary put every day on
+  // screen, at which point a garment worn on three days would have spun on all
+  // three from one press.
+  protected readonly swapping = signal<DaySwap | null>(null);
+  protected readonly isSwapping = computed(() => this.swapping() !== null);
 
-  protected readonly stillWorn = signal<StillWorn | null>(null);
+  protected readonly stillWorn = signal<DayStillWorn | null>(null);
 
   // Per day, because a rejection is about a day's weather and its occasion: the
   // shoe that is wrong for Tuesday's rain is the right answer for Thursday. Held
@@ -319,12 +411,7 @@ export class TripDetailPage {
 
   protected readonly statusKey = packStatus(this.repacking);
 
-  // The ordinal, not the index, because that is what the day carries and what
-  // the join is keyed by. Day 1 on arrival even when day 1 has no look: the
-  // strip is the trip's calendar, and an opening selection that depended on
-  // which days happened to keep a look would leave the user working out why
-  // day 3 is the one lit up.
-  protected readonly selectedDay = signal(1);
+  protected readonly repackClass = `${ACTION} border-ink text-ink`;
 
   private readonly looksById = computed(() => {
     const looks = new Map<string, Look>();
@@ -348,15 +435,25 @@ export class TripDetailPage {
     return items;
   });
 
-  protected readonly selectedLook = computed(() => {
-    const day = this.detail()?.trip.days.find((candidate) => candidate.day === this.selectedDay());
-    // Two ways to have no look and one rendering: the day carries null, or it
-    // carries an id the response did not hydrate. The second cannot happen from
-    // this endpoint and the type permits it, so it is folded into the first
-    // rather than given a branch that could never be reached.
-    return day?.look_id === undefined || day.look_id === null
-      ? null
-      : (this.looksById().get(day.look_id) ?? null);
+  // The whole trip, in the order the server sent the days, with each day joined
+  // to its look and to whichever of the three per-day signals names it.
+  protected readonly itinerary = computed<readonly ItineraryDay[]>(() => {
+    const looks = this.looksById();
+    const swapping = this.swapping();
+    const worn = this.stillWorn();
+    const failure = this.swapError();
+
+    return (this.detail()?.trip.days ?? []).map((day) => ({
+      day,
+      // Two ways to have no look and one rendering: the day carries null, or it
+      // carries an id the response did not hydrate. The second cannot happen
+      // from this endpoint and the type permits it, so it is folded into the
+      // first rather than given a branch that could never be reached.
+      look: day.look_id === null ? null : (looks.get(day.look_id) ?? null),
+      swappingItemId: swapping !== null && swapping.day === day.day ? swapping.itemId : null,
+      stillWorn: worn !== null && worn.day === day.day ? worn : null,
+      errorKey: failure !== null && failure.day === day.day ? failure.key : null,
+    }));
   });
 
   // Ids that hydrate to nothing are dropped rather than rendered as a blank
@@ -370,28 +467,48 @@ export class TripDetailPage {
       .filter((item): item is Item => item !== undefined);
   });
 
-  // The counts, then the reuse clause when there is one to make. Composed
-  // through a key rather than joined with a separator in code, so the character
-  // between the two clauses is a translator's to change.
-  protected readonly headerLine = computed(() => {
+  // The counts, as one whole sentence rather than as a template joining two.
+  // Pluralised on the looks alone, which is 4.5's reading unchanged: item_count
+  // cannot be one, because a wearable look is at least a top, a bottom and
+  // shoes, whereas a one-day trip really does pack one look.
+  protected readonly summaryLine = computed(() => {
     const summary = this.detail()?.trip.packing_list.reuse_summary;
     if (summary === undefined) {
       return '';
     }
+    return summary.look_count === 1
+      ? this.i18n.t('trip.view.summary.one', { items: summary.item_count })
+      : this.i18n.t('trip.view.summary.other', {
+          items: summary.item_count,
+          looks: summary.look_count,
+        });
+  });
 
-    // Pluralised on the looks alone, which is 4.5's reading unchanged:
-    // item_count cannot be one, because a wearable look is at least a top, a
-    // bottom and shoes, whereas a one-day trip really does pack one look.
-    const counts =
-      summary.look_count === 1
-        ? this.i18n.t('trip.packed.counts.one', { items: summary.item_count })
-        : this.i18n.t('trip.packed.counts.other', {
-            items: summary.item_count,
-            looks: summary.look_count,
-          });
-
-    const reuse = this.reuseClause();
-    return reuse === null ? counts : this.i18n.t('trip.view.headerLine', { counts, reuse });
+  // The two dictionaries AuthoredLine takes, held in a computed rather than
+  // built in the template: a fresh object literal on every binding would make
+  // the component's own segments computed re-run on every change detection.
+  // `weather-strip.ts` hands its line down the same way.
+  //
+  // Three ways to have no clause and one answer to all of them: nothing is worn
+  // twice, the garment was never named, or the look that wore it was detached
+  // and its row left with it. The alternative is a sentence reading "You'll
+  // wear Untitled item on 3 days", which names nothing and takes the line with
+  // it.
+  protected readonly reuseLine = computed<{ params: Params; content: Params } | null>(() => {
+    const reused = this.detail()?.trip.packing_list.reuse_summary.most_reused;
+    if (reused === undefined || reused === null) {
+      return null;
+    }
+    const name = this.itemsById().get(reused.item_id)?.display_name;
+    if (name === undefined || name === null) {
+      return null;
+    }
+    // "wear" rather than the specification's "appear", and that is the whole
+    // reason for the rewording: display_name is written by the model and its
+    // grammatical number is unknowable here, so "the jeans appear" and "the
+    // blazer appears" cannot both come out of one template. The verb after
+    // "you'll" is invariant.
+    return { params: { days: reused.days }, content: { name } };
   });
 
   // Pluralised because a one-day trip is legal — `tripProblem` refuses an end
@@ -411,22 +528,17 @@ export class TripDetailPage {
     return this.armed() ? this.i18n.t('trip.delete.armed') : this.i18n.t('trip.delete.idle');
   });
 
+  protected readonly deleteClass = computed(() =>
+    this.armed()
+      ? `${ACTION} border-danger bg-danger text-canvas`
+      : `${ACTION} border-line text-danger`,
+  );
+
   constructor() {
     this.api.get(this.id).subscribe({
       next: (detail) => this.detail.set(detail),
       error: (failure: unknown) => this.errorKey.set(tripLoadErrorKey(failure)),
     });
-  }
-
-  protected select(day: number): void {
-    this.selectedDay.set(day);
-    // Both belong to the look that was on screen: *"That piece isn't in this
-    // day's look"* and *"You'll still wear the shirt on Day 3"* are sentences
-    // about a day the reader has just left. The exclusions are not cleared with
-    // them — those are per day and keyed by it, so they are still the right
-    // answer when the reader comes back.
-    this.swapError.set(null);
-    this.stillWorn.set(null);
   }
 
   protected repack(): void {
@@ -435,7 +547,7 @@ export class TripDetailPage {
     // presses landing in the same frame both see an enabled button. Neither
     // clause can be reached from the rendered screen, which is why the mutation
     // pass leaves both of them standing and the tests assert `disabled`.
-    if (this.repacking() || this.deleting() || this.swapping()) {
+    if (this.repacking() || this.deleting() || this.isSwapping()) {
       return;
     }
     // The repack disarms the delete, which is the "any other interaction" half
@@ -470,7 +582,7 @@ export class TripDetailPage {
   }
 
   protected onDelete(): void {
-    if (this.repacking() || this.deleting() || this.swapping()) {
+    if (this.repacking() || this.deleting() || this.isSwapping()) {
       return;
     }
 
@@ -498,16 +610,18 @@ export class TripDetailPage {
     this.armed.set(false);
   }
 
-  // One garment on the day on screen. No preview and no confirmation: the swap
-  // *is* the answer, and a second tap on the tile that came back is the user
-  // saying "not that one either" — which is what makes the exclusions a
-  // conversation rather than a form. The cost is that there is no undo, which is
-  // recorded rather than mitigated (DECISIONS.md 210).
-  protected swapItem(item: Item): void {
+  // One garment on one day, and the day arrives from the section the badge was
+  // pressed in rather than from a selection: there is no selection any more. No
+  // preview and no confirmation — the swap *is* the answer, and a second tap on
+  // the tile that came back is the user saying "not that one either", which is
+  // what makes the exclusions a conversation rather than a form. The cost is
+  // that there is no undo, which is recorded rather than mitigated
+  // (DECISIONS.md 210).
+  protected swapItem(day: number, item: Item): void {
     // The visible guard is the badges' own `disabled`; this is the real one, for
     // repack()'s reason — a signal write schedules change detection rather than
     // doing it, so two presses in one frame both see an enabled button.
-    if (this.swapping() || this.repacking() || this.deleting()) {
+    if (this.isSwapping() || this.repacking() || this.deleting()) {
       return;
     }
     // A dress has no role and therefore no badge, so this is unreachable from
@@ -520,17 +634,20 @@ export class TripDetailPage {
     }
     // 126's "any other interaction", which the badge is: an armed delete
     // surviving a swap is a second press landing on a control the user stopped
-    // thinking about.
+    // thinking about. A badge on any day of the trip disarms it.
     this.disarm();
 
-    const day = this.selectedDay();
     // The tapped garment joins the day's exclusions before the request goes out,
     // and stays there if it fails. The server appends it for this call anyway;
     // what this list is for is the *next* tap on this day.
     const excluded = new Set(this.excluded().get(day) ?? []).add(item.id);
     this.excluded.update((current) => new Map(current).set(day, excluded));
 
-    this.swappingItemId.set(item.id);
+    this.swapping.set({ day, itemId: item.id });
+    // Both belong to the swap that has just been replaced by this one. They are
+    // cleared rather than kept per day: only one swap runs at a time, so there
+    // is only ever one of each, and a sentence about Monday left standing under
+    // Monday while Thursday is being rebuilt answers a press nobody remembers.
     this.swapError.set(null);
     this.stillWorn.set(null);
 
@@ -552,15 +669,15 @@ export class TripDetailPage {
           // antecedent is the press, and dropping the line would lose the days,
           // which are what STAGE-4 4.6a asks for.
           const days = stillWornDays(detail, item.id);
-          this.stillWorn.set(days.length === 0 ? null : { name: this.name(item), days });
-          this.swappingItemId.set(null);
+          this.stillWorn.set(days.length === 0 ? null : { day, name: this.name(item), days });
+          this.swapping.set(null);
         },
         // The day's look is left standing. A failed swap changed nothing on the
         // server, so blanking the look would be the screen disagreeing with the
         // sentence underneath it.
         error: (failure: unknown) => {
-          this.swapError.set(swapErrorKey(failure));
-          this.swappingItemId.set(null);
+          this.swapError.set({ day, key: swapErrorKey(failure) });
+          this.swapping.set(null);
         },
       });
   }
@@ -578,8 +695,8 @@ export class TripDetailPage {
   // The day's high, which is what this project already means by "the
   // temperature": the weather strip prints it, summarize_forecast prints it to
   // the model, and DECISIONS.md 142 settled it there. temp_min_c is on the wire
-  // and goes unrendered, because a tab wide enough for a range is a tab that
-  // fits three days on a phone.
+  // and goes unrendered — a range on this line would be two numbers where the
+  // sentence beside them needs one.
   protected temperature(day: TripDay): number {
     return Math.round(day.temp_max_c);
   }
@@ -588,45 +705,15 @@ export class TripDetailPage {
     return CONDITION_GLYPH[day.condition];
   }
 
-  protected tabClass(selected: boolean): string {
-    const base =
-      'flex min-h-11 min-w-[68px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-3 py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-    return selected
-      ? `${base} bg-accent text-surface`
-      : `${base} border border-line-strong bg-surface`;
-  }
-
-  protected tabDayClass(): string {
-    return 'font-display text-lg font-medium';
-  }
-
-  // Faded rather than recoloured on the selected pill: the two detail lines sit
-  // on `bg-accent` there, where an ink token would be unreadable and the
-  // surface colour at full strength would compete with the day number above it.
-  protected tabDetailClass(selected: boolean): string {
-    const base = 'text-[10px] tabular-nums';
-    return selected ? `${base} opacity-80` : `${base} text-ink-muted`;
-  }
-
-  // Three ways to have no clause and one answer to all of them: nothing is worn
-  // twice, the garment was never named, or the look that wore it was detached
-  // and its row left with it. The alternative is a sentence reading "You'll
-  // wear Untitled item on 3 days", which names nothing and takes the header
-  // line with it.
-  private reuseClause(): string | null {
-    const reused = this.detail()?.trip.packing_list.reuse_summary.most_reused;
-    if (reused === undefined || reused === null) {
-      return null;
-    }
-    const name = this.itemsById().get(reused.item_id)?.display_name;
-    if (name === undefined || name === null) {
-      return null;
-    }
-    // "wear" rather than the specification's "appear", and that is the whole
-    // reason for the rewording: display_name is written by the model and its
-    // grammatical number is unknowable here, so "the jeans appear" and "the
-    // blazer appears" cannot both come out of one template. The verb after
-    // "you'll" is invariant.
-    return this.i18n.t('trip.view.reuse', { name, days: reused.days });
+  // Both halves are closed vocabulary this project wrote, so the whole line is
+  // authored and the dot between them lives in the string table rather than in
+  // this file. Neither value needs the guard `saved-looks.page.ts` puts in front
+  // of an occasion: `TripDay` types both as enums, and a value outside either
+  // vocabulary is a 500 on the way out of `TripResponse` and cannot arrive here.
+  protected weatherLine(day: TripDay): string {
+    return this.i18n.t('trip.view.day.weather', {
+      condition: this.i18n.t(`vocabulary.condition.${day.condition}`),
+      occasion: this.i18n.t(`vocabulary.occasion.${day.occasion}`),
+    });
   }
 }

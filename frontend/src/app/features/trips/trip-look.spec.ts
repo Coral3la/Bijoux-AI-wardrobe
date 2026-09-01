@@ -115,12 +115,45 @@ describe('TripLook', () => {
     await loading;
   });
 
-  it('renders the title, the reasoning and the weather note', () => {
+  it('renders the reasoning and the weather note', () => {
     render(look());
 
-    expect(element().querySelector('h2')?.textContent).toContain('Morning meetings');
     expect(text()).toContain('The high-rise jean balances the oversized shirt.');
     expect(text()).toContain('Mild at 18°C — the blazer is enough.');
+  });
+
+  // The title is the page's from the Itinerary pass on: it shares a baseline
+  // with the day number and the weather, and that row has to render for a day
+  // whose look was detached — which is a row this component is not on screen
+  // for. DECISIONS.md 222.
+  it('draws no title of its own', () => {
+    render(look());
+
+    expect(element().querySelector('h2')).toBeNull();
+    expect(text()).not.toContain('Morning meetings');
+  });
+
+  // caption=false on the tile and a caption of its own underneath it: the
+  // colour is in the photograph directly above, and what a garment is doing in
+  // a look is the category. The name is the model's and the category is ours,
+  // which is the split every converted tile draws. DECISIONS.md 071, 222.
+  it('captions each tile with the garment and its category', () => {
+    render(look({ items: [item({ id: 'a', display_name: 'white shirt', category: 'top' })] }));
+
+    expect(text()).toContain('white shirt');
+    expect(text()).toContain(en['vocabulary.category.top']);
+    expect(text()).not.toContain(en['vocabulary.color.white']);
+  });
+
+  // An untagged row can reach a look through a detached one, and a caps line
+  // under a photograph naming nothing is worse than no line.
+  it('captions a garment with no category with its name alone', () => {
+    render(look({ items: [item({ id: 'a', display_name: 'white shirt', category: null })] }));
+
+    expect(text()).toContain('white shirt');
+    // t() renders a key it cannot find as the key itself, so a caption built
+    // without the null guard prints the lookup at the reader.
+    expect(text()).not.toContain('vocabulary.category.');
   });
 
   // The order the server sent, which is look_items.position. The fixture arrives
@@ -194,15 +227,20 @@ describe('TripLook', () => {
     expect(swapped.map((chosen) => chosen.id)).toEqual(['b']);
   });
 
-  it('disables every badge while a swap is in flight', () => {
+  // `busy` and not `swappingItemId`, and the fixture is the reason the two are
+  // separate inputs: this look is a day the swap is *not* on, so nothing here
+  // is waiting and every badge on it must still be locked. One request runs at
+  // a time across the whole itinerary. DECISIONS.md 222.
+  it('disables every badge while a swap is in flight anywhere in the trip', () => {
     render(
       look({
         items: [item({ id: 'a', category: 'top' }), item({ id: 'b', category: 'shoes' })],
       }),
-      { swappingItemId: 'a' },
+      { busy: true },
     );
 
     expect(badges().map((badge) => badge.disabled)).toEqual([true, true]);
+    expect(waiting()).toEqual([false, false]);
   });
 
   // The wait is drawn on the tile that was tapped and on no other. A mutation

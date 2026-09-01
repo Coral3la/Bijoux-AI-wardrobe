@@ -2,17 +2,28 @@ import { Directive, computed, input } from '@angular/core';
 
 export type ChipVariant = 'default' | 'accent';
 
+// Atelier's chip, and the conversion 220 asked for rather than a third copy of
+// it. `filter-bar.ts` and `look-request-form.ts` wrote the same treatment out
+// locally because this directive set its font size in the base string every
+// variant shares; the trip form is the third screen to need it and is also the
+// only caller this directive has left, so converting it here changes exactly one
+// screen's paint and retires the copy that would otherwise have been written.
+// DECISIONS.md 219, 220, 222.
 const BASE =
-  'min-h-11 inline-flex items-center rounded-full px-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+  'inline-flex min-h-11 items-center rounded-full border px-4 text-[11px] font-medium tracking-[0.18em] uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
+// `accent` has no caller and is left standing rather than deleted: it lost its
+// last one when the wardrobe's filter bar was converted, which is a tidy that
+// belongs to whoever is looking at that screen. It is re-struck off the same
+// shape so the two variants cannot drift into different chips.
 const STATES: Record<ChipVariant, { readonly inactive: string; readonly active: string }> = {
   default: {
-    inactive: 'bg-surface text-ink border border-line-strong',
-    active: 'bg-ink text-surface',
+    inactive: 'border-line text-ink-muted',
+    active: 'border-ink bg-ink text-canvas',
   },
   accent: {
-    inactive: 'bg-surface text-ink-muted border border-line',
-    active: 'bg-accent-wash text-accent border border-accent-soft',
+    inactive: 'border-line bg-surface text-ink-muted',
+    active: 'border-accent-soft bg-accent-wash text-accent',
   },
 };
 

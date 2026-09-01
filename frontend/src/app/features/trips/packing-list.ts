@@ -19,18 +19,29 @@ interface CategoryGroup {
   selector: 'app-packing-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section class="flex flex-col gap-4">
-      <h2 class="font-display text-xl">{{ i18n.t('trip.view.packingList') }}</h2>
+    <section class="flex flex-col gap-6">
+      <!-- Before you go, not Packing list. The itinerary above it is read at
+           the desk while the trip is being planned and this is read at the
+           wardrobe on the morning of, so the heading names the moment rather
+           than the object — and it is the last thing on a page that reads top
+           to bottom as a journey. It is a title this project wrote, so it takes
+           the display face at the direction's size. DECISIONS.md 222. -->
+      <h2
+        class="font-display text-[32px] leading-none font-light tracking-[-0.01em] md:text-[36px]"
+      >
+        {{ i18n.t('trip.view.beforeYouGo') }}
+      </h2>
 
-      <!-- One card, and the dividers inside it are edge definition rather than
-           card borders: 05-FRONTEND-SPEC.md's "No card borders" governs the
-           outside, where the shadow carries the separation, and overflow-hidden
-           is what stops a full-bleed divider running past the corner radius. -->
-      <div class="overflow-hidden rounded-xl bg-surface shadow-sm">
+      <!-- No card. The list sits on the canvas like every other block on this
+           screen, and what separates one group from the next is the hairline
+           under its own heading. Two columns where there is width for them:
+           twelve to fourteen garments in one column is a scroll on a page that
+           has already asked for several. DECISIONS.md 222. -->
+      <div class="grid gap-x-12 gap-y-8 md:grid-cols-2">
         @for (group of groups(); track group.headingKey) {
-          <section>
+          <section class="flex flex-col">
             <h3
-              class="border-be border-line px-3.5 pt-3 pb-2 text-xs font-medium tracking-widest text-ink-soft uppercase"
+              class="border-b border-line pb-1 font-mono text-[10px] font-medium tracking-[0.24em] text-ink-soft uppercase"
             >
               {{
                 i18n.t('trip.view.group', {
@@ -40,26 +51,30 @@ interface CategoryGroup {
               }}
             </h3>
             <ul class="flex flex-col">
-              @for (item of group.items; track item.id; let last = $last) {
+              @for (item of group.items; track item.id) {
                 <!-- The label wraps the checkbox rather than pointing at it with
                      for=, so the garment name is the tap target without an id
                      scheme that has to stay unique across a page that also
-                     renders the same items inside the look above. -->
-                <li class="border-line" [class.border-be]="!last">
-                  <label class="flex min-h-11 items-center gap-3 px-3.5 py-3 text-sm">
+                     renders the same items inside the looks above. -->
+                <li>
+                  <label class="flex min-h-11 items-center gap-3 py-2 text-sm">
                     <input
                       type="checkbox"
                       [checked]="packed().has(item.id)"
                       (change)="toggle(item.id)"
-                      class="size-5 shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      class="size-4 shrink-0 accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                     />
                     <!-- Struck through rather than removed or moved to the
                          bottom: the list is read against a suitcase, and a row
                          that leaves the place the eye last saw it costs more
-                         than the strike saves. -->
+                         than the strike saves.
+
+                         The content face, because a garment name is the model's
+                         and not ours. DECISIONS.md 071. -->
                     <span
+                      class="font-sans"
                       [class.line-through]="packed().has(item.id)"
-                      [class.opacity-60]="packed().has(item.id)"
+                      [class.text-ink-soft]="packed().has(item.id)"
                     >
                       {{ name(item) }}
                     </span>

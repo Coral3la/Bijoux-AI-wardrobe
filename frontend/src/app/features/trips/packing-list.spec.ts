@@ -100,7 +100,7 @@ describe('PackingList', () => {
       item({ id: 'c', category: 'shoes', display_name: 'brown boots' }),
     ]);
 
-    expect(headings()).toEqual(['Tops (2)', 'Shoes (1)']);
+    expect(headings()).toEqual(['Tops · 2', 'Shoes · 1']);
   });
 
   // In CATEGORIES order, not in arrival order: two trips carrying the same
@@ -113,7 +113,7 @@ describe('PackingList', () => {
       item({ id: 'c', category: 'top', display_name: 'white shirt' }),
     ]);
 
-    expect(headings()).toEqual(['Tops (1)', 'Bottoms (1)', 'Shoes (1)']);
+    expect(headings()).toEqual(['Tops · 1', 'Bottoms · 1', 'Shoes · 1']);
   });
 
   it('starts with nothing ticked', () => {
@@ -175,7 +175,7 @@ describe('PackingList', () => {
       item({ id: 'b', category: 'top', display_name: 'white shirt' }),
     ]);
 
-    expect(headings()).toEqual(['Tops (1)', 'Other (1)']);
+    expect(headings()).toEqual(['Tops · 1', 'Other · 1']);
     expect(text()).toContain('mystery garment');
   });
 
@@ -183,6 +183,6 @@ describe('PackingList', () => {
     render([]);
 
     expect(headings()).toEqual([]);
-    expect(text()).toContain(en['trip.view.packingList']);
+    expect(text()).toContain(en['trip.view.beforeYouGo']);
   });
 });
