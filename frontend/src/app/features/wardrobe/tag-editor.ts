@@ -12,6 +12,7 @@ import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 
 import { I18nService } from '../../core/i18n/i18n.service';
 import { SCALE_MAX, SCALE_MIN } from '../../core/state/wardrobe.store';
+import { Button } from '../../shared/ui/button';
 import {
   CATEGORIES,
   COLORS,
@@ -52,101 +53,158 @@ function toForm(value: string | null): string {
 @Component({
   selector: 'app-tag-editor',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule],
+  imports: [Button, ReactiveFormsModule],
   template: `
-    <form [formGroup]="form" (ngSubmit)="submit()" novalidate class="flex flex-col gap-5">
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <!-- Category first, and it is the only select whose empty option is
-             conditional. O-3 opens this editor from a failed tile where every
-             tag is null, so the control must be able to say "not chosen yet" —
-             but offering that same option on an item that has a category would
-             be offering to clear it, which Q7 declined. So the placeholder is
-             rendered only while the stored value is null and disappears after
-             the first save. DECISIONS.md 123. -->
-        <label class="flex flex-col gap-1 text-sm">
-          {{ i18n.t('item.field.category') }}
-          <select
-            id="category"
-            formControlName="category"
-            (change)="onCategoryChange()"
-            [class]="selectClass"
-          >
-            @if (categoryUnset()) {
-              <option [value]="UNSET">{{ i18n.t('item.edit.choose') }}</option>
-            }
-            @for (value of categories; track value) {
-              <option [value]="value">{{ i18n.t('vocabulary.category.' + value) }}</option>
-            }
-          </select>
-        </label>
-
-        <!-- Options narrow by category because SUBCATEGORIES is a *value*
-             mirror that already exists in enums.ts. The category-dependent
-             rules for fit, length and rise are not mirrored and the selects
-             below offer every word: those are rules, they live server-side
-             (085), and copying them is what B declined. DECISIONS.md 124. -->
-        <label class="flex flex-col gap-1 text-sm">
-          {{ i18n.t('item.field.subcategory') }}
-          <select id="subcategory" formControlName="subcategory" [class]="selectClass">
-            <option [value]="UNSET">{{ i18n.t('item.edit.unset') }}</option>
-            @for (value of subcategories(); track value) {
-              <option [value]="value">{{ i18n.t('vocabulary.subcategory.' + value) }}</option>
-            }
-          </select>
-        </label>
-
-        @for (field of vocabularyFields; track field.name) {
+    <form
+      [formGroup]="form"
+      (ngSubmit)="submit()"
+      novalidate
+      class="flex flex-col gap-5 rounded-2xl bg-surface p-5 shadow-sm"
+    >
+      <!-- Four sections rather than one per dimension. Ten bordered sections
+           would roughly double this form's height on a phone and demote each
+           control's own <label> to a heading; grouping keeps the two-column
+           grid and still gives the eye somewhere to rest. -->
+      <section class="flex flex-col gap-3">
+        <h3 class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+          {{ i18n.t('item.edit.section.garment') }}
+        </h3>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <!-- Category first, and it is the only select whose empty option is
+               conditional. O-3 opens this editor from a failed tile where every
+               tag is null, so the control must be able to say "not chosen
+               yet" — but offering that same option on an item that has a
+               category would be offering to clear it, which Q7 declined. So the
+               placeholder is rendered only while the stored value is null and
+               disappears after the first save. DECISIONS.md 123. -->
           <label class="flex flex-col gap-1 text-sm">
-            {{ i18n.t('item.field.' + field.name) }}
-            <select [id]="field.name" [formControlName]="field.name" [class]="selectClass">
-              <option [value]="UNSET">{{ i18n.t('item.edit.unset') }}</option>
-              @for (value of field.values; track value) {
-                <option [value]="value">{{ i18n.t(field.prefix + value) }}</option>
+            {{ i18n.t('item.field.category') }}
+            <select
+              id="category"
+              formControlName="category"
+              (change)="onCategoryChange()"
+              [class]="selectClass"
+            >
+              @if (categoryUnset()) {
+                <option [value]="UNSET">{{ i18n.t('item.edit.choose') }}</option>
+              }
+              @for (value of categories; track value) {
+                <option [value]="value">{{ i18n.t('vocabulary.category.' + value) }}</option>
               }
             </select>
           </label>
-        }
-      </div>
 
-      <!-- Both handles carry an explicit [value] through the form control. An
-           unbound range reads 50 in the gate and 3 in a browser, and jsdom does
-           not snap to step — so the coercion is ours, at submit, exactly as 115
-           put it at the store's one door into filter state. -->
-      @for (scale of scales; track scale) {
+          <!-- Options narrow by category because SUBCATEGORIES is a *value*
+               mirror that already exists in enums.ts. The category-dependent
+               rules for fit, length and rise are not mirrored and the selects
+               below offer every word: those are rules, they live server-side
+               (085), and copying them is what B declined. DECISIONS.md 124. -->
+          <label class="flex flex-col gap-1 text-sm">
+            {{ i18n.t('item.field.subcategory') }}
+            <select id="subcategory" formControlName="subcategory" [class]="selectClass">
+              <option [value]="UNSET">{{ i18n.t('item.edit.unset') }}</option>
+              @for (value of subcategories(); track value) {
+                <option [value]="value">{{ i18n.t('vocabulary.subcategory.' + value) }}</option>
+              }
+            </select>
+          </label>
+
+          @for (field of garmentFields; track field.name) {
+            <label class="flex flex-col gap-1 text-sm">
+              {{ i18n.t('item.field.' + field.name) }}
+              <select [id]="field.name" [formControlName]="field.name" [class]="selectClass">
+                <option [value]="UNSET">{{ i18n.t('item.edit.unset') }}</option>
+                @for (value of field.values; track value) {
+                  <option [value]="value">{{ i18n.t(field.prefix + value) }}</option>
+                }
+              </select>
+            </label>
+          }
+        </div>
+      </section>
+
+      <section class="flex flex-col gap-3 border-bs border-line pt-5">
+        <h3 class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+          {{ i18n.t('item.edit.section.colourAndPattern') }}
+        </h3>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          @for (field of colourFields; track field.name) {
+            <label class="flex flex-col gap-1 text-sm">
+              {{ i18n.t('item.field.' + field.name) }}
+              <select [id]="field.name" [formControlName]="field.name" [class]="selectClass">
+                <option [value]="UNSET">{{ i18n.t('item.edit.unset') }}</option>
+                @for (value of field.values; track value) {
+                  <option [value]="value">{{ i18n.t(field.prefix + value) }}</option>
+                }
+              </select>
+            </label>
+          }
+        </div>
+      </section>
+
+      <section class="flex flex-col gap-3 border-bs border-line pt-5">
+        <h3 class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+          {{ i18n.t('item.edit.section.fitAndScale') }}
+        </h3>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          @for (field of fitFields; track field.name) {
+            <label class="flex flex-col gap-1 text-sm">
+              {{ i18n.t('item.field.' + field.name) }}
+              <select [id]="field.name" [formControlName]="field.name" [class]="selectClass">
+                <option [value]="UNSET">{{ i18n.t('item.edit.unset') }}</option>
+                @for (value of field.values; track value) {
+                  <option [value]="value">{{ i18n.t(field.prefix + value) }}</option>
+                }
+              </select>
+            </label>
+          }
+          <!-- Both handles carry an explicit [value] through the form control.
+               An unbound range reads 50 in the gate and 3 in a browser, and
+               jsdom does not snap to step — so the coercion is ours, at submit,
+               exactly as 115 put it at the store's one door into filter
+               state. -->
+          @for (scale of scales; track scale) {
+            <label class="flex flex-col gap-1 text-sm">
+              {{ i18n.t('item.field.' + scale) }}
+              <input
+                type="range"
+                [id]="scale"
+                [formControlName]="scale"
+                [min]="SCALE_MIN"
+                [max]="SCALE_MAX"
+                step="1"
+                class="w-full"
+              />
+            </label>
+          }
+
+          <label class="flex min-h-11 items-center gap-2 text-sm">
+            <input type="checkbox" id="water_resistant" formControlName="water_resistant" />
+            {{ i18n.t('item.edit.waterResistant') }}
+          </label>
+        </div>
+      </section>
+
+      <section class="flex flex-col gap-3 border-bs border-line pt-5">
+        <h3 class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+          {{ i18n.t('item.edit.section.name') }}
+        </h3>
+        <!-- The one free-text field, and STAGE-1 1.9's "never a free-text input"
+             is corrected rather than obeyed: it means a *tag* is never free
+             text. display_name is not a tag — it is the alt text and the only
+             human-readable thing on a row with no tags, which is the row this
+             screen exists for. DECISIONS.md 125. -->
         <label class="flex flex-col gap-1 text-sm">
-          {{ i18n.t('item.field.' + scale) }}
+          {{ i18n.t('item.edit.name') }}
           <input
-            type="range"
-            [id]="scale"
-            [formControlName]="scale"
-            [min]="SCALE_MIN"
-            [max]="SCALE_MAX"
-            step="1"
-            class="w-full"
+            type="text"
+            id="display_name"
+            formControlName="display_name"
+            [placeholder]="i18n.t('item.edit.namePlaceholder')"
+            [class]="selectClass"
           />
         </label>
-      }
-
-      <label class="flex min-h-11 items-center gap-2 text-sm">
-        <input type="checkbox" id="water_resistant" formControlName="water_resistant" />
-        {{ i18n.t('item.edit.waterResistant') }}
-      </label>
-
-      <!-- The one free-text field, and STAGE-1 1.9's "never a free-text input"
-           is corrected rather than obeyed: it means a *tag* is never free text.
-           display_name is not a tag — it is the alt text and the only
-           human-readable thing on a row with no tags, which is the row this
-           screen exists for. DECISIONS.md 125. -->
-      <label class="flex flex-col gap-1 text-sm">
-        {{ i18n.t('item.edit.name') }}
-        <input
-          type="text"
-          id="display_name"
-          formControlName="display_name"
-          [placeholder]="i18n.t('item.edit.namePlaceholder')"
-          class="min-h-11 rounded-md border border-current/20 bg-surface px-3"
-        />
-      </label>
+      </section>
 
       @if (blocked()) {
         <p class="text-sm font-medium text-danger">{{ i18n.t('item.edit.chooseCategory') }}</p>
@@ -155,11 +213,7 @@ function toForm(value: string | null): string {
         <p class="text-sm font-medium text-danger">{{ i18n.t(key) }}</p>
       }
 
-      <button
-        type="submit"
-        [disabled]="saving()"
-        class="min-h-11 self-start rounded-md bg-accent px-4 text-surface disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
+      <button appButton type="submit" [disabled]="saving()" class="self-start disabled:opacity-50">
         {{ saving() ? i18n.t('item.edit.saving') : i18n.t('item.edit.save') }}
       </button>
     </form>
@@ -181,17 +235,27 @@ export class TagEditor {
   protected readonly categories = CATEGORIES;
   protected readonly scales = ['formality', 'warmth'] as const;
   protected readonly selectClass =
-    'min-h-11 rounded-md border border-current/20 bg-surface px-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+    'min-h-11 rounded-md border border-line-strong bg-surface px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
-  protected readonly vocabularyFields = [
-    { name: 'fit', values: FITS, prefix: 'vocabulary.fit.' },
-    { name: 'length', values: LENGTHS, prefix: 'vocabulary.length.' },
-    { name: 'rise', values: RISES, prefix: 'vocabulary.rise.' },
+  // The same eight entries the one `vocabularyFields` list held, split across
+  // the three sections that group them. Category and subcategory are written
+  // out in the template above rather than looped, so Garment carries only
+  // `layer` here. Nothing about the form's values or its wire shape changes.
+  protected readonly garmentFields = [
+    { name: 'layer', values: LAYERS, prefix: 'vocabulary.layer.' },
+  ] as const;
+
+  protected readonly colourFields = [
     { name: 'color_primary', values: COLORS, prefix: 'vocabulary.color.' },
     { name: 'color_secondary', values: COLORS, prefix: 'vocabulary.color.' },
     { name: 'pattern', values: PATTERNS, prefix: 'vocabulary.pattern.' },
     { name: 'material', values: MATERIALS, prefix: 'vocabulary.material.' },
-    { name: 'layer', values: LAYERS, prefix: 'vocabulary.layer.' },
+  ] as const;
+
+  protected readonly fitFields = [
+    { name: 'fit', values: FITS, prefix: 'vocabulary.fit.' },
+    { name: 'length', values: LENGTHS, prefix: 'vocabulary.length.' },
+    { name: 'rise', values: RISES, prefix: 'vocabulary.rise.' },
   ] as const;
 
   // Built once from the input, never re-synced from it. A save answers with the

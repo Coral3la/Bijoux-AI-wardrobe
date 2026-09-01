@@ -11,6 +11,8 @@ import { ActivatedRoute, Params, Router } from '@angular/router';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { ItemFilters, WardrobeStore } from '../../core/state/wardrobe.store';
 import { CATEGORIES, COLORS } from '../../shared/models/enums';
+import { Button } from '../../shared/ui/button';
+import { EmptyState } from '../../shared/ui/empty-state';
 import { FilterBar } from './filter-bar';
 import { ItemCard } from './item-card';
 import { PendingStrip } from './pending-strip';
@@ -42,13 +44,24 @@ function scale(value: string | null): number | undefined {
 @Component({
   selector: 'app-wardrobe-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilterBar, ItemCard, PendingStrip, UploadSheet, WardrobeInsights, WeatherStrip],
+  imports: [
+    Button,
+    EmptyState,
+    FilterBar,
+    ItemCard,
+    PendingStrip,
+    UploadSheet,
+    WardrobeInsights,
+    WeatherStrip,
+  ],
   template: `
     <main class="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
       <header class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h1 class="font-display text-3xl">{{ i18n.t('wardrobe.title') }}</h1>
+        <h1 class="font-display text-4xl leading-tight tracking-tight">
+          {{ i18n.t('wardrobe.title') }}
+        </h1>
         @if (!store.isLoading() && store.loadError() === null) {
-          <p class="text-sm">{{ countLabel() }}</p>
+          <p class="font-display text-lg text-ink-muted tabular-nums">{{ countLabel() }}</p>
         }
       </header>
 
@@ -88,44 +101,36 @@ function scale(value: string | null): number | undefined {
       } @else if (store.loadError(); as key) {
         <div class="flex flex-col items-start gap-2">
           <p class="text-sm font-medium text-danger">{{ i18n.t(key) }}</p>
-          <button
-            type="button"
-            (click)="store.load()"
-            class="min-h-11 rounded-md px-3 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
+          <button appButton variant="ghost" type="button" (click)="store.load()">
             {{ i18n.t('wardrobe.retryLoad') }}
           </button>
         </div>
       } @else if (store.isEmpty() && store.pending().length === 0) {
-        <section class="flex flex-col items-start gap-3 py-12">
-          <h2 class="font-display text-2xl">{{ i18n.t('wardrobe.empty.title') }}</h2>
-          <p class="max-w-prose text-sm">{{ i18n.t('wardrobe.empty.body') }}</p>
+        <app-empty-state
+          [title]="i18n.t('wardrobe.empty.title')"
+          [description]="i18n.t('wardrobe.empty.body')"
+        >
           <!-- Inert for exactly one task, which 090 accepted as the cost of
                shipping the empty state reviewable. Wired here, along with the
                FAB 090 declined to build because no task had required one. -->
-          <button
-            type="button"
-            (click)="openSheet()"
-            class="min-h-11 rounded-md bg-accent px-4 text-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
+          <button appButton type="button" (click)="openSheet()">
             {{ i18n.t('wardrobe.empty.cta') }}
           </button>
-        </section>
+        </app-empty-state>
       } @else if (noMatches()) {
         <!-- A wardrobe with items in it and nothing on screen is not an empty
              wardrobe, and it must not offer the empty wardrobe's action: the
-             way out of here is the filter, not the camera. DECISIONS.md 111. -->
-        <section class="flex flex-col items-start gap-3 py-12">
-          <h2 class="font-display text-2xl">{{ i18n.t('wardrobe.filter.noMatch.title') }}</h2>
-          <p class="max-w-prose text-sm">{{ i18n.t('wardrobe.filter.noMatch.body') }}</p>
-          <button
-            type="button"
-            (click)="onFiltersChanged({})"
-            class="min-h-11 rounded-md bg-accent px-4 text-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
+             way out of here is the filter, not the camera. Same component as
+             the state above, different copy and a different slot — which is
+             the whole of what keeps the two apart. DECISIONS.md 111. -->
+        <app-empty-state
+          [title]="i18n.t('wardrobe.filter.noMatch.title')"
+          [description]="i18n.t('wardrobe.filter.noMatch.body')"
+        >
+          <button appButton variant="ghost" type="button" (click)="onFiltersChanged({})">
             {{ i18n.t('wardrobe.filter.clear') }}
           </button>
-        </section>
+        </app-empty-state>
       } @else {
         <!-- Counts what the loop is still watching, not every row the server
              calls processing: after the hard stop those are two different
@@ -160,8 +165,20 @@ function scale(value: string | null): number | undefined {
       <button
         type="button"
         (click)="openSheet()"
-        class="fixed bottom-6 end-6 z-30 flex min-h-11 items-center rounded-full bg-accent px-5 text-surface shadow-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        class="fixed bottom-6 end-6 z-30 flex h-14 items-center rounded-full bg-ink px-6 text-surface shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="me-2 h-5 w-5"
+          aria-hidden="true"
+        >
+          <path d="M12 5v14M5 12h14" />
+        </svg>
         {{ i18n.t('wardrobe.upload.open') }}
       </button>
     }

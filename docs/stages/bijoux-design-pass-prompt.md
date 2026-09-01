@@ -13,7 +13,7 @@ Editorial refinement, kept quiet. Extend the current DNA (warm canvas, slate acc
 - **One task at a time.** Orient first, no code. Then write files, run `ng build` and touched specs, print the diff over touched files (`git --no-pager diff`), print the suggested commit message, stop. Wait for "approved" or "next".
 - **No git write commands.** Ever.
 - **Body face stays the current system stack.** Do not add a new font. `--font-display` (Fraunces) stays reserved for headings and displayed counts.
-- **CSS logical properties only** — `ms-`, `me-`, `text-start`, `inset-inline-*`, `border-inline-*`. Never `left`/`right` for layout.
+- **CSS logical properties only** — `ms-`, `me-`, `text-start`, `inset-inline-*`, `border-inline-*`. Never `left`/`right` for layout. Note the utility names: Tailwind 4 spells the logical block borders **`border-bs`** and **`border-be`** — `border-block-start` is a CSS property name, not a class, and silently renders nothing.
 - **Every user-facing string goes through an i18n key** in `frontend/public/i18n/en.json`. Do not hardcode.
 - **No new tests unless a real regression is at stake.** Touched specs get updated to match the new markup; that is all.
 - **No behaviour changes.** No signal renamings, no state extraction, no route rewrites, no API changes. If a template restructure would change what the screen does, stop and ask.
@@ -158,15 +158,22 @@ Each of the four specs has three assertions. For directives: renders, applies it
 
 **Header:** h1 becomes `font-display text-4xl leading-tight tracking-tight` (from `text-3xl`). Count on the right becomes `font-display text-lg text-ink-muted tabular-nums`.
 
-**Weather strip:** wrap in `bg-surface rounded-xl p-4 shadow-sm`. No card border — 05-FRONTEND-SPEC line 650 ("Generous whitespace, no card borders — use shadow and spacing for separation") governs; the shadow carries the separation. Temperature and condition in `font-display text-2xl leading-tight` with the condition in `text-ink-muted font-normal`. City + "today" line becomes uppercase caption: `text-xs font-medium tracking-widest uppercase text-ink-soft`. The "Style me" link uses the new `Button` (primary) with an inline arrow SVG on the trailing side.
+**Weather strip:** wrap in `bg-surface rounded-xl p-4 shadow-sm`. No card border — 05-FRONTEND-SPEC line 650 ("Generous whitespace, no card borders — use shadow and spacing for separation") governs; the shadow carries the separation.
 
-**Insights panel:** the two numbers (34 and 136) render in `font-display text-lg font-medium` inline within the sentence.
+**This needs the existing `wardrobe.weather.line` split into two keys, and the split is required rather than cosmetic.** That key is `'{{temp}}°C · {{condition}} in {{city}}'` — one interpolated sentence in one text node, so no fragment of it can be styled, and giving the whole sentence `font-display` would put a geocoded city name in Fraunces. `05` line 646 names this strip as one of four surfaces that must use the body face, and `weather-strip.ts` carries that comment citing `DECISIONS.md` 071. Replace it with:
+
+- `wardrobe.weather.reading` → `'{{temp}}°C · {{condition}}'`, rendered `font-display text-2xl leading-tight` as **one text node**. Project-authored words only: a rounded number and a `vocabulary.condition.*` term. The condition is not muted separately — that would need the sentence broken into fragments, which is the thing this split exists to avoid.
+- `wardrobe.weather.place` → `'{{city}} · today'`, rendered as an uppercase caption in the **body face**: `text-xs font-medium tracking-widest uppercase text-ink-soft`. User data never reaches Fraunces.
+
+The "Style me" link uses the new `[appButton]` directive with `variant="primary"` and an inline arrow SVG on the trailing side.
+
+**Insights panel:** the **whole count line** renders `font-display text-lg` as one text node. The two numbers are not emphasised individually: `wardrobe.insights.neverWorn.*` is a single key, and picking out the numerals inside it would mean either fragmenting the sentence — which destroys the word order a Hebrew translation needs, the whole reason the i18n layer exists — or pushing markup through `innerHTML`. The count line carries no user data, so Fraunces is legal on all of it (071). The most-worn line beneath it **stays in the body face**: it interpolates `{{name}}`.
 
 **Category chips row:** apply the new `[appChip]` directive to the existing chip `<button>` elements. Active chip uses default variant. **Remove `filter-bar.ts`'s inline `[attr.aria-pressed]` bindings on those chips** — a template binding wins over a directive host binding, so leaving both would let them diverge silently. The Chip directive now owns that announcement. The colour swatches in the same file are **not** chips under this plan — they stay swatches with their existing markup.
 
 **Filter bar:** the `[Filters ▾]` button uses the new `[appButton]` directive with `variant="secondary"` and an inline filter SVG on the leading side.
 
-**Item grid:** tiles get `rounded-xl` (from whatever they had). The name below the tile is `text-xs text-ink-muted`. Processing overlay: keep the dim-photo pattern; add an uppercase "Tagging…" label positioned `inset-block-end` in `text-[10px] font-medium tracking-widest uppercase text-ink-muted`.
+**Item grid:** tiles get `rounded-xl` (from whatever they had). **No caption below the tile** — `item-card` renders the photograph and its overlays and nothing else. 05's mockup drew a name there; no task ever built one, and adding it now would print `wardrobe.item.untagged` ("Wardrobe item, not tagged yet") under every processing tile. Processing overlay: keep the dim-photo pattern; add an uppercase "Tagging…" label positioned `inset-block-end` in `text-[10px] font-medium tracking-widest uppercase text-ink-muted`.
 
 **Empty state:** replace the inline empty state with the new `app-empty-state`. Existing wardrobe empty-state copy and its "Add your first items" button move to inputs and projected content. Note the visual shift: the wardrobe empty's current `<h2 class="font-display text-2xl">` becomes EmptyState's own `font-display text-2xl leading-tight` (essentially the same). The saved-looks empty state (DR.6) will pick up the same treatment — this is deliberate, empty states get one identity.
 
@@ -174,9 +181,34 @@ Each of the four specs has three assertions. For directives: renders, applies it
 
 **FAB:** becomes `bg-ink text-surface rounded-full h-14 px-6 shadow-md`. Icon (inline SVG plus sign) on the leading side.
 
-**Item detail page (`/wardrobe/:id`):** the back link at the top stays (it is hierarchical up-navigation, per the nav-bar comment). Layout becomes: back link, then a hero image occupying the full content width with `rounded-2xl aspect-square max-w-md mx-auto`, then the item name as `font-display text-3xl leading-tight` beneath it, then meta list (category / colours / warmth / formality / etc.) rendered as `text-sm text-ink-muted` pairs stacked with `gap-2`. Primary action row uses the new `Button` component: **Style around this** as primary, **Edit tags** as secondary, **Delete** as danger. Wrap the action row in `flex flex-wrap gap-3`. The "processing" and "failed" states keep their existing behaviour, just re-skinned to use `bg-surface-elevated rounded-xl p-4` (no card border; the surface-elevated colour is the distinction).
+**Upload sheet:** apply `[appButton]` to the two picker controls — `variant="primary"` on the camera path, `variant="ghost"` on the gallery path — and **keep their existing `focus-within:outline-*` classes**. Those controls are `<label>` elements wrapping an `sr-only` `<input type="file">`, so focus lands on the input and never on the label: the directive's own `focus-visible` ring cannot fire there, and the caller's `focus-within` ring is what makes them keyboard-visible. This is exactly the composition DR.2's class-merge test guards — the directive contributes its base and variant classes, the label's own classes survive beside them. Cancel becomes a ghost `[appButton]`.
 
-**Tag editor:** wrap the form in `bg-surface rounded-2xl p-5 shadow-sm`. Each dimension (category, layer, colours, formality, warmth, condition, etc.) becomes a labelled section separated by `border-block-start border-line pt-5` (first section has no border). Section label is `text-xs font-medium tracking-widest uppercase text-ink-soft`. **Keep the ten native `<select>` elements as selects** — a select-to-chip-group conversion is a real UX change (native OS picker, keyboard, screen-reader semantics all shift) and belongs in its own task, not a visual pass. Re-skin the selects: `bg-surface border border-line-strong rounded-md min-h-11 px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`. Save is primary `Button`, Cancel is ghost `Button`.
+**Item detail page (`/wardrobe/:id`):** the back link at the top stays (it is hierarchical up-navigation, per the nav-bar comment). Layout becomes: back link, then a hero image occupying the full content width with `rounded-2xl aspect-square max-w-md mx-auto`, then the item name beneath it.
+
+**The name takes `text-3xl leading-tight` in the body face — not `font-display`.** `display_name` is user-entered and may be non-Latin; `05` line 646 names item detail as one of the four surfaces that must apply the body-face rule deliberately, and `item-detail.page.ts` carries that comment citing `DECISIONS.md` 071. An earlier draft of this plan specified Fraunces here and was wrong: a stated floor outranks a plan bullet.
+
+**No meta list.** An earlier draft asked for category / colours / warmth / formality as `text-sm text-ink-muted` pairs. Those values are already on screen — the tag editor is always open, which `05` §4 settled ("there is nothing else on the screen to be behind"), so a read-only list above it would print every value twice.
+
+**Action row** is `flex flex-wrap gap-3` holding **Retag** as a secondary `[appButton]` and **Delete** as a danger `[appButton]`. There is no **Edit tags** control to make secondary — same `05` §4 decision — and **Style around this** stays where `05` §4 puts it, directly under the photograph as a primary `[appButton]`, because that section forbids burying it behind the edit and delete actions. Retag's two-step `409` conflict panel and Delete's arm-on-first-press keep their behaviour exactly.
+
+The "processing" and "failed" states keep their existing behaviour, just re-skinned to use `bg-surface-elevated rounded-xl p-4` (no card border; the surface-elevated colour is the distinction).
+
+**Tag editor:** wrap the form in `bg-surface rounded-2xl p-5 shadow-sm`.
+
+**Four group sections, not one per dimension.** An earlier draft asked for a labelled section per dimension; there are ten of them in a two-column grid, and ten bordered sections roughly doubles the form's height on a phone while demoting each control's `<label>` to a section heading. Keep the existing two-column grid and apply the section pattern at group level:
+
+| section | key | fields |
+| --- | --- | --- |
+| Garment | `tagEditor.section.garment` | category, subcategory, layer |
+| Colour & pattern | `tagEditor.section.colourAndPattern` | color_primary, color_secondary, pattern, material |
+| Fit & scale | `tagEditor.section.fitAndScale` | fit, length, rise, formality, warmth, water_resistant |
+| Name | `tagEditor.section.name` | display_name |
+
+Sections are separated by `border-bs border-line pt-5` (the first has no border). Section label is `text-xs font-medium tracking-widest uppercase text-ink-soft`.
+
+**Keep the ten native `<select>` elements as selects** — a select-to-chip-group conversion is a real UX change (native OS picker, keyboard, screen-reader semantics all shift) and belongs in its own task, not a visual pass. Re-skin the selects, and the `display_name` text input with them: `bg-surface border border-line-strong rounded-md min-h-11 px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`.
+
+Save is a primary `[appButton]`. **There is no Cancel button** — the editor is always open, so there is nothing to cancel back to, and inventing one would be new behaviour rather than a re-skin.
 
 **Commit:** `refactor(web): wardrobe visual refresh`
 
@@ -235,7 +267,7 @@ Each of the four specs has three assertions. For directives: renders, applies it
 
 **Trip look:** the tile grid inside a day mirrors the stylist look card's 2+3 layout — wrap in `bg-surface rounded-2xl p-4 shadow-sm`. The swap button ↻ becomes a `<button appButton variant="secondary" [attr.aria-label]="…">` with an inline refresh SVG and compact caller-added padding (`px-3`) — height stays min-h-11 per the 44px floor.
 
-**Packing list:** wrap in `bg-surface rounded-xl overflow-hidden shadow-sm`. No card border — 05 line 650; the shadow carries it. Each row: 12px vertical padding, 14px horizontal, `border-block-end border-line` (last row has no border-block-end) — the row divider IS a line (that is edge definition inside the card, not a card border). 32px thumbnail (`rounded-md`), item name `text-sm`, reuse count on the right in `text-xs text-ink-soft tabular-nums`.
+**Packing list:** wrap in `bg-surface rounded-xl overflow-hidden shadow-sm`. No card border — 05 line 650; the shadow carries it. Each row: 12px vertical padding, 14px horizontal, `border-be border-line` (last row has no border-be) — the row divider IS a line (that is edge definition inside the card, not a card border). 32px thumbnail (`rounded-md`), item name `text-sm`, reuse count on the right in `text-xs text-ink-soft tabular-nums`.
 
 **Trip actions row:** "Repack" is `Button` (secondary), "Delete" is `Button` (danger).
 
@@ -258,7 +290,7 @@ Each of the four specs has three assertions. For directives: renders, applies it
 
 **Auth pages:** single-column, centered, `max-w-sm mx-auto py-16 px-6`. Form inputs get `bg-surface border border-line-strong rounded-md h-11 px-3 focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`. Submit is the primary `Button`. The bootstrap notice on `/login` stays; wrap it in `bg-surface-elevated rounded-md p-3 text-sm` (no card border; the surface-elevated colour is the distinction). The demo-wardrobe button becomes a `Button` (secondary).
 
-**Profile page:** header pattern matches Stylist — uppercase caption above an h1 Fraunces. Form sections separated by `border-block-start border-line pt-6`. Save is primary `Button`.
+**Profile page:** header pattern matches Stylist — uppercase caption above an h1 Fraunces. Form sections separated by `border-bs border-line pt-6`. Save is primary `Button`.
 
 **Saved looks page:** header pattern matches other feature pages. Empty state uses the `EmptyState` component with copy pointing at the stylist as the CTA.
 

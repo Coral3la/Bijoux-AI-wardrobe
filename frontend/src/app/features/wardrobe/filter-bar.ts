@@ -11,6 +11,8 @@ import {
 import { I18nService } from '../../core/i18n/i18n.service';
 import { ItemFilters, SCALE_MAX, SCALE_MIN } from '../../core/state/wardrobe.store';
 import { CATEGORIES, COLORS, Category, Color } from '../../shared/models/enums';
+import { Button } from '../../shared/ui/button';
+import { Chip } from '../../shared/ui/chip';
 
 // Presentation, not vocabulary: these are what a swatch is painted, while the
 // words themselves are in en.json, under `vocabulary.*` since 1.9 — a screen's
@@ -41,6 +43,7 @@ const SWATCHES = {
 @Component({
   selector: 'app-filter-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Button, Chip],
   template: `
     <section class="flex flex-col gap-3">
       <!-- 05-FRONTEND-SPEC.md's mockup draws this row scrolling horizontally
@@ -48,20 +51,27 @@ const SWATCHES = {
            is undefined in jsdom and calling it throws, so a selected chip off
            the right edge stays there. Measured, not assumed — 06's probe. -->
       <div class="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+        <!-- No aria-pressed binding here any more: appChip sets it from the same
+             active input that paints the chip, and a template binding would
+             outrank the directive's host binding and let the two drift. A
+             backtick in a template comment would end the literal, so this one
+             quotes nothing. -->
         <button
+          appChip
           type="button"
-          [attr.aria-pressed]="filters().category === undefined"
+          [active]="filters().category === undefined"
           (click)="chooseCategory(undefined)"
-          [class]="chipClass(filters().category === undefined)"
+          class="shrink-0"
         >
           {{ i18n.t('wardrobe.filter.category.all') }}
         </button>
         @for (category of categories; track category) {
           <button
+            appChip
             type="button"
-            [attr.aria-pressed]="filters().category === category"
+            [active]="filters().category === category"
             (click)="chooseCategory(category)"
-            [class]="chipClass(filters().category === category)"
+            class="shrink-0"
           >
             {{ i18n.t('vocabulary.category.' + category) }}
           </button>
@@ -74,26 +84,35 @@ const SWATCHES = {
              gallery path closes the upload sheet. O-15 is answered by this
              rather than acted on. DECISIONS.md 113. -->
         <button
+          appButton
+          variant="secondary"
           type="button"
           [attr.aria-expanded]="open()"
           (click)="toggle()"
-          class="min-h-11 rounded-md px-3 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="me-2 h-4 w-4"
+            aria-hidden="true"
+          >
+            <path d="M4 6h16M7 12h10M10 18h4" />
+          </svg>
           {{ i18n.t('wardrobe.filter.title') }}
         </button>
         @if (isFiltered()) {
-          <button
-            type="button"
-            (click)="clear()"
-            class="min-h-11 rounded-md px-3 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
+          <button appButton variant="ghost" type="button" (click)="clear()">
             {{ i18n.t('wardrobe.filter.clear') }}
           </button>
         }
       </div>
 
       @if (open()) {
-        <div class="flex flex-col gap-5 rounded-lg bg-surface p-4 shadow-sm">
+        <div class="flex flex-col gap-5 rounded-xl bg-surface p-4 shadow-sm">
           <fieldset class="flex flex-col gap-2">
             <legend class="text-sm font-medium">{{ i18n.t('wardrobe.filter.color') }}</legend>
             <div class="flex flex-wrap gap-2">
@@ -209,12 +228,6 @@ export class FilterBar {
 
   protected rangeLabel(key: string, dimension: 'formality' | 'warmth'): string {
     return this.i18n.t(key, { name: this.i18n.t(`wardrobe.filter.${dimension}`) });
-  }
-
-  protected chipClass(selected: boolean): string {
-    const base =
-      'min-h-11 shrink-0 rounded-full px-4 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-    return selected ? `${base} bg-accent text-surface` : `${base} bg-surface`;
   }
 
   protected swatchClass(selected: boolean): string {

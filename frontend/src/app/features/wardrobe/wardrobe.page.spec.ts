@@ -74,9 +74,11 @@ function alts(): (string | null)[] {
 
 // The empty state and the no-match state are direct children of <main>, where
 // the filter bar's own <section> is a grandchild inside <app-filter-bar>. That
-// is what tells the state's Clear filters button from the bar's.
+// is what tells the state's Clear filters button from the bar's. Both states
+// are <app-empty-state> since the design pass; the property this relies on is
+// unchanged, only the element name.
 function stateSection(): HTMLElement | null {
-  return (fixture.nativeElement as HTMLElement).querySelector('main > section');
+  return (fixture.nativeElement as HTMLElement).querySelector('main > app-empty-state');
 }
 
 function maybeButtonWith(fragment: string): HTMLButtonElement | undefined {

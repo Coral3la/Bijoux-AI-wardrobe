@@ -9,7 +9,7 @@ import { Item } from '../../shared/models/item.model';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink],
   template: `
-    <article class="relative aspect-square overflow-hidden rounded-lg bg-surface shadow-sm">
+    <article class="relative aspect-square overflow-hidden rounded-xl bg-surface shadow-sm">
       <!-- The photograph is on the wire from the first response, so a
            processing tile dims it rather than replacing it with a blank
            skeleton: the user has just photographed this garment and it is the
@@ -38,7 +38,9 @@ import { Item } from '../../shared/models/item.model';
       </a>
 
       @if (item().status === 'processing' && !gaveUp()) {
-        <p class="absolute inset-x-0 bottom-0 bg-surface/90 p-1 text-center text-xs">
+        <p
+          class="absolute inset-x-0 bottom-0 bg-surface/90 p-1 text-center text-[10px] font-medium tracking-widest text-ink-muted uppercase"
+        >
           {{ i18n.t('wardrobe.item.processing') }}
         </p>
       }

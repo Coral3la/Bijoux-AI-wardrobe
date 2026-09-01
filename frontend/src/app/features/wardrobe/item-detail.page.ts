@@ -7,12 +7,13 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { WardrobeStore } from '../../core/state/wardrobe.store';
 import { Item, ItemUpdate } from '../../shared/models/item.model';
 import { CloudinaryUrlPipe } from '../../shared/pipes/cloudinary-url.pipe';
+import { Button } from '../../shared/ui/button';
 import { TagEditor } from './tag-editor';
 
 @Component({
   selector: 'app-item-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CloudinaryUrlPipe, RouterLink, TagEditor],
+  imports: [Button, CloudinaryUrlPipe, RouterLink, TagEditor],
   template: `
     <main class="mx-auto flex w-full max-w-3xl flex-col gap-6 p-6">
       <a
@@ -23,11 +24,6 @@ import { TagEditor } from './tag-editor';
       </a>
 
       @if (item(); as row) {
-        <!-- Body face, not display: display_name is user-entered and may be
-             non-Latin, which Fraunces does not cover. 05's rule names this
-             screen as one of four that must apply it deliberately (071). -->
-        <h1 class="text-2xl">{{ row.display_name ?? i18n.t('item.untitled') }}</h1>
-
         <!-- The detail transform, built from image_public_id. The server sends
              image_url as a 300px padded thumbnail and nothing else, so this is
              the first screen in the project that cannot use it. O-10's pipe,
@@ -35,8 +31,14 @@ import { TagEditor } from './tag-editor';
         <img
           [src]="row.image_public_id | cloudinaryUrl: 'detail'"
           [alt]="row.display_name ?? i18n.t('item.untitled')"
-          class="w-full rounded-lg bg-surface object-contain"
+          class="mx-auto aspect-square w-full max-w-md rounded-2xl bg-surface object-contain"
         />
+
+        <!-- Under the photograph now, and still the body face: display_name is
+             user-entered and may be non-Latin, which Fraunces does not cover.
+             05's rule names this screen as one of four that must apply it
+             deliberately, so the size grows and the family does not (071). -->
+        <h1 class="text-3xl leading-tight">{{ row.display_name ?? i18n.t('item.untitled') }}</h1>
 
         <!-- The primary action on this screen, and 05-FRONTEND-SPEC.md's
              instruction is that it is not buried behind edit and delete — so it
@@ -45,11 +47,7 @@ import { TagEditor } from './tag-editor';
              button on any other row would navigate to a request the endpoint
              answers anchor_unavailable to. -->
         @if (row.status === 'ready') {
-          <a
-            routerLink="/stylist"
-            [queryParams]="{ anchor: row.id }"
-            class="inline-flex min-h-11 items-center self-start rounded-md bg-accent px-4 text-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
+          <a appButton routerLink="/stylist" [queryParams]="{ anchor: row.id }" class="self-start">
             {{ i18n.t('item.styleAround') }}
           </a>
         }
@@ -67,11 +65,15 @@ import { TagEditor } from './tag-editor';
              never off a client-side copy of the required set — naming the
              missing field would need that copy, which is what B declined. -->
         @if (row.status === 'failed') {
-          <p class="text-sm font-medium text-danger">{{ i18n.t('item.incomplete') }}</p>
+          <p class="rounded-xl bg-surface-elevated p-4 text-sm font-medium text-danger">
+            {{ i18n.t('item.incomplete') }}
+          </p>
         }
 
         @if (row.status === 'processing') {
-          <p class="text-sm">{{ i18n.t('item.processing') }}</p>
+          <p class="rounded-xl bg-surface-elevated p-4 text-sm text-ink-muted">
+            {{ i18n.t('item.processing') }}
+          </p>
         } @else {
           <section class="flex flex-col gap-3">
             <h2 class="font-display text-xl">{{ i18n.t('item.edit.title') }}</h2>
@@ -103,16 +105,18 @@ import { TagEditor } from './tag-editor';
           }
         </section>
 
-        <div class="flex flex-wrap items-center gap-3 border-t border-current/10 pt-4">
+        <div class="flex flex-wrap items-center gap-3 border-bs border-line pt-4">
           <!-- One control, ungated. It sends the unforced retag; the 409 opens
                the second step. Gating it on user_edited and forcing straight
                away would mean the 409 is never produced from the UI, and
                acceptance criterion 6 would stay a route test. 122. -->
           <button
+            appButton
+            variant="secondary"
             type="button"
             (click)="retag()"
             [disabled]="retagging()"
-            class="min-h-11 rounded-md px-3 text-sm underline disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            class="disabled:opacity-50"
           >
             {{ retagging() ? i18n.t('item.retag.working') : i18n.t('item.retag.action') }}
           </button>
@@ -123,14 +127,19 @@ import { TagEditor } from './tag-editor';
                modal was declined on cost: a fourth hand-rolled focus trap,
                with inert unsupported, to guard a misclick two clicks already
                guard. DECISIONS.md 126. -->
+          <!-- The armed state stays a class binding rather than a variant swap:
+               the danger variant is what this control looks like unarmed, and
+               arming it fills the button in. -->
           <button
+            appButton
+            variant="danger"
             type="button"
             (click)="onDelete()"
             (blur)="disarm()"
             [disabled]="deleting()"
-            class="min-h-11 rounded-md px-3 text-sm underline disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            [class.text-danger]="armed()"
-            [class.font-medium]="armed()"
+            class="disabled:opacity-50"
+            [class.bg-danger]="armed()"
+            [class.text-surface]="armed()"
           >
             {{ deleteLabel() }}
           </button>
@@ -141,21 +150,13 @@ import { TagEditor } from './tag-editor';
         }
 
         @if (retagConflict()) {
-          <div class="flex flex-col items-start gap-2 rounded-lg bg-surface p-3">
+          <div class="flex flex-col items-start gap-3 rounded-xl bg-surface-elevated p-4">
             <p class="text-sm font-medium">{{ i18n.t('item.retag.confirm') }}</p>
             <div class="flex flex-wrap gap-3">
-              <button
-                type="button"
-                (click)="retag(true)"
-                class="min-h-11 rounded-md px-3 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
+              <button appButton variant="danger" type="button" (click)="retag(true)">
                 {{ i18n.t('item.retag.confirmAction') }}
               </button>
-              <button
-                type="button"
-                (click)="dismissConflict()"
-                class="min-h-11 rounded-md px-3 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
+              <button appButton variant="ghost" type="button" (click)="dismissConflict()">
                 {{ i18n.t('item.retag.cancel') }}
               </button>
             </div>

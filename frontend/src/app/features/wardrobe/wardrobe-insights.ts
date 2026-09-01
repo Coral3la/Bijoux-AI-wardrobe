@@ -21,17 +21,23 @@ interface Insights {
   template: `
     @if (insights(); as panel) {
       <section
-        class="flex flex-col items-start gap-1 rounded-lg bg-surface px-4 py-3"
+        class="flex flex-col items-start gap-2 rounded-xl bg-surface p-4 shadow-sm"
         [attr.aria-label]="i18n.t('wardrobe.insights.region')"
       >
-        <p class="text-sm">{{ panel.line }}</p>
+        <!-- The whole sentence takes the display face, not the two numbers
+             inside it. Emphasising the numerals alone would mean splitting one
+             i18n key into fragments, and a sentence assembled from pieces
+             cannot be reordered for a language that words it differently. The
+             line carries no user data, so Fraunces is legal across all of it —
+             which the link below is not: it interpolates a garment name. -->
+        <p class="font-display text-lg">{{ panel.line }}</p>
         <!-- The link the most_worn field was narrowed to three fields to
              carry: an id, because the one garment named on this panel is the
              one the user is most likely to want to look at. -->
         @if (panel.mostWorn; as garment) {
           <a
             [routerLink]="['/wardrobe', garment.id]"
-            class="inline-flex min-h-11 items-center rounded-md text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            class="inline-flex min-h-11 items-center rounded-md text-sm text-ink-muted underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             {{ garment.line }}
           </a>

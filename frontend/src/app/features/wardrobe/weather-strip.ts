@@ -5,23 +5,31 @@ import { WeatherApi } from '../../core/api/weather.api';
 import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { Weather } from '../../shared/models/weather.model';
+import { Button } from '../../shared/ui/button';
 import { todayInLocalTime } from '../stylist/look-request-form';
 
 @Component({
   selector: 'app-weather-strip',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink],
+  imports: [Button, RouterLink],
   template: `
     <section
-      class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg bg-surface px-4 py-3"
+      class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-surface p-4 shadow-sm"
       [attr.aria-label]="i18n.t('wardrobe.weather.region')"
     >
-      <!-- Body face, deliberately: the city is a name the user chose off the
-           geocoder and may be non-Latin, which Fraunces does not cover — the
-           rule 05-FRONTEND-SPEC.md line 292 names this strip in.
-           DECISIONS.md 071. -->
-      @if (summary(); as line) {
-        <p class="text-sm">{{ line }}</p>
+      <!-- Two lines rather than one sentence, and the split is what makes the
+           display face legal here. The reading is a rounded number and a word
+           from our own vocabulary, so Fraunces may have it; the city is a name
+           the user chose off the geocoder and may be non-Latin, which Fraunces
+           does not cover — the rule 05-FRONTEND-SPEC.md line 646 names this
+           strip in. It stays in the body face at any size. DECISIONS.md 071. -->
+      @if (forecastLines(); as lines) {
+        <div class="flex flex-col gap-1">
+          <p class="font-display text-2xl leading-tight">{{ lines.reading }}</p>
+          <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+            {{ lines.place }}
+          </p>
+        </div>
       } @else if (!hasHome()) {
         <!-- The degraded state §2.12 specifies, and the only place it points is
              the screen that fixes it. It replaces the temperature; it never
@@ -45,11 +53,20 @@ import { todayInLocalTime } from '../stylist/look-request-form';
            being tappable, because the degraded state puts a second link inside
            it and an anchor inside an anchor is not a document — 05 is annotated
            where it draws the strip itself as the target. -->
-      <a
-        routerLink="/stylist"
-        class="ms-auto inline-flex min-h-11 items-center rounded-md bg-accent px-4 text-sm text-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
+      <a appButton routerLink="/stylist" class="ms-auto">
         {{ i18n.t('wardrobe.weather.styleMe') }}
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="ms-2 h-4 w-4"
+          aria-hidden="true"
+        >
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        </svg>
       </a>
     </section>
   `,
@@ -70,23 +87,30 @@ export class WeatherStrip {
   });
 
   // The city comes off the account and the numbers off the forecast, so the
-  // line exists only when both do. 151 makes that one condition rather than
+  // lines exist only when both do. 151 makes that one condition rather than
   // two: an account with coordinates has a city name.
-  protected readonly summary = computed(() => {
+  protected readonly forecastLines = computed(() => {
     const forecast = this.weather();
     const city = this.auth.currentUser()?.home_city ?? null;
     if (forecast === null || city === null) {
       return null;
     }
-    return this.i18n.t('wardrobe.weather.line', {
-      // The day's high, which is the number this project already means by "the
-      // temperature": `summarize_forecast` prints `temp_max_c` to the model and
-      // DECISIONS.md 142 settled it there. A strip and a prompt disagreeing
-      // about today would be visible on one screen.
-      temp: Math.round(forecast.temp_max_c),
-      condition: this.i18n.t(`vocabulary.condition.${forecast.condition}`),
-      city,
-    });
+    return {
+      // Each line is one whole key, never assembled from fragments: a sentence
+      // broken up so that half of it can be styled cannot be reordered for a
+      // language that puts it the other way round.
+      //
+      // The temperature is the day's high, which is the number this project
+      // already means by "the temperature": `summarize_forecast` prints
+      // `temp_max_c` to the model and DECISIONS.md 142 settled it there. A
+      // strip and a prompt disagreeing about today would be visible on one
+      // screen.
+      reading: this.i18n.t('wardrobe.weather.reading', {
+        temp: Math.round(forecast.temp_max_c),
+        condition: this.i18n.t(`vocabulary.condition.${forecast.condition}`),
+      }),
+      place: this.i18n.t('wardrobe.weather.place', { city }),
+    };
   });
 
   // Fails silently, on the reasoning StylistStore.loadWeather records: the

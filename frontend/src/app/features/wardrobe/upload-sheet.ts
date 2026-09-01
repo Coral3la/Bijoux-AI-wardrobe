@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 
 import { I18nService } from '../../core/i18n/i18n.service';
+import { Button } from '../../shared/ui/button';
 
 // Hand-written copies of MAX_FILES_PER_REQUEST and max_upload_bytes in
 // backend/app/core/config.py. Nothing compares the two — a browser cannot read
@@ -29,6 +30,7 @@ const ACCEPTED = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
 @Component({
   selector: 'app-upload-sheet',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Button],
   template: `
     <!-- A plain element, not <dialog>. jsdom implements neither showModal nor
          show nor close (measured at 1.6), so a dialog-based sheet could not be
@@ -48,7 +50,7 @@ const ACCEPTED = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
         [attr.aria-label]="i18n.t('wardrobe.upload.title')"
         class="relative flex flex-col gap-4 rounded-t-2xl bg-surface p-6 shadow-lg"
       >
-        <h2 class="font-display text-xl">{{ i18n.t('wardrobe.upload.title') }}</h2>
+        <h2 class="font-display text-2xl leading-tight">{{ i18n.t('wardrobe.upload.title') }}</h2>
 
         <!-- Part of the feature, not decoration: tagging accuracy depends on
              it, which is why it sits above the buttons rather than below. -->
@@ -59,8 +61,15 @@ const ACCEPTED = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
         }
 
         <div class="flex flex-col gap-3">
+          <!-- appButton on a <label>, and the focus-within ring stays. Focus
+               lands on the sr-only input inside, never on the label, so the
+               directive's own focus-visible ring cannot fire here — these two
+               classes are what make the control keyboard-visible, and they
+               survive beside the directive's because a template class and a
+               host binding merge rather than replace. -->
           <label
-            class="flex min-h-11 cursor-pointer items-center justify-center rounded-md bg-accent px-4 text-surface focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent"
+            appButton
+            class="w-full cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent"
           >
             {{ i18n.t('wardrobe.upload.camera') }}
             <!-- The input stays focusable rather than display:none, so the
@@ -76,7 +85,9 @@ const ACCEPTED = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
           </label>
 
           <label
-            class="flex min-h-11 cursor-pointer items-center justify-center rounded-md px-4 underline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent"
+            appButton
+            variant="ghost"
+            class="w-full cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent"
           >
             {{ i18n.t('wardrobe.upload.gallery') }}
             <input
@@ -91,9 +102,11 @@ const ACCEPTED = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
         </div>
 
         <button
+          appButton
+          variant="ghost"
           type="button"
           (click)="dismissed.emit()"
-          class="min-h-11 self-start rounded-md px-3 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          class="self-start"
         >
           {{ i18n.t('wardrobe.upload.done') }}
         </button>
