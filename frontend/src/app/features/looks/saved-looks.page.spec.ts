@@ -81,9 +81,14 @@ function hearts(): HTMLButtonElement[] {
   ];
 }
 
+// Matched on containment rather than equality: the worn button carries a ✓
+// beside its label, so an exact match would find the unworn ones only — which
+// is the state half these tests are about.
 function wearButtons(): HTMLButtonElement[] {
   return [...element().querySelectorAll<HTMLButtonElement>('button')].filter((candidate) =>
-    [en['saved.wear'], en['saved.wear.done']].includes(candidate.textContent?.trim() ?? ''),
+    [en['saved.wear'], en['saved.wear.done']].some((label) =>
+      (candidate.textContent ?? '').includes(label),
+    ),
   );
 }
 
@@ -136,12 +141,16 @@ describe('SavedLooksPage', () => {
     listRequest().flush({ looks: [], total: 0 });
   });
 
-  // A stack of two, which says "a stack of look cards" without claiming a
-  // length the response has not arrived to confirm. DECISIONS.md 217.
-  it('draws the stack shape while the list is loading', async () => {
+  // Two rows, and the row's own shape inside each: four plates and the two
+  // lines of text beside them. Twelve is that arithmetic — a block per row
+  // would satisfy "something is loading" and promise the wrong screen.
+  // DECISIONS.md 217, 221.
+  it('draws the row shape while the list is loading', async () => {
     await render();
 
-    expect((fixture.nativeElement as HTMLElement).querySelectorAll('app-skeleton')).toHaveLength(2);
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('app-skeleton')).toHaveLength(
+      12,
+    );
 
     listRequest().flush({ looks: [], total: 0 });
     await fixture.whenStable();
@@ -174,6 +183,98 @@ describe('SavedLooksPage', () => {
     expect(text()).toContain('Morning meetings');
     expect(text()).toContain('Dinner out');
     expect(element().querySelectorAll('app-item-card')).toHaveLength(2);
+  });
+
+  // The row's photographs are the whole of the left column, at a quarter of
+  // 320px each. The caption input the stylist added is what turns the wardrobe's
+  // colour line off; without it every plate here carries a name nobody can read.
+  it('draws the garments without the wardrobe caption', async () => {
+    await render();
+    listRequest().flush({ looks: [look()], total: 1 });
+    await fixture.whenStable();
+
+    expect(element().querySelectorAll('app-item-card')).toHaveLength(1);
+    expect(text()).not.toContain('white oversized shirt');
+  });
+
+  // What the look was asked for, in the slot the mockup drew a save date in.
+  // Nothing on the wire carries a save date, so this is the row's kicker.
+  it('heads the row with the occasion the look was built for', async () => {
+    await render();
+    listRequest().flush({ looks: [look({ occasion: 'evening' })], total: 1 });
+    await fixture.whenStable();
+
+    expect(text()).toContain(en['vocabulary.occasion.evening']);
+  });
+
+  // `looks.occasion` is TEXT on the server and nothing on the wire narrows it,
+  // so a value outside the vocabulary is possible — and t() renders a missing
+  // key as itself, which would print `vocabulary.occasion.brunch` at the reader.
+  it('prints no kicker for an occasion outside the vocabulary', async () => {
+    await render();
+    listRequest().flush({ looks: [look({ occasion: 'brunch' })], total: 1 });
+    await fixture.whenStable();
+
+    expect(text()).not.toContain('vocabulary.occasion');
+  });
+
+  it('counts the saved looks in the header', async () => {
+    await render();
+    listRequest().flush({ looks: [look(), look({ id: 'look-2' })], total: 2 });
+    await fixture.whenStable();
+
+    expect(text()).toContain(en['saved.count.other'].replace('{{count}}', '2'));
+  });
+
+  // The two English values coincide at one — "1 saved" either way, because
+  // "saved" does not inflect — so nothing on the screen can tell the branch
+  // apart and only a second table can. The pair exists for a language that
+  // inflects rather than for this one, which is why it is worth pinning at all.
+  it('takes the singular key for one saved look', async () => {
+    const loading = TestBed.inject(I18nService).load();
+    TestBed.inject(HttpTestingController)
+      .expectOne('/i18n/en.json')
+      .flush({ ...en, 'saved.count.one': 'just the one' });
+    await loading;
+
+    await render();
+    listRequest().flush({ looks: [look()], total: 1 });
+    await fixture.whenStable();
+
+    expect(text()).toContain('just the one');
+  });
+
+  // The count is read from the string table rather than assembled in the
+  // component, and this is the only assertion that can tell the two apart: a
+  // hard-coded `${count} saved` renders identically under en.json's own value
+  // and survives every other test in this file.
+  it('takes the count line from the string table rather than from the code', async () => {
+    const loading = TestBed.inject(I18nService).load();
+    TestBed.inject(HttpTestingController)
+      .expectOne('/i18n/en.json')
+      .flush({ ...en, 'saved.count.other': '{{count}} kept' });
+    await loading;
+
+    await render();
+    listRequest().flush({ looks: [look(), look({ id: 'look-2' })], total: 2 });
+    await fixture.whenStable();
+
+    expect(text()).toContain('2 kept');
+  });
+
+  // Counted off is_saved and not off the rows: the list keeps a look that has
+  // just been unsaved, so a count of rows would claim a save the empty heart
+  // under it denies.
+  it('stops counting a look the moment it is unsaved', async () => {
+    await render();
+    listRequest().flush({ looks: [look()], total: 1 });
+    await fixture.whenStable();
+
+    hearts()[0].click();
+    mock.expectOne(`${environment.apiUrl}/looks/look-1`).flush(look({ is_saved: false }));
+    await fixture.whenStable();
+
+    expect(text()).toContain(en['saved.count.other'].replace('{{count}}', '0'));
   });
 
   it('keeps the server order of the garments', async () => {
@@ -274,7 +375,7 @@ describe('SavedLooksPage', () => {
     listRequest().flush({ looks: [look({ worn_at: todayInLocalTime() })], total: 1 });
     await fixture.whenStable();
 
-    expect(wearButtons()[0].textContent?.trim()).toBe(en['saved.wear.done']);
+    expect(wearButtons()[0].textContent).toContain(en['saved.wear.done']);
     expect(wearButtons()[0].disabled).toBe(true);
   });
 
@@ -285,7 +386,7 @@ describe('SavedLooksPage', () => {
     listRequest().flush({ looks: [look({ worn_at: '2020-01-01' })], total: 1 });
     await fixture.whenStable();
 
-    expect(wearButtons()[0].textContent?.trim()).toBe(en['saved.wear']);
+    expect(wearButtons()[0].textContent).toContain(en['saved.wear']);
     expect(wearButtons()[0].disabled).toBe(false);
   });
 
@@ -301,7 +402,7 @@ describe('SavedLooksPage', () => {
     await fixture.whenStable();
 
     expect(text()).toContain(en['looks.error.general']);
-    expect(wearButtons()[0].textContent?.trim()).toBe(en['saved.wear']);
+    expect(wearButtons()[0].textContent).toContain(en['saved.wear']);
   });
 
   it('reports a failed write without emptying the list', async () => {

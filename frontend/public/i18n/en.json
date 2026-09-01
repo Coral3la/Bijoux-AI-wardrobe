@@ -345,6 +345,8 @@
   "stylist.look.thumbUp": "Good look",
   "stylist.look.thumbDown": "Not for me",
   "saved.title": "Saved looks",
+  "saved.count.one": "1 saved",
+  "saved.count.other": "{{count}} saved",
   "saved.loading": "Loading your saved looks\u2026",
   "saved.empty.title": "Nothing saved yet",
   "saved.empty.body": "Tap the heart on a look you like and it will be here.",

@@ -178,11 +178,11 @@ function scale(value: string | null): number | undefined {
           </button>
         </div>
       } @else if (store.isEmpty() && store.pending().length === 0) {
-        <!-- These two states still render EmptyState, which still carries the
-             pre-Atelier faces and the pre-Atelier button: it is shared with
-             /saved, and converting it belongs to the commit that converts that
-             screen rather than to this one. It is the one part of this screen
-             the mockup does not yet reach. -->
+        <!-- These two states render EmptyState, which took its Atelier pass in
+             the /saved commit that converts its other caller: it is centred
+             now, and its title and description carry Cormorant. The button
+             inside it is still the pre-Atelier appButton, which is shared with
+             every screen in the product and is nobody's screen to convert. -->
         <app-empty-state
           [title]="i18n.t('wardrobe.empty.title')"
           [description]="i18n.t('wardrobe.empty.body')"

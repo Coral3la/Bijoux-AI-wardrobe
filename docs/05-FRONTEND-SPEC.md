@@ -344,60 +344,96 @@ If `missing_pieces` is non-empty, render it as a small italic list under a caps 
 
 ### 6a. Saved looks — `/saved` *(Stage 3)*
 
-**Added at task 3.2.** `STAGE-3` 3.2 asks for a saved-looks list screen and this
-document had no screen for it — the heart was drawn on the card above and the
-list it feeds was specified nowhere.
+**Added at task 3.2** — `STAGE-3` 3.2 asked for a saved-looks list screen and this
+document had no screen for it. **Rewritten at the Atelier pass**, from the picked
+mockup: the direction is **The Shelf** and `DECISIONS.md` 221 is why.
 
 ```
-┌────────────────────────────────┐
-│  Saved looks                   │
-│  ┌──────────────────────────┐  │
-│  │ Morning meetings      ♥  │  │
-│  │ 18°C — the blazer is …   │  │
-│  │ ┌───┐┌───┐┌───┐┌───┐     │  │
-│  │ └───┘└───┘└───┘└───┘     │  │
-│  │ [ I wore this ]          │  │  ← task 3.4
-│  └──────────────────────────┘  │
-│  ┌──────────────────────────┐  │
-│  │ Dinner out            ♥  │  │
-│  …                             │
-└────────────────────────────────┘
+  Saved looks                                        3 saved
+  ────────────────────────────────────────────────────────────
+  ┌──┐┌──┐┌──┐┌──┐   WORK                    ♡   ( I WORE THIS )
+  │  ││  ││  ││  │   Morning meetings
+  └──┘└──┘└──┘└──┘   Mild at 18°C — the blazer is enough.
+  ────────────────────────────────────────────────────────────
+  ┌──┐┌──┐┌──┐┌──┐   EVENING                 ♥   ( ✓ WORN TODAY )
+  │  ││  ││  ││  │   Dinner in Neve Tzedek
+  └──┘└──┘└──┘└──┘   Cooler after sundown; trousers keep it grown-up.
+  ────────────────────────────────────────────────────────────
 ```
 
-**"I wore this", added at task 3.4.** Below the garments rather than beside the
-heart: the heart is about the list and this is about today, and a text label
-does not belong in a row built for a glyph. It is the only control in the
-application that is **not** optimistic, which is a deliberate exception to
-`DECISIONS.md` 183 rather than an omission — wearing is not a toggle, so a
-second tap does not undo it; the response changes `wear_count` on every garment
-and the client cannot derive those numbers; and there is no previous state to
-roll back to, because nothing is written before the answer arrives. It shows a
-busy state and renders what the server says. `DECISIONS.md` 184.
+**One look is one row, on the canvas.** A three-column grid — `320px 1fr auto` —
+holding a four-plate garment strip, the body, and the controls; a hairline
+between rows and none after the last; no card, no fill, no shadow. It stacks to
+one column below `md`. The page is 980px wide rather than the `max-w-2xl` it held
+before, which is what 320px of photographs costs.
 
-**After a successful tap it stays, disabled, reading "Worn today."** The state is
-worth showing, and the endpoint is idempotent for that exact date anyway, so a
-client that retried would cost nothing. A look worn on an *earlier* day gets the
-button back, enabled: that is a second wearing and the server counts it as one.
-The date sent is the browser's local today, from the same `todayInLocalTime` the
-stylist form and the weather strip use — two spellings of "today" in one
-application would disagree for anyone off UTC.
+**The strip is `ItemCard` with `caption=false`** — 220's input — so a saved row's
+tile is the photograph alone. The plates stay **4:5**, the wardrobe's ratio and
+the look card's, where the mockup drew squares. The garments are **in the
+server's order**, which is `look_items.position` and therefore the model's own.
 
-**Not the look card.** That component groups by layer, carries a ↻ badge on
-every garment and ends in "Try again", none of which a saved look can do —
-there is no request behind it to re-run. A row carries the title, the weather
-note, the garments as a flat strip **in the server's order**, and the heart.
-Reusing the card would have meant two inputs whose only job is to switch its own
-features off.
+**The body is three lines: a mono kicker, the title, the weather note.** The
+kicker is the **occasion** the look was built for, uppercase at 10px and
+letter-spaced, guarded against a value outside `vocabulary.occasion.*`. The title
+is the content face at 22px and the note is the content face italic at 14px —
+both are the model's words, so `DECISIONS.md` 071 keeps them out of the serif the
+mockup drew them in.
+
+**The mockup's date and its *This week* / *Earlier* grouping are not built, and
+the reason is the same for both: `LookResponse` carries no save date.** The rows
+are one flat stack. `looks.created_at` is a column and is not on the response
+schema; putting it there is a backend commit, and the grouping and the dateline
+follow it. `DECISIONS.md` 221.
+
+**The header** is the display serif at 48px with a **mono count** on the far end
+— `3 saved` — over a single rule. The count is read off `is_saved` rather than
+off the rows, so unsaving the last row shows `0 saved` above it rather than
+claiming a save the empty heart denies.
+
+**The controls sit together in the third column**: the heart as a 44px circle,
+filled in the accent when saved, and the wear button as a caps-letter-spaced
+pill. This **reverses the "below the garments" placement** of 3.4 and keeps its
+reasoning — *a text label does not sit in a row built for a glyph* was true of a
+card whose only other control was a heart, and is not true of a row whose third
+column is the controls.
+
+**"I wore this", added at task 3.4.** It is the only control in the application
+that is **not** optimistic, which is a deliberate exception to `DECISIONS.md` 183
+rather than an omission — wearing is not a toggle, so a second tap does not undo
+it; the response changes `wear_count` on every garment and the client cannot
+derive those numbers; and there is no previous state to roll back to, because
+nothing is written before the answer arrives. It shows a busy state and renders
+what the server says.
+
+**After a successful tap it stays, disabled, reading "✓ Worn today"** — and
+un-filled, which is the whole of how the screen says a look was worn today. The
+mockup drew a second `✓ Worn` badge beside the title and it is deleted: one fact,
+one signal. A look worn on an *earlier* day gets the button back, enabled: that
+is a second wearing and the server counts it as one. The date sent is the
+browser's local today, from the same `todayInLocalTime` the stylist form and the
+weather strip use — two spellings of "today" in one application would disagree
+for anyone off UTC.
+
+**Not the look card.** That component heads with the parameters its request
+carried, carries a ↻ badge on every garment and ends in "Try again", none of
+which a saved look can do — there is no request behind it to re-run. Reusing it
+would have meant inputs whose only job is to switch its own features off.
 
 **Unsaving leaves the row where it is**, with an empty heart, until the next
 load. Taking it away under the finger that unsaved it makes the tap
 uncorrectable; leaving it makes it one tap back.
 
-Empty state links to `/stylist` — it is the likeliest first visit, since the
-heart is one task old and no account has used it.
+**The wait draws the row**: two skeleton rows, each a strip of four plates and
+two text lines, deferred as a region with the status line inside it (`DECISIONS.md`
+217).
 
-**Nothing links to this screen.** `AUDITS.md` **O-29**; the entry point is its
-own work, as `/stylist`'s was at 2.12.
+Empty state links to `/stylist` with a **ghost** CTA — it is the likeliest first
+visit, and an empty saved list is a state a working account passes through rather
+than the one action a new account must take.
+
+**The navigation bar is what links here**, since task 4.9; `AUDITS.md` **O-29**
+is closed and the sentence that used to stand here — *nothing links to this
+screen* — went with it.
 
 ### 7. Trips — `/trips` *(Stage 4)*
 
@@ -690,6 +726,8 @@ The accent and the muted differ by one digit and that is not a slip — the acce
 - **The weather strip is a line, not a card.** One italic sentence, the reading in mono after a middle dot, and a caps-letter-spaced **Style me** link pushed to the far end, over a single hairline rule. No panel, no shadow, no rounded ground. All three states of §2.12 still render and the link is in every one of them.
 - **The grid** is four columns on desktop and two on a phone, **4:5 plates**, no shadow and no tile background — the photograph sits on the paper. Rows are further apart than columns (40px against 28px), because a caption under every tile would otherwise read as a label for the plate below it. **Each tile carries a caption**: the name in the content face, then `Colour · Category` in 10px uppercase meta — the name is the model's words, the meta is our closed vocabulary, and the two are set accordingly.
 - **The floating action is an outlined pill**, not a filled circle: a solid disc of ink over the grid is the one object that would outweigh a photograph, and the word on it removes the need for an icon-only label.
+- **An empty state is a centred placard on the canvas**, not a box and not a note: the title in the display serif at 28px with `text-wrap: balance`, the description in italic prose at 40ch, the caller's own CTA below it, and no border, fill or padding of its own. `EmptyState` is shared by `/wardrobe`'s two empty states and `/saved`'s, and the CTA's weight is the caller's — filled for a first upload, ghost for the other two.
+- **A list row is a row, not a card.** `/saved` is the pattern: a garment strip, a body, the controls, a hairline between them, on the canvas. Separation is the rule below.
 - **No cards and no shadows on a converted screen.** Separation comes from air and from hairlines. `--shadow-sm/md/lg` remain declared for the screens that have not been converted.
 - **Whitespace is still the three named intervals** `--spacing-hero`, `--spacing-region` and `--spacing-group` (`DECISIONS.md` 212, which survives its own supersession): `pt-hero` above a page title, `gap-region` between the parts of a screen, `gap-group` binding a label to what it labels. Tailwind's numeric scale stays available for composition inside a component. A piece of vertical space is owned by one layer of the layout — the container, which can see its neighbours, not the component, which can only see itself.
 - Every interactive element ≥ 44px tall. This is a phone app that happens to run in a browser. **The mockup draws a 33px chip and the built one is 44px**, which is the one place the implementation deliberately departs from the picture.

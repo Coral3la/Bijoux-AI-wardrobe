@@ -66,6 +66,17 @@ describe('EmptyState', () => {
     expect(host.querySelector('p')?.classList.contains('font-prose')).toBe(true);
   });
 
+  // The axis is this pass's whole decision and it is invisible to every other
+  // test here: the title, the description and the CTA all render identically
+  // left-aligned. 216 pinned the prose face for the same reason.
+  // DECISIONS.md 221.
+  it('centres the note rather than aligning it to the start edge', async () => {
+    const host = await render({ description: 'Photograph a few garments.' });
+
+    expect(host.classList.contains('items-center')).toBe(true);
+    expect(host.classList.contains('text-center')).toBe(true);
+  });
+
   it('projects the caller-supplied call to action', async () => {
     const hostFixture = TestBed.createComponent(EmptyStateHost);
     await hostFixture.whenStable();
