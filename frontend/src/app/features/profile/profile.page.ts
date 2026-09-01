@@ -7,6 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
+import { Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
 import { MeApi } from '../../core/api/me.api';
@@ -14,7 +15,6 @@ import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { LocationResult } from '../../shared/models/location.model';
 import { UserUpdate } from '../../shared/models/user.model';
-import { Button } from '../../shared/ui/button';
 
 // Mirrored from `02-DATA-MODEL.md`'s own `CHECK (height_cm BETWEEN 120 AND
 // 230)`, which the request schema refuses rather than Postgres. Another of the
@@ -30,6 +30,27 @@ export const MAX_HEIGHT_CM = 230;
 const MIN_QUERY_LENGTH = 2;
 
 export const SEARCH_DEBOUNCE_MS = 300;
+
+// The auth pair's five strings, minus the swap link and plus a quiet one for
+// the two controls that end a section rather than a page. DECISIONS.md 223.
+const LABEL = 'font-mono text-[10px] font-medium tracking-[0.24em] text-ink-soft uppercase';
+
+const HINT = 'font-prose text-sm text-ink-muted italic';
+
+const FIELD =
+  'min-h-11 border-b border-ink-soft bg-transparent py-2 font-sans text-base focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+
+const PILL =
+  'inline-flex min-h-11 items-center justify-center rounded-full border border-ink bg-ink px-6 text-[11px] font-medium tracking-[0.22em] text-canvas uppercase disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+
+const QUIET_LINK =
+  'inline-flex min-h-11 items-center border-b border-ink-muted text-[10px] font-medium tracking-[0.22em] text-ink-muted uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+
+// The quiet treatment without the rule under it: this one leaves the page
+// rather than acting on it, and an underlined caps link at the top of a screen
+// reads as a tab.
+const BACK_LINK =
+  'mb-8 inline-flex min-h-11 items-center self-start text-[10px] font-medium tracking-[0.22em] text-ink-muted uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
 // What the three home columns hold, which is not what the picker offers:
 // `country` is in a result to tell two Berlins apart (DECISIONS.md 153) and
@@ -49,114 +70,57 @@ function toWire(value: string): string | null {
 @Component({
   selector: 'app-profile-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ReactiveFormsModule],
+  imports: [ReactiveFormsModule, RouterLink],
   template: `
-    <main class="mx-auto flex w-full max-w-2xl flex-col gap-region px-6 pt-hero pb-region">
-      <header class="flex flex-col gap-1">
-        <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+    <main class="mx-auto flex w-full max-w-[660px] flex-col px-6 pt-hero pb-region md:px-14">
+      <!-- The navigation bar above this screen already reaches the wardrobe, so
+           this link is a second route to it and is kept for the reason the item
+           screen keeps its own: a settings page is somewhere you leave, and the
+           way out belongs on the page rather than only in the chrome. -->
+      <a routerLink="/wardrobe" [class]="back">
+        <span aria-hidden="true" class="me-2">&#8592;</span>{{ i18n.t('profile.back') }}
+      </a>
+
+      <header class="mb-12 flex flex-col gap-1.5 border-b border-line pb-5">
+        <p class="font-mono text-[11px] tracking-[0.18em] text-ink-soft uppercase">
           {{ i18n.t('profile.caption') }}
         </p>
-        <h1 class="font-display text-4xl leading-tight tracking-tight">
+        <h1
+          class="font-display text-[40px] leading-[1] font-light tracking-[-0.02em] md:text-[56px]"
+        >
           {{ i18n.t('profile.title') }}
         </h1>
       </header>
 
-      <form [formGroup]="form" (ngSubmit)="submit()" novalidate class="flex flex-col gap-6">
-        <!-- Four sections, divided rather than headed: the controls already
-             carry their own labels, and a heading over each would demote every
-             one of them to a subtitle. The first has no border because a rule
-             above the first group draws a line under the header. -->
-        <section class="flex flex-col gap-4">
-          <label class="flex flex-col gap-1 text-sm">
+      <form [formGroup]="form" (ngSubmit)="submit()" novalidate class="flex flex-col gap-10">
+        <!-- Sections divided by air rather than by headings: every one of them
+             already carries a label, and a heading over each would demote that
+             label to a subtitle. The hint under each is the sentence the screen
+             owes the reader about what the field is for. -->
+        <section class="flex flex-col gap-3">
+          <label for="display_name" [class]="label">
             {{ i18n.t('profile.displayName.label') }}
-            <input
-              type="text"
-              id="display_name"
-              formControlName="display_name"
-              [class]="fieldClass"
-            />
           </label>
-
-          <!-- Not a form control, unlike every other field here. The range
-               message is a computed, a computed over a plain form control never
-               recomputes because nothing tells it the value moved, and the
-               number value accessor would then be a second place the string
-               becomes a number. One signal, one coercion, one source for the
-               wire. -->
-          <div class="flex flex-col gap-1">
-            <label for="height_cm" class="text-sm">{{ i18n.t('profile.height.label') }}</label>
-            <input
-              type="number"
-              id="height_cm"
-              [value]="height() ?? ''"
-              (input)="onHeight($event)"
-              [min]="MIN_HEIGHT_CM"
-              [max]="MAX_HEIGHT_CM"
-              [attr.aria-invalid]="heightOutOfRange() ? 'true' : null"
-              [attr.aria-describedby]="heightOutOfRange() ? 'height-error' : null"
-              [class]="fieldClass"
-            />
-            @if (heightOutOfRange()) {
-              <p id="height-error" class="text-sm font-medium text-danger">
-                {{ i18n.t('profile.height.range', { min: MIN_HEIGHT_CM, max: MAX_HEIGHT_CM }) }}
-              </p>
-            }
-          </div>
+          <input type="text" id="display_name" formControlName="display_name" [class]="field" />
+          <p [class]="hint">{{ i18n.t('profile.displayName.hint') }}</p>
         </section>
 
-        <!-- Free text, all three. The size columns are TEXT with no vocabulary
-             anywhere — 02-DATA-MODEL.md gives them no CHECK and enums.py no
-             members — so a select here would be this screen inventing a
-             vocabulary the database does not have. -->
-        <section class="border-bs border-line pt-6">
-          <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            @for (size of sizes; track size.name) {
-              <label class="flex flex-col gap-1 text-sm">
-                {{ i18n.t(size.label) }}
-                <input
-                  type="text"
-                  [id]="size.name"
-                  [formControlName]="size.name"
-                  [placeholder]="i18n.t(size.placeholder)"
-                  [class]="fieldClass"
-                />
-              </label>
-            }
-          </div>
-        </section>
-
-        <!-- The placeholder teaches by example, which is 05-FRONTEND-SPEC.md §8
-             in as many words. This is the whole of the personalisation the
-             brief sells: the string reaches the model verbatim, never matched
-             or filtered, so an empty one is a USER PROFILE block that does not
-             render at all. -->
-        <section class="border-bs border-line pt-6">
-          <label class="flex flex-col gap-1 text-sm">
-            {{ i18n.t('profile.styleNotes.label') }}
-            <textarea
-              id="style_notes"
-              rows="3"
-              formControlName="style_notes"
-              [placeholder]="i18n.t('profile.styleNotes.placeholder')"
-              class="rounded-md border border-line-strong bg-surface p-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            ></textarea>
-          </label>
-        </section>
-
-        <section class="flex flex-col gap-2 border-bs border-line pt-6">
-          <h2 class="text-sm font-medium">{{ i18n.t('profile.home.label') }}</h2>
-          <p class="text-sm text-ink-muted">{{ i18n.t('profile.home.hint') }}</p>
+        <section class="flex flex-col gap-3">
+          <h2 [class]="label">{{ i18n.t('profile.home.label') }}</h2>
 
           @if (home(); as chosen) {
-            <div class="flex items-center gap-3 rounded-xl bg-surface p-3 shadow-sm">
-              <p class="text-sm">{{ chosen.city }}</p>
+            <!-- The stone panel the trip form's chosen destination sits in, and
+                 the place name is in the content face for 071's reason: it comes
+                 off the geocoder, and Cormorant Garamond is latin-subset. -->
+            <div class="flex items-center justify-between gap-4 rounded-sm bg-surface-elevated p-4">
+              <p class="font-sans text-[17px]">{{ chosen.city }}</p>
               <button
                 type="button"
                 (click)="clearHome()"
-                [attr.aria-label]="i18n.t('profile.home.clear')"
-                class="ms-auto min-h-11 min-w-11 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                [attr.aria-label]="i18n.t('profile.home.changeLabel')"
+                [class]="quiet"
               >
-                ×
+                {{ i18n.t('profile.home.change') }}
               </button>
             </div>
           } @else {
@@ -172,11 +136,11 @@ function toWire(value: string): string | null {
               [placeholder]="i18n.t('profile.home.searchPlaceholder')"
               autocapitalize="words"
               spellcheck="false"
-              [class]="fieldClass"
+              [class]="field"
             />
 
             @if (searching()) {
-              <p class="text-sm" role="status" aria-live="polite">
+              <p [class]="hint" role="status" aria-live="polite">
                 {{ i18n.t('profile.home.searching') }}
               </p>
             }
@@ -184,16 +148,18 @@ function toWire(value: string): string | null {
               <p class="text-sm font-medium text-danger">{{ i18n.t('profile.home.error') }}</p>
             }
             @if (noMatches()) {
-              <p class="text-sm">{{ i18n.t('profile.home.noResults') }}</p>
+              <p [class]="hint">{{ i18n.t('profile.home.noResults') }}</p>
             }
 
-            <ul class="flex flex-col gap-1">
+            <!-- Rows on a hairline rather than a stack of filled buttons, which
+                 is the treatment the trip form's identical picker takes. -->
+            <ul class="flex flex-col">
               @for (result of results(); track result.lat + ':' + result.lon) {
-                <li>
+                <li class="border-b border-line last:border-b-0">
                   <button
                     type="button"
                     (click)="chooseHome(result)"
-                    class="min-h-11 w-full rounded-md bg-surface px-3 text-start text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    class="min-h-11 w-full text-start font-sans text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                   >
                     {{
                       i18n.t('profile.home.result', {
@@ -206,25 +172,104 @@ function toWire(value: string): string | null {
               }
             </ul>
           }
+
+          <p [class]="hint">{{ i18n.t('profile.home.hint') }}</p>
+        </section>
+
+        <!-- Not a form control, unlike every other field here. The range
+             message is a computed, a computed over a plain form control never
+             recomputes because nothing tells it the value moved, and the
+             number value accessor would then be a second place the string
+             becomes a number. One signal, one coercion, one source for the
+             wire. -->
+        <section class="flex flex-col gap-3">
+          <div class="flex items-baseline gap-x-2">
+            <label for="height_cm" [class]="label">{{ i18n.t('profile.height.label') }}</label>
+            <span class="font-prose text-[13px] text-ink-soft italic">
+              {{ i18n.t('profile.height.optional') }}
+            </span>
+          </div>
+          <input
+            type="number"
+            id="height_cm"
+            [value]="height() ?? ''"
+            (input)="onHeight($event)"
+            [min]="MIN_HEIGHT_CM"
+            [max]="MAX_HEIGHT_CM"
+            [attr.aria-invalid]="heightOutOfRange() ? 'true' : null"
+            [attr.aria-describedby]="heightOutOfRange() ? 'height-error' : null"
+            [class]="heightField"
+          />
+          @if (heightOutOfRange()) {
+            <p id="height-error" class="text-sm font-medium text-danger">
+              {{ i18n.t('profile.height.range', { min: MIN_HEIGHT_CM, max: MAX_HEIGHT_CM }) }}
+            </p>
+          }
+          <p [class]="hint">{{ i18n.t('profile.height.hint') }}</p>
+        </section>
+
+        <!-- Free text, all three. The size columns are TEXT with no vocabulary
+             anywhere — 02-DATA-MODEL.md gives them no CHECK and enums.py no
+             members — so a select here would be this screen inventing a
+             vocabulary the database does not have. -->
+        <section class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+          @for (size of sizes; track size.name) {
+            <div class="flex flex-col gap-3">
+              <label [for]="size.name" [class]="label">{{ i18n.t(size.label) }}</label>
+              <input
+                type="text"
+                [id]="size.name"
+                [formControlName]="size.name"
+                [placeholder]="i18n.t(size.placeholder)"
+                [class]="field"
+              />
+            </div>
+          }
+        </section>
+
+        <!-- The placeholder teaches by example, which is 05-FRONTEND-SPEC.md §8
+             in as many words. This is the whole of the personalisation the
+             brief sells: the string reaches the model verbatim, never matched
+             or filtered, so an empty one is a USER PROFILE block that does not
+             render at all. -->
+        <section class="flex flex-col gap-3">
+          <label for="style_notes" [class]="label">
+            {{ i18n.t('profile.styleNotes.label') }}
+          </label>
+          <textarea
+            id="style_notes"
+            rows="3"
+            formControlName="style_notes"
+            [placeholder]="i18n.t('profile.styleNotes.placeholder')"
+            class="border-b border-ink-soft bg-transparent py-2 font-sans text-base focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          ></textarea>
+        </section>
+
+        <!-- Read-only because PATCH /me takes no email. Rendered rather than
+             omitted: this is the only screen that can tell you which account
+             you are signed in to, and the navigation bar stopped saying so at
+             208. -->
+        <section class="flex flex-col gap-3">
+          <h2 [class]="label">{{ i18n.t('profile.email.label') }}</h2>
+          <p class="border-b border-line py-2 font-sans text-base text-ink-muted">{{ email() }}</p>
+          <p [class]="hint">{{ i18n.t('profile.email.hint') }}</p>
         </section>
 
         @if (saveError()) {
           <p class="text-sm font-medium text-danger">{{ i18n.t('profile.error.save') }}</p>
         }
         @if (saved()) {
-          <p class="text-sm text-ink-muted" role="status" aria-live="polite">
-            {{ i18n.t('profile.saved') }}
-          </p>
+          <p [class]="hint" role="status" aria-live="polite">{{ i18n.t('profile.saved') }}</p>
         }
 
-        <button
-          appButton
-          type="submit"
-          [disabled]="saving()"
-          class="self-start disabled:opacity-50"
-        >
-          {{ saving() ? i18n.t('profile.saving') : i18n.t('profile.save') }}
-        </button>
+        <div class="flex flex-wrap items-center justify-between gap-4 border-t border-line pt-6">
+          <button type="submit" [disabled]="saving()" [class]="pill">
+            {{ saving() ? i18n.t('profile.saving') : i18n.t('profile.save') }}
+          </button>
+          <button type="button" (click)="signOut()" [class]="quiet">
+            {{ i18n.t('profile.signOut') }}
+          </button>
+        </div>
       </form>
     </main>
   `,
@@ -233,12 +278,18 @@ export class ProfilePage {
   protected readonly i18n = inject(I18nService);
   private readonly auth = inject(AuthService);
   private readonly api = inject(MeApi);
+  private readonly router = inject(Router);
   private readonly fb = inject(NonNullableFormBuilder);
 
   protected readonly MIN_HEIGHT_CM = MIN_HEIGHT_CM;
   protected readonly MAX_HEIGHT_CM = MAX_HEIGHT_CM;
-  protected readonly fieldClass =
-    'min-h-11 rounded-md border border-line-strong bg-surface px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+  protected readonly label = LABEL;
+  protected readonly hint = HINT;
+  protected readonly field = FIELD;
+  protected readonly pill = PILL;
+  protected readonly quiet = QUIET_LINK;
+  protected readonly back = BACK_LINK;
+  protected readonly heightField = `${FIELD} max-w-[120px]`;
 
   protected readonly sizes = [
     {
@@ -272,6 +323,7 @@ export class ProfilePage {
     style_notes: '',
   });
 
+  protected readonly email = signal('');
   protected readonly height = signal<number | null>(null);
   protected readonly home = signal<HomeLocation | null>(null);
   protected readonly query = signal('');
@@ -350,9 +402,20 @@ export class ProfilePage {
     this.saved.set(false);
   }
 
+  // Labelled "Change" and it still clears: the panel it returns to is the
+  // search box, and a save made from there with nothing picked clears the home
+  // city, exactly as the "×" it replaced did. DECISIONS.md 223.
   protected clearHome(): void {
     this.home.set(null);
     this.saved.set(false);
+  }
+
+  // Lifted from nav-bar.ts unchanged, including the reason it navigates rather
+  // than relying on the guard: no guard re-runs on a route that is already
+  // active. DECISIONS.md 068.
+  protected signOut(): void {
+    this.auth.logout();
+    void this.router.navigateByUrl('/login');
   }
 
   protected submit(): void {
@@ -439,6 +502,7 @@ export class ProfilePage {
       return;
     }
 
+    this.email.set(user.email);
     this.height.set(user.height_cm);
     this.form.setValue({
       display_name: user.display_name ?? '',

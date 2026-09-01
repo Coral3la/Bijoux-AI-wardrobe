@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import en from '../../../../public/i18n/en.json';
@@ -16,6 +16,8 @@ let fixture: ComponentFixture<ProfilePage>;
 let mock: HttpTestingController;
 let currentUser: User | null;
 let accepted: User[];
+let signedOut: boolean;
+let router: Router;
 
 function user(overrides: Partial<User> = {}): User {
   return {
@@ -49,6 +51,12 @@ function text(): string {
 
 function field(id: string): HTMLInputElement {
   return element().querySelector<HTMLInputElement>(`#${id}`)!;
+}
+
+function control(label: string): HTMLButtonElement {
+  return [...element().querySelectorAll('button')].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )!;
 }
 
 function results(): string[] {
@@ -109,21 +117,29 @@ describe('ProfilePage', () => {
   beforeEach(async () => {
     currentUser = user();
     accepted = [];
+    signedOut = false;
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([{ path: 'wardrobe', children: [] }]),
+        provideRouter([
+          { path: 'wardrobe', children: [] },
+          { path: 'login', children: [] },
+        ]),
         {
           provide: AuthService,
           useValue: {
             currentUser: () => currentUser,
             acceptProfile: (value: User) => accepted.push(value),
+            logout: () => {
+              signedOut = true;
+            },
           },
         },
       ],
     });
     mock = TestBed.inject(HttpTestingController);
+    router = TestBed.inject(Router);
 
     const loading = TestBed.inject(I18nService).load();
     mock.expectOne('/i18n/en.json').flush(en);
@@ -149,7 +165,32 @@ describe('ProfilePage', () => {
     expect(field('display_name').value).toBe('Coral');
     expect(field('height_cm').value).toBe('165');
     expect(field('size_top').value).toBe('M');
-    expect(element().querySelector<HTMLTextAreaElement>('#style_notes')!.value).toBe('no crop tops');
+    expect(element().querySelector<HTMLTextAreaElement>('#style_notes')!.value).toBe(
+      'no crop tops',
+    );
+  });
+
+  // Rendered from the session like every other field, and read-only: there is
+  // no email on `PATCH /me`.
+  it('shows the address the session is signed in as', async () => {
+    currentUser = user({ email: 'her@example.com' });
+    await render();
+
+    expect(text()).toContain('her@example.com');
+  });
+
+  // Real timers, unlike every other test here: the sign-out navigates, and
+  // `whenStable()` never settles under a frozen clock.
+  it('ends the session and returns to the login screen', async () => {
+    fixture = TestBed.createComponent(ProfilePage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    control(en['profile.signOut']).click();
+    await fixture.whenStable();
+
+    expect(signedOut).toBe(true);
+    expect(router.url).toBe('/login');
   });
 
   it('shows a stored home city instead of the search box', async () => {
@@ -191,7 +232,7 @@ describe('ProfilePage', () => {
     currentUser = user({ home_city: 'Tel Aviv', home_lat: 32.08, home_lon: 34.78 });
     await render();
 
-    press(`button[aria-label="${en['profile.home.clear']}"]`);
+    press(`button[aria-label="${en['profile.home.changeLabel']}"]`);
     save();
 
     const body = patchRequest().request.body as Record<string, unknown>;

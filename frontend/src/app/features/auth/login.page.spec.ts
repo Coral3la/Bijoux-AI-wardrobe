@@ -100,6 +100,7 @@ describe('LoginPage', () => {
   });
 
   it('renders its labels from the string file', () => {
+    expect(text()).toContain('Welcome back.');
     expect(text()).toContain('Sign in');
     expect(text()).toContain('Email');
     expect(text()).toContain('Password');

@@ -86,8 +86,9 @@ describe('RegisterPage', () => {
   });
 
   it('renders its labels from the string file', () => {
-    expect(text()).toContain('Create an account');
-    expect(text()).toContain('Display name');
+    expect(text()).toContain('Begin a wardrobe.');
+    expect(text()).toContain('Your name');
+    expect(text()).toContain('Create account');
   });
 
   it('requires every field and sends nothing on an empty submit', async () => {

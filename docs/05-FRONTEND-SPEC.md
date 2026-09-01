@@ -125,7 +125,13 @@ of what was there before.
 
 ### 1. Auth — `/login`, `/register`
 
-Single-column, centred. Email, password, display name on register. Nothing else. This screen must not consume design time.
+**Rewritten at the auth pass, and the sentence it replaces is quoted rather than deleted: *"Single-column, centred. Email, password, display name on register. Nothing else. This screen must not consume design time."*** That was right for a scaffold and wrong for the first screen a stranger meets, and `DECISIONS.md` 223 is the argument.
+
+**A full-height cream canvas with no application chrome.** The navigation bar is gated on a confirmed user (`app.html`), so these two screens have none, and the wordmark at the start of the top edge — display serif, 22px, 0.28em, uppercase — is the only furniture. Everything else is centred in what is left: a display-serif title at 48px (*"Welcome back."* on `/login`, *"Begin a wardrobe."* on `/register`), one italic tagline both screens share (*"Your wardrobe, considered."*), then a 400px column of fields.
+
+**A field is a label and one rule.** A mono micro-label at 10px and 0.24em over a transparent input on a single `ink-soft` hairline — no box, no fill, no placeholder. The submit is the Atelier pill with the arrow the stylist's and the trip's forms already carry. Under it, in italic prose, the swap line: *"New here?"* → **Register**, *"Already have an account?"* → **Log in**, the link set as a caps-letter-spaced accent run. Two keys, not one sentence — the question is ours and the word after it is a control's label.
+
+**The two screens are twins and differ in four places**: the title, the swap line, one extra field on register, and login's three extra objects — the two bootstrap notices and the demo button, which the picked mockup was not drawn against and which keep every decision recorded for them.
 
 Built at task 0.9. **Display name is required by the form** although the API accepts `null`, because registration is the only place in the whole application where it can be set — `PATCH /me` accepts `display_name` since task 2.2 and can clear it, and **task 2.10a builds the profile screen in §8** — scheduled there after `AUDITS.md` O-6's second half had recommended it since 2.2 without a task being written. Until it lands, nothing renders that field. This sentence read *"`PATCH /me` at Stage 2 covers only `home_city`/`home_lat`/`home_lon`"* until 2.2 widened the endpoint (`AUDITS.md` O-6, `DECISIONS.md` 149); the conclusion is unchanged and the reason for it moved from the API to the missing screen. Password rules mirror the API's on register (8 characters minimum, 72 **bytes** maximum) and are absent on login, where `LoginRequest` has none. Both forms carry `novalidate` so the browser's own bubble cannot preempt the i18n messages, and submit is disabled only while a request is in flight — never on an invalid form, which must stay submittable so the messages can appear. `DECISIONS.md` 070.
 
@@ -681,6 +687,17 @@ orientation and one the Itinerary added:
 
 Height, sizes, style notes, home city with autocomplete. Style notes needs placeholder text that teaches by example: *"e.g. I prefer high-rise bottoms and avoid crop tops."*
 
+**Rewritten at the auth pass.** One column at 660px under the navigation bar: a caps back link to the wardrobe, then a mono kicker (*Account*) over a display-serif `h1` at 56px with a rule under the pair. Beneath it **six sections 40px apart**, each a mono micro-label, its control on the auth pair's hairline field, and one italic hint saying what the field is for:
+
+1. **Your name** — *"The greeting on the wardrobe uses this."*
+2. **Home city** — the chosen city in a stone panel with a **Change** link, or the type-ahead when there is none. The picker is unchanged from the one built at 2.2 and matches the trip form's: two-character floor, 300ms debounce, stale answers dropped, results as rows on hairlines. *Change* clears the three home columns and brings the search box back, which is what the `×` it replaced did.
+3. **Height** — an *optional* tag beside the label, a 120px number field, the documented 120–230 bound refused before the request. *"Centimetres. The stylist is told it before it builds a look."*
+4. **Sizes** — three free-text fields. Not in the picked mockup and kept: they are columns `PATCH /me` accepts and the stylist's prompt reads.
+5. **Style notes** — the textarea, its teaching placeholder unchanged.
+6. **Email** — read-only, because `PATCH /me` takes no email. *"Can't be changed here."*
+
+The actions row sits on a hairline: the save pill at the start edge, a **Sign out** at the end. That sign-out duplicates the navigation bar's and is the one control on the screen that is deliberately a second copy — `DECISIONS.md` 223 names which of the two goes if one has to.
+
 ---
 
 ## Polling for tagging status
@@ -717,7 +734,7 @@ One decision, made once, applied everywhere: **the clothes are the design.** Eve
 
 **The direction is Atelier** — the vocabulary of an Aesop store or a COS catalogue. A warm paper ground, one thin serif, chrome that nearly disappears, and a great deal of air. It was picked from three whole-screen mockups rather than assembled from properties, and every rule below is read off the picked mockup rather than argued from first principles.
 
-**A screen is converted whole, in one commit, from a picked mockup.** Converted so far, in order: the **wardrobe** (Atelier, `DECISIONS.md` 219), the **stylist** (the Ritual, 220), **saved looks** (the Shelf, 221) and **trips** (the Itinerary, 222). Still to be pitched: **profile** and the **auth pair**.
+**A screen is converted whole, in one commit, from a picked mockup.** Converted, in order: the **wardrobe** (Atelier, `DECISIONS.md` 219), the **stylist** (the Ritual, 220), **saved looks** (the Shelf, 221), **trips** (the Itinerary, 222) and the **auth pair with the profile** (223, one direction across three pictures rather than three directions across one screen). **Nothing is left to pitch and the pass is closed.** What it did not do is written where it belongs rather than here: `appButton` is still pre-Atelier on three screens (223), and the accessibility pass the palette's contrast needs is still unscheduled (below).
 
 **The palette is global and follows through immediately; everything else is per-screen.** The tokens below are the application's only palette — there is no second, prefixed set — so every screen is on Atelier's colours from the day the wardrobe lands. What each screen's own pitch decides is its **typography, layout, states and copy**. Until the last pitch lands the unconverted screens are therefore half-converted, and that is deliberate: a palette is the substrate a design is drawn on, not the design.
 
@@ -762,6 +779,7 @@ The accent and the muted differ by one digit and that is not a slip — the acce
 - **The floating action is an outlined pill**, not a filled circle: a solid disc of ink over the grid is the one object that would outweigh a photograph, and the word on it removes the need for an icon-only label.
 - **An empty state is a centred placard on the canvas**, not a box and not a note: the title in the display serif at 28px with `text-wrap: balance`, the description in italic prose at 40ch, the caller's own CTA below it, and no border, fill or padding of its own. `EmptyState` is shared by `/wardrobe`'s two empty states and `/saved`'s, and the CTA's weight is the caller's — filled for a first upload, ghost for the other two.
 - **A list row is a row, not a card.** `/saved` is the pattern: a garment strip, a body, the controls, a hairline between them, on the canvas. Separation is the rule below.
+- **A field on a converted screen is a label and one rule** — mono micro-label at 10px and 0.24em over a transparent input on a single `ink-soft` hairline. It is the auth pair's and the profile's; the trip form's and the stylist's boxed fields predate it and were not re-cut.
 - **No cards and no shadows on a converted screen.** Separation comes from air and from hairlines. `--shadow-sm/md/lg` remain declared for the screens that have not been converted.
 - **Whitespace is still the three named intervals** `--spacing-hero`, `--spacing-region` and `--spacing-group` (`DECISIONS.md` 212, which survives its own supersession): `pt-hero` above a page title, `gap-region` between the parts of a screen, `gap-group` binding a label to what it labels. Tailwind's numeric scale stays available for composition inside a component. A piece of vertical space is owned by one layer of the layout — the container, which can see its neighbours, not the component, which can only see itself.
 - Every interactive element ≥ 44px tall. This is a phone app that happens to run in a browser. **The mockup draws a 33px chip and the built one is 44px**, which is the one place the implementation deliberately departs from the picture.
