@@ -230,7 +230,11 @@ Save is a primary `[appButton]`. **There is no Cancel button** — the editor is
 
 **Reasoning card:** wrap `reasoning` in `bg-surface-elevated rounded-xl p-4` with an uppercase label above it: `text-xs font-medium tracking-widest uppercase text-ink-soft` reading "Why this" (new i18n key `stylist.look.whyThis`). No card border — the surface-elevated colour is the distinction (05 line 650).
 
-**Look card:** the outer element becomes `bg-surface rounded-2xl p-5 shadow-md`. The two "primary" tiles (top + bottom) are a 2-column grid with `gap-3` and each carries an uppercase caption above the item name reading the item's role (`stylist.look.role.<role>` — the key exists). The three "secondary" tiles (shoes/outerwear/accessory) are a 3-column grid with `gap-2` and each just carries the item name below in `text-xs text-ink-soft`.
+**Look card:** the outer element becomes `bg-surface rounded-2xl p-5 shadow-md`.
+
+**The card keeps the layer grouping it was built with.** An earlier draft of this plan asked for two "primary" tiles (top + bottom) above three "secondary" ones, each captioned with the item's role from `stylist.look.role.<role>`, and it was wrong three times over. `look-card.ts` does not lay tiles out by role: `groups()` sorts by layer then category, cuts the sorted run into one `<section>` per layer, and heads each with the shared vocabulary — an order `look-card.spec.ts` asserts across the whole card, because that order is the point of the sort. Slotting by role instead would delete that computed and the two tests that hold it, which is a restructure and not a re-skin. `stylist.look.role.<role>` does not exist either — `en.json` carries no role key of any kind. And five fixed slots have nowhere to put a **bag**, which `05`'s own mockup draws, nor a **dress**, which `roleOf` gives no role on purpose (`AUDITS.md` O-25); a look is three to six items, not five.
+
+The visual half is all DR.4 takes: the per-layer `<h3>` becomes the uppercase caption (`text-xs font-medium tracking-widest uppercase text-ink-soft`), and the tiles stay in the three-column grid they are already in.
 
 **Feedback row:** the Save / thumbs-up / thumbs-down / try-again controls become uses of the new `Button` (Save is primary or secondary depending on the current spec; keep whichever variant matches the existing colour). Icons stay inline SVGs.
 
@@ -265,7 +269,7 @@ Save is a primary `[appButton]`. **There is no Cancel button** — the editor is
 
 **Selected day header:** `font-display text-xl font-medium` day name, with an uppercase caption below showing occasion and temperature.
 
-**Trip look:** the tile grid inside a day mirrors the stylist look card's 2+3 layout — wrap in `bg-surface rounded-2xl p-4 shadow-sm`. The swap button ↻ becomes a `<button appButton variant="secondary" [attr.aria-label]="…">` with an inline refresh SVG and compact caller-added padding (`px-3`) — height stays min-h-11 per the 44px floor.
+**Trip look:** the tile grid inside a day mirrors the stylist look card's layer-grouped layout — wrap in `bg-surface rounded-2xl p-4 shadow-sm`. The swap button ↻ becomes a `<button appButton variant="secondary" [attr.aria-label]="…">` with an inline refresh SVG and compact caller-added padding (`px-3`) — height stays min-h-11 per the 44px floor.
 
 **Packing list:** wrap in `bg-surface rounded-xl overflow-hidden shadow-sm`. No card border — 05 line 650; the shadow carries it. Each row: 12px vertical padding, 14px horizontal, `border-be border-line` (last row has no border-be) — the row divider IS a line (that is edge definition inside the card, not a card border). 32px thumbnail (`rounded-md`), item name `text-sm`, reuse count on the right in `text-xs text-ink-soft tabular-nums`.
 

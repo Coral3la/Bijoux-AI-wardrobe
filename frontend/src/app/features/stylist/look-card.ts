@@ -4,6 +4,7 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { CATEGORIES, Category, LAYERS, Layer, roleOf } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
 import { Feedback, Look, MissingPiece } from '../../shared/models/look.model';
+import { Button } from '../../shared/ui/button';
 import { ItemCard } from '../wardrobe/item-card';
 
 interface LayerGroup {
@@ -29,9 +30,9 @@ function isCategory(value: string): value is Category {
 @Component({
   selector: 'app-look-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ItemCard],
+  imports: [Button, ItemCard],
   template: `
-    <article class="flex flex-col gap-5 rounded-lg bg-surface p-5">
+    <article class="flex flex-col gap-5 rounded-2xl bg-surface p-5 shadow-md">
       <header class="flex flex-col gap-1">
         <!-- Body face, not font-display: the title is written by the model, and
              05-FRONTEND-SPEC.md line 290 reserves Fraunces for chrome we
@@ -45,7 +46,9 @@ function isCategory(value: string): value is Category {
 
       @for (group of groups(); track group.headingKey) {
         <section class="flex flex-col gap-2">
-          <h3 class="text-sm font-medium">{{ i18n.t(group.headingKey) }}</h3>
+          <h3 class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+            {{ i18n.t(group.headingKey) }}
+          </h3>
           <ul class="grid grid-cols-3 gap-3">
             @for (item of group.items; track item.id) {
               <li class="relative">
@@ -74,7 +77,7 @@ function isCategory(value: string): value is Category {
                      piece is being replaced. -->
                 @if (swappingItemId() === item.id) {
                   <div
-                    class="absolute inset-0 flex items-center justify-center rounded-lg bg-surface/80"
+                    class="absolute inset-0 flex items-center justify-center rounded-xl bg-surface/80"
                     role="status"
                   >
                     <span class="sr-only">{{ i18n.t('stylist.look.swapping') }}</span>
@@ -90,14 +93,23 @@ function isCategory(value: string): value is Category {
         </section>
       }
 
-      <div class="flex flex-col gap-2">
-        <p class="text-sm">{{ look().reasoning }}</p>
-        <p class="text-sm">{{ look().weather_note }}</p>
+      <!-- The label is a <p> rather than an <h3>: the two headings this card
+           does have are the layer groups and the missing-piece list, both of
+           which name a set of things, and a third one over the model's prose
+           would put a section in the outline that has no section under it. -->
+      <div class="flex flex-col gap-2 rounded-xl bg-surface-elevated p-4">
+        <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+          {{ i18n.t('stylist.look.whyThis') }}
+        </p>
+        <p class="text-sm leading-relaxed">{{ look().reasoning }}</p>
+        <p class="text-sm leading-relaxed">{{ look().weather_note }}</p>
       </div>
 
       @if (missingPieces().length > 0) {
-        <section class="flex flex-col gap-1 text-sm text-current/70">
-          <h3 class="font-medium">{{ i18n.t('stylist.look.missing') }}</h3>
+        <section class="flex flex-col gap-1 text-sm text-ink-muted">
+          <h3 class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+            {{ i18n.t('stylist.look.missing') }}
+          </h3>
           <ul class="flex flex-col gap-1">
             @for (piece of missingPieces(); track $index) {
               <li>{{ pieceLine(piece) }}</li>
@@ -115,12 +127,14 @@ function isCategory(value: string): value is Category {
              announces the change twice and disagrees with itself about which
              direction the press goes. -->
         <button
+          appButton
+          variant="secondary"
           type="button"
           (click)="save.emit()"
           [disabled]="busy()"
           [attr.aria-pressed]="look().is_saved"
           [attr.aria-label]="i18n.t('stylist.look.save')"
-          class="min-h-11 min-w-11 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
+          class="disabled:opacity-50"
         >
           <span aria-hidden="true">{{ look().is_saved ? '♥' : '♡' }}</span>
         </button>
@@ -137,34 +151,34 @@ function isCategory(value: string): value is Category {
              encode "off" as a skin tone. aria-pressed is what actually carries
              the state; the ring is its visible half. -->
         <button
+          appButton
+          variant="secondary"
           type="button"
           (click)="rate(1)"
           [disabled]="busy()"
           [attr.aria-pressed]="look().feedback === 1"
           [attr.aria-label]="i18n.t('stylist.look.thumbUp')"
           [class.ring-2]="look().feedback === 1"
-          class="min-h-11 min-w-11 rounded-md ring-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
+          class="ring-accent disabled:opacity-50"
         >
           <span aria-hidden="true">👍</span>
         </button>
 
         <button
+          appButton
+          variant="secondary"
           type="button"
           (click)="rate(-1)"
           [disabled]="busy()"
           [attr.aria-pressed]="look().feedback === -1"
           [attr.aria-label]="i18n.t('stylist.look.thumbDown')"
           [class.ring-2]="look().feedback === -1"
-          class="min-h-11 min-w-11 rounded-md ring-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
+          class="ring-accent disabled:opacity-50"
         >
           <span aria-hidden="true">👎</span>
         </button>
 
-        <button
-          type="button"
-          (click)="tryAgain.emit()"
-          class="min-h-11 rounded-md bg-accent px-4 text-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
+        <button appButton variant="ghost" type="button" (click)="tryAgain.emit()" class="ms-auto">
           {{ i18n.t('stylist.look.tryAgain') }}
         </button>
       </div>

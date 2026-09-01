@@ -3,6 +3,8 @@ import { ChangeDetectionStrategy, Component, inject, input, output } from '@angu
 import { I18nService } from '../../core/i18n/i18n.service';
 import { OCCASIONS, Occasion } from '../../shared/models/enums';
 import { Weather } from '../../shared/models/weather.model';
+import { Button } from '../../shared/ui/button';
+import { Chip } from '../../shared/ui/chip';
 
 // Transcribed from 04-API-SPEC.md, which measured it against the provider on
 // 2026-08-26: `today + 15`, sixteen days counting today. It bounds the date
@@ -44,6 +46,7 @@ export function forecastHorizon(now = new Date()): string {
 @Component({
   selector: 'app-look-request-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Button, Chip],
   template: `
     <!-- A real form, so the return key submits from the date and notes fields
          the way it does on login. The occasion and coat controls are buttons
@@ -54,14 +57,19 @@ export function forecastHorizon(now = new Date()): string {
         <legend class="text-sm font-medium">{{ i18n.t('stylist.occasion.legend') }}</legend>
         <!-- Scrolls rather than wraps, and nothing scrolls it for the user, for
              the reason filter-bar.ts records: scrollIntoView is undefined in
-             jsdom. Six chips fit a phone where the wardrobe's nine did not. -->
+             jsdom. Six chips fit a phone where the wardrobe's nine did not.
+
+             No [attr.aria-pressed] here: the Chip directive announces the state
+             from the same input that paints it, and a template binding beside it
+             would win silently and be free to disagree. -->
         <div class="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
           @for (occasion of occasions; track occasion) {
             <button
+              appChip
               type="button"
-              [attr.aria-pressed]="draft().occasion === occasion"
+              [active]="draft().occasion === occasion"
               (click)="chooseOccasion(occasion)"
-              [class]="chipClass(draft().occasion === occasion)"
+              class="shrink-0"
             >
               {{ i18n.t('vocabulary.occasion.' + occasion) }}
             </button>
@@ -79,7 +87,7 @@ export function forecastHorizon(now = new Date()): string {
           [value]="draft().date"
           [max]="horizon"
           (change)="chooseDate($event)"
-          class="min-h-11 rounded-md bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          class="min-h-11 rounded-md border border-line-strong bg-surface px-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         />
       </div>
 
@@ -88,10 +96,11 @@ export function forecastHorizon(now = new Date()): string {
         <div class="flex items-center gap-2">
           @for (choice of coatChoices; track choice.key) {
             <button
+              appChip
               type="button"
-              [attr.aria-pressed]="draft().include_outerwear === choice.value"
+              [active]="draft().include_outerwear === choice.value"
               (click)="chooseCoat(choice.value)"
-              [class]="chipClass(draft().include_outerwear === choice.value)"
+              class="shrink-0"
             >
               {{ i18n.t(choice.key) }}
             </button>
@@ -109,7 +118,7 @@ export function forecastHorizon(now = new Date()): string {
           [value]="draft().notes"
           [placeholder]="i18n.t('stylist.notes.placeholder')"
           (input)="changeNotes($event)"
-          class="rounded-md bg-surface p-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          class="rounded-md border border-line-strong bg-surface p-3 text-sm focus:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         ></textarea>
       </div>
 
@@ -120,12 +129,7 @@ export function forecastHorizon(now = new Date()): string {
         <p class="text-sm">{{ weatherLine(forecast) }}</p>
       }
 
-      <button
-        type="submit"
-        class="min-h-11 rounded-md bg-accent px-4 text-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
-        {{ i18n.t('stylist.submit') }}
-      </button>
+      <button appButton type="submit">{{ i18n.t('stylist.submit') }}</button>
     </form>
   `,
 })
@@ -162,12 +166,6 @@ export class LookRequestForm {
       max: Math.round(weather.temp_max_c),
       condition: this.i18n.t(`vocabulary.condition.${weather.condition}`),
     });
-  }
-
-  protected chipClass(selected: boolean): string {
-    const base =
-      'min-h-11 shrink-0 rounded-full px-4 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-    return selected ? `${base} bg-accent text-surface` : `${base} bg-surface`;
   }
 
   // Not single-valued the way the category chips are: tapping the selected

@@ -17,6 +17,7 @@ import { WardrobeStore } from '../../core/state/wardrobe.store';
 import { roleOf } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
 import { Feedback, Look, SuggestRequest } from '../../shared/models/look.model';
+import { Skeleton } from '../../shared/ui/skeleton';
 import { LookCard } from './look-card';
 import { LookDraft, LookRequestForm, todayInLocalTime } from './look-request-form';
 
@@ -31,11 +32,20 @@ const STATUS_KEYS = [
 
 export const STATUS_INTERVAL_MS = 2000;
 
-// The look card's own shape, five tiles in the 2 + 3 arrangement
-// 05-FRONTEND-SPEC.md draws — a skeleton of the thing being built rather than
-// a spinner, which is what §2.8 asks for and what makes the wait read as
-// progress. Task 2.9 fills this outline in.
+// The look card's own shape, five tiles — a skeleton of the thing being built
+// rather than a spinner, which is what §2.8 asks for and what makes the wait
+// read as progress. 05-FRONTEND-SPEC.md draws them 2 + 3; task 2.9 grouped the
+// card by layer instead, so it is the count that carries over, not the shape.
 const SKELETON_TILES = [0, 1, 2, 3, 4] as const;
+
+// The locale is pinned rather than read off the browser: there is one string
+// table and it is `en`, so a browser locale here would print the weekday in a
+// language nothing else on the screen is written in.
+const TODAY_FORMAT = new Intl.DateTimeFormat('en-GB', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+});
 
 // All three optionals are omitted rather than sent as null. Absent is already
 // what the endpoint defaults them to — `include_outerwear: null` is "let the
@@ -58,18 +68,23 @@ function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
 @Component({
   selector: 'app-stylist-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [LookCard, LookRequestForm],
+  imports: [LookCard, LookRequestForm, Skeleton],
   template: `
     <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
-      <header>
-        <h1 class="font-display text-3xl">{{ i18n.t('stylist.title') }}</h1>
+      <header class="flex flex-col gap-1">
+        <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
+          {{ todayLabel() }}
+        </p>
+        <h1 class="font-display text-4xl leading-tight tracking-tight">
+          {{ i18n.t('stylist.title') }}
+        </h1>
       </header>
 
       @if (store.isSuggesting()) {
         <section class="flex flex-col gap-4">
           <div class="grid grid-cols-3 gap-3" aria-hidden="true">
             @for (tile of tiles; track tile) {
-              <div class="aspect-square animate-pulse rounded-lg bg-surface"></div>
+              <app-skeleton class="aspect-square" radius="rounded-xl" />
             }
           </div>
           <!-- The status line is the accessible name of the wait: the tiles
@@ -109,7 +124,7 @@ function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
              one of the form's controls: the four in LookDraft are what the user
              sets here, and the anchor is what she arrived carrying. -->
         @if (anchor(); as item) {
-          <div class="flex items-center gap-3 rounded-lg bg-surface p-3">
+          <div class="flex items-center gap-3 rounded-xl bg-surface p-3 shadow-sm">
             <p class="text-sm">
               {{ i18n.t('stylist.anchor.pinned', { item: name(item) }) }}
             </p>
@@ -145,6 +160,12 @@ export class StylistPage {
 
   protected readonly tiles = SKELETON_TILES;
 
+  // Today, never the date in the picker: this is the screen's dateline rather
+  // than a readout of the form below it, and it is fixed for the visit for the
+  // same reason `horizon` is — the day a screen was opened on does not change
+  // under the reader.
+  private readonly today = TODAY_FORMAT.format(new Date());
+
   // The garment "Style around this" arrived with, or null. Held here rather
   // than in the draft for the same reason the draft is held here rather than in
   // the form: it outlives the control that renders it, and the skeleton
@@ -169,6 +190,9 @@ export class StylistPage {
   private readonly statusIndex = signal(0);
   private timer: ReturnType<typeof setInterval> | null = null;
 
+  protected readonly todayLabel = computed(() =>
+    this.i18n.t('stylist.today', { date: this.today }),
+  );
   protected readonly statusKey = computed(() => STATUS_KEYS[this.statusIndex()]);
   // The suggested look, unless the heart has since written to it. StylistStore
   // holds what the stylist answered and LooksStore holds what PATCH answered,
