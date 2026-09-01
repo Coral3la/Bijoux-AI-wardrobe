@@ -46,7 +46,11 @@ import { ItemCard } from '../wardrobe/item-card';
           [title]="i18n.t('saved.empty.title')"
           [description]="i18n.t('saved.empty.body')"
         >
-          <a appButton routerLink="/stylist">{{ i18n.t('saved.empty.cta') }}</a>
+          <!-- Ghost, unlike the wardrobe's first-upload CTA: an empty saved list
+               is a state a working account passes through, not the one action a
+               new account must take. Per-caller weight is why the CTA is
+               projected. DECISIONS.md 216. -->
+          <a appButton variant="ghost" routerLink="/stylist">{{ i18n.t('saved.empty.cta') }}</a>
         </app-empty-state>
       } @else {
         <ul class="flex flex-col gap-4">

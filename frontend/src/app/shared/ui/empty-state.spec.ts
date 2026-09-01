@@ -22,12 +22,9 @@ class EmptyStateHost {
 
 let fixture: ComponentFixture<EmptyState>;
 
-async function render(inputs: { icon?: string; description?: string } = {}): Promise<HTMLElement> {
+async function render(inputs: { description?: string } = {}): Promise<HTMLElement> {
   fixture = TestBed.createComponent(EmptyState);
   fixture.componentRef.setInput('title', 'Your wardrobe is empty');
-  if (inputs.icon !== undefined) {
-    fixture.componentRef.setInput('icon', inputs.icon);
-  }
   if (inputs.description !== undefined) {
     fixture.componentRef.setInput('description', inputs.description);
   }
@@ -49,18 +46,24 @@ describe('EmptyState', () => {
     expect(host.querySelector('h2')?.textContent?.trim()).toBe('Your wardrobe is empty');
   });
 
-  it('renders the optional icon and description only when given them', async () => {
+  it('renders the optional description only when given one', async () => {
     const host = await render();
 
-    expect(host.querySelector('svg')).toBeNull();
     expect(host.querySelector('p')).toBeNull();
 
-    fixture.componentRef.setInput('icon', 'M4 7h16');
     fixture.componentRef.setInput('description', 'Photograph a few garments.');
     await fixture.whenStable();
 
-    expect(host.querySelector('path')?.getAttribute('d')).toBe('M4 7h16');
     expect(host.querySelector('p')?.textContent?.trim()).toBe('Photograph a few garments.');
+  });
+
+  // The description is a sentence this project wrote, so it takes the authored
+  // prose face — which is the whole of what DR.11a moves onto these screens,
+  // and the one thing here a restyle could silently undo. DECISIONS.md 216.
+  it('sets the description in the authored prose face', async () => {
+    const host = await render({ description: 'Photograph a few garments.' });
+
+    expect(host.querySelector('p')?.classList.contains('font-prose')).toBe(true);
   });
 
   it('projects the caller-supplied call to action', async () => {
