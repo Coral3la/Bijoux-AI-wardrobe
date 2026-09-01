@@ -75,6 +75,7 @@ UPPER_SNAKE     constants, enum members, settings fields
 - Named exports. No `default`.
 - No `any`. If a type is genuinely unknown, use `unknown` and narrow it.
 - No user-facing string hard-coded in a template. Every one goes through an i18n key.
+- A user-facing sentence is **one** i18n key even when part of it renders in a different face. Use `AuthoredLine` to render the split; do not split the key. A key broken into fragments cannot be reordered by a translator, which is the whole reason the face rule exists. `DECISIONS.md` 213.
 - CSS logical properties only — `ms-4`, `me-2`, `text-start`. Never `left` or `right` for layout.
 
 ```
