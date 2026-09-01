@@ -5,31 +5,47 @@ import { WeatherApi } from '../../core/api/weather.api';
 import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { Weather } from '../../shared/models/weather.model';
+import { AuthoredLine } from '../../shared/ui/authored-line';
 import { Button } from '../../shared/ui/button';
 import { todayInLocalTime } from '../stylist/look-request-form';
 
 @Component({
   selector: 'app-weather-strip',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, RouterLink],
+  imports: [AuthoredLine, Button, RouterLink],
   template: `
     <section
       class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-surface p-4 shadow-sm"
       [attr.aria-label]="i18n.t('wardrobe.weather.region')"
     >
-      <!-- Two lines rather than one sentence, and the split is what makes the
-           display face legal here. The reading is a rounded number and a word
-           from our own vocabulary, so Fraunces may have it; the city is a name
-           the user chose off the geocoder and content rather than chrome — the
-           rule 05-FRONTEND-SPEC.md's "The display face is for chrome we author"
-           names this strip in. It stays in the body face at any size, and it
-           would even if Fraunces covered Hebrew. DECISIONS.md 071. -->
-      @if (forecastLines(); as lines) {
+      <!-- One sentence, and the city inside it is content while the sentence
+           around it is ours — so the city alone leaves the prose face. Until
+           DR.12 this strip was two separate keys, and that split was a
+           workaround rather than a design: 071 had no way to put a geocoded
+           name inside an authored line, so the line was cut in half to keep
+           the display face away from it. AuthoredLine is the answer the split
+           was standing in for, and the key is whole again — a translator can
+           put the city placeholder first and only the city moves.
+
+           The condition leads the sentence because the condition vocabulary is
+           capitalised for chip use: "Clear in Tel Aviv-Yafo today" is right
+           where "It's Clear in …" is not. The vocabulary's existing shape
+           decided the word order rather than the other way round. This strip is
+           the canonical instance 05-FRONTEND-SPEC.md's "The display face is for
+           chrome we author" names. DECISIONS.md 218.
+
+           No backtick and no interpolation braces in this comment: it lives
+           inside the component's template literal, so a backtick would end the
+           string. DECISIONS.md 218. -->
+      @if (forecast(); as today) {
         <div class="flex flex-col gap-1">
-          <p class="font-display text-2xl leading-tight">{{ lines.reading }}</p>
-          <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
-            {{ lines.place }}
-          </p>
+          <app-authored-line
+            class="block font-prose text-base text-ink-muted"
+            key="wardrobe.weather.sentence"
+            [params]="today.params"
+            [content]="today.content"
+          />
+          <p class="font-display text-2xl leading-tight">{{ today.reading }}</p>
         </div>
       } @else if (!hasHome()) {
         <!-- The degraded state §2.12 specifies, and the only place it points is
@@ -38,7 +54,7 @@ import { todayInLocalTime } from '../stylist/look-request-form';
              stylist. -->
         <a
           routerLink="/profile"
-          class="inline-flex min-h-11 items-center rounded-md text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          class="inline-flex min-h-11 items-center rounded-md font-prose text-base underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           {{ i18n.t('wardrobe.weather.setHome') }}
         </a>
@@ -87,30 +103,32 @@ export class WeatherStrip {
     return user !== null && user.home_lat !== null && user.home_lon !== null;
   });
 
-  // The city comes off the account and the numbers off the forecast, so the
-  // lines exist only when both do. 151 makes that one condition rather than
-  // two: an account with coordinates has a city name.
-  protected readonly forecastLines = computed(() => {
-    const forecast = this.weather();
+  // The city comes off the account and the numbers off the forecast, so this
+  // exists only when both do. 151 makes that one condition rather than two: an
+  // account with coordinates has a city name.
+  protected readonly forecast = computed(() => {
+    const weather = this.weather();
     const city = this.auth.currentUser()?.home_city ?? null;
-    if (forecast === null || city === null) {
+    if (weather === null || city === null) {
       return null;
     }
     return {
-      // Each line is one whole key, never assembled from fragments: a sentence
-      // broken up so that half of it can be styled cannot be reordered for a
-      // language that puts it the other way round.
-      //
       // The temperature is the day's high, which is the number this project
       // already means by "the temperature": `summarize_forecast` prints
       // `temp_max_c` to the model and DECISIONS.md 142 settled it there. A
       // strip and a prompt disagreeing about today would be visible on one
-      // screen.
+      // screen. It is chrome — a rounded number this project formatted — so it
+      // keeps the display face.
       reading: this.i18n.t('wardrobe.weather.reading', {
-        temp: Math.round(forecast.temp_max_c),
-        condition: this.i18n.t(`vocabulary.condition.${forecast.condition}`),
+        temp: Math.round(weather.temp_max_c),
       }),
-      place: this.i18n.t('wardrobe.weather.place', { city }),
+      // Two dictionaries, and the split is the whole point: the condition is a
+      // word out of our own closed vocabulary and stays in the authored face,
+      // the city came off a geocoder and does not. A single dictionary with a
+      // list of content names would let a forgotten entry render a city in the
+      // wrong face with nothing to catch it. DECISIONS.md 213.
+      params: { condition: this.i18n.t(`vocabulary.condition.${weather.condition}`) },
+      content: { city },
     };
   });
 

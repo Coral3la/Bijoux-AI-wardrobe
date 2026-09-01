@@ -59,6 +59,10 @@ function text(): string {
   return element().textContent ?? '';
 }
 
+function sentence(): HTMLElement | null {
+  return element().querySelector('app-authored-line');
+}
+
 function href(label: string): string | null {
   const link = [...element().querySelectorAll('a')].find(
     (candidate) => candidate.textContent?.trim() === label,
@@ -119,8 +123,24 @@ describe('WeatherStrip', () => {
     // 30.4 rounds to 30: the day's high, which is the number `summarize_forecast`
     // already prints to the model. DECISIONS.md 142.
     expect(text()).toContain('30°C');
-    expect(text()).toContain(en['vocabulary.condition.clear']);
-    expect(text()).toContain('Tel Aviv');
+    // The whole sentence rather than the three fragments this asserted before
+    // DR.12. Fragments survived the rewrite from two keys to one untouched —
+    // '30°C', 'Clear' and 'Tel Aviv' are all still on screen either way — so
+    // they were pinning the words and not the sentence. DECISIONS.md 218.
+    expect(sentence()?.textContent).toBe('Clear in Tel Aviv today');
+  });
+
+  // The sentence is ours and the city is not, so the city alone leaves the
+  // prose face. This is the assertion that makes the strip a caller of 213
+  // rather than a component with a string in it, and it is the one a later
+  // "tidy the spans" edit could silently undo. DECISIONS.md 218.
+  it('renders the city, and only the city, in the content face', async () => {
+    await render();
+    weatherRequest().flush(weather());
+    await fixture.whenStable();
+
+    const faced = [...(sentence()?.querySelectorAll('span.font-sans') ?? [])];
+    expect(faced.map((span) => span.textContent)).toEqual(['Tel Aviv']);
   });
 
   // §2.12: the strip carries the only entry point into /stylist, so it is the
