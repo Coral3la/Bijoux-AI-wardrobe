@@ -55,7 +55,7 @@ function scale(value: string | null): number | undefined {
     WeatherStrip,
   ],
   template: `
-    <main class="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
+    <main class="mx-auto flex w-full max-w-5xl flex-col gap-region px-6 pt-hero pb-region">
       <header class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h1 class="font-display text-4xl leading-tight tracking-tight">
           {{ i18n.t('wardrobe.title') }}
@@ -137,22 +137,28 @@ function scale(value: string | null): number | undefined {
              numbers, and each abandoned tile says so for itself. It is not
              filtered either — the loop never was — and it does not need to be:
              a processing row has null tags, so no tag filter can hide one. -->
-        @if (store.awaitingTags().length > 0) {
-          <p class="text-sm">{{ taggingLabel() }}</p>
-        }
-        <ul class="grid grid-cols-3 gap-3 md:grid-cols-5">
-          @for (item of store.visible(); track item.id) {
-            <li>
-              <app-item-card
-                [item]="item"
-                [retrying]="store.retrying().has(item.id)"
-                [errorKey]="store.retagErrors().get(item.id) ?? null"
-                [stoppedWaiting]="store.stoppedWaiting().has(item.id)"
-                (retry)="store.retag(item.id)"
-              />
-            </li>
+        <!-- Grouped rather than left as siblings of <main>: the tagging line
+             is a label for the grid under it, and at region distance a label
+             reads as an unrelated notice. This is the group rung's first
+             caller. DECISIONS.md 212. -->
+        <div class="flex flex-col gap-group">
+          @if (store.awaitingTags().length > 0) {
+            <p class="text-sm">{{ taggingLabel() }}</p>
           }
-        </ul>
+          <ul class="grid grid-cols-3 gap-3 md:grid-cols-5">
+            @for (item of store.visible(); track item.id) {
+              <li>
+                <app-item-card
+                  [item]="item"
+                  [retrying]="store.retrying().has(item.id)"
+                  [errorKey]="store.retagErrors().get(item.id) ?? null"
+                  [stoppedWaiting]="store.stoppedWaiting().has(item.id)"
+                  (retry)="store.retag(item.id)"
+                />
+              </li>
+            }
+          </ul>
+        </div>
       }
     </main>
 

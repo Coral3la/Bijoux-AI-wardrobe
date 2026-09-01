@@ -21,7 +21,7 @@ import { ItemCard } from '../wardrobe/item-card';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Button, EmptyState, ItemCard, RouterLink],
   template: `
-    <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
+    <main class="mx-auto flex w-full max-w-2xl flex-col gap-region px-6 pt-hero pb-region">
       <header>
         <h1 class="font-display text-4xl leading-tight tracking-tight">
           {{ i18n.t('saved.title') }}

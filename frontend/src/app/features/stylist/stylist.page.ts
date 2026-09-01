@@ -70,7 +70,7 @@ function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [LookCard, LookRequestForm, Skeleton],
   template: `
-    <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
+    <main class="mx-auto flex w-full max-w-2xl flex-col gap-region px-6 pt-hero pb-region">
       <header class="flex flex-col gap-1">
         <p class="text-xs font-medium tracking-widest text-ink-soft uppercase">
           {{ todayLabel() }}
@@ -81,7 +81,7 @@ function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
       </header>
 
       @if (store.isSuggesting()) {
-        <section class="flex flex-col gap-4">
+        <section class="flex flex-col gap-group">
           <div class="grid grid-cols-3 gap-3" aria-hidden="true">
             @for (tile of tiles; track tile) {
               <app-skeleton class="aspect-square" radius="rounded-xl" />
@@ -122,29 +122,35 @@ function toRequest(draft: LookDraft, anchor: Item | null): SuggestRequest {
 
         <!-- Pinned above the form, where 05-FRONTEND-SPEC.md puts it. It is not
              one of the form's controls: the four in LookDraft are what the user
-             sets here, and the anchor is what she arrived carrying. -->
-        @if (anchor(); as item) {
-          <div class="flex items-center gap-3 rounded-xl bg-surface p-3 shadow-sm">
-            <p class="text-sm">
-              {{ i18n.t('stylist.anchor.pinned', { item: name(item) }) }}
-            </p>
-            <button
-              type="button"
-              (click)="clearAnchor()"
-              [attr.aria-label]="i18n.t('stylist.anchor.clear')"
-              class="ms-auto min-h-11 min-w-11 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
-              ×
-            </button>
-          </div>
-        }
+             sets here, and the anchor is what she arrived carrying.
 
-        <app-look-request-form
-          [draft]="draft()"
-          [weather]="store.weather()"
-          (draftChanged)="onDraftChanged($event)"
-          (submitted)="suggest()"
-        />
+             Grouped with the form rather than left a sibling of <main>: the pin
+             states what the form below it will build around, and at region
+             distance the two read as unrelated. DECISIONS.md 212. -->
+        <div class="flex flex-col gap-group">
+          @if (anchor(); as item) {
+            <div class="flex items-center gap-3 rounded-xl bg-surface p-3 shadow-sm">
+              <p class="text-sm">
+                {{ i18n.t('stylist.anchor.pinned', { item: name(item) }) }}
+              </p>
+              <button
+                type="button"
+                (click)="clearAnchor()"
+                [attr.aria-label]="i18n.t('stylist.anchor.clear')"
+                class="ms-auto min-h-11 min-w-11 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                ×
+              </button>
+            </div>
+          }
+
+          <app-look-request-form
+            [draft]="draft()"
+            [weather]="store.weather()"
+            (draftChanged)="onDraftChanged($event)"
+            (submitted)="suggest()"
+          />
+        </div>
       }
     </main>
   `,

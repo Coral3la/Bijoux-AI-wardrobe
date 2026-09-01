@@ -36,6 +36,19 @@
 
   --font-display: 'Fraunces', ui-serif, Georgia, serif;
 
+  /* The interval hierarchy. Before this the whole application had one
+     distance — every screen container was `gap-6` — so a title sat as far
+     from its own count as it did from an unrelated region, and nothing was
+     grouped by proximity because nothing was closer than anything else.
+     Three named rungs replace it: hero above a page title, region between
+     the parts of a screen, group between a label and the thing it labels.
+     Tailwind's numeric scale stays available for composition inside a
+     component; these three are the hierarchy and are the only ones that
+     carry meaning. DECISIONS.md 212. */
+  --spacing-hero: 4rem;
+  --spacing-region: 2.5rem;
+  --spacing-group: 0.75rem;
+
   /* radii — these override Tailwind 4's built-in --radius-sm/md/lg/xl/2xl
      deliberately; the resulting shift across the ~75 existing rounded-*
      call sites is the intended re-anchoring of the visual language, not

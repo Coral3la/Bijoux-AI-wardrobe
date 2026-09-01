@@ -647,7 +647,8 @@ One decision, made once, applied everywhere: **the clothes are the design.** The
 - **`--color-danger: #7f2f3c`** is the fifth token, added at 0.9 for validation messages and failure notices. It is used only where something is wrong: the "server may be waking up" notice deliberately does not take it, because task 1.3's failed tiles lean on the same signal and it must not also mean "slow". `DECISIONS.md` 057.
 - The five colours and the display face are declared once, as `@theme` tokens in `frontend/src/tailwind.css`, and generate their own utilities (`bg-canvas`, `text-ink`, `text-danger`, `font-display`). There is no `tailwind.config.js` — Tailwind 4 is CSS-first. `DECISIONS.md` 056.
 - Cut-out garment images on white read as a catalogue. Nothing else should compete with them.
-- Generous whitespace, no card borders — use shadow and spacing for separation.
+- No card borders — use shadow and spacing for separation.
+- **Whitespace is a hierarchy of three intervals, not one measurement.** `--spacing-hero` (4rem) is the band above a page title; `--spacing-region` (2.5rem) separates the parts of a screen; `--spacing-group` (0.75rem) binds a label to the thing it labels. They are declared beside the colours in `frontend/src/tailwind.css` and spelled `pt-hero`, `gap-region`, `gap-group`. Tailwind's numeric scale stays available for composition inside a component — `gap-3` between two chips is not a hierarchy decision — but a distance between *regions of a screen* takes a named rung. Until DR.7 every screen container was `gap-6` and there was no hierarchy of space at all. `DECISIONS.md` 212.
 - One display typeface for headings, one system stack for body.
 - Every interactive element ≥ 44px tall. This is a phone app that happens to run in a browser.
 
