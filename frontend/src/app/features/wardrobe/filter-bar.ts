@@ -11,8 +11,17 @@ import {
 import { I18nService } from '../../core/i18n/i18n.service';
 import { ItemFilters, SCALE_MAX, SCALE_MIN } from '../../core/state/wardrobe.store';
 import { CATEGORIES, COLORS, Category, Color } from '../../shared/models/enums';
-import { Button } from '../../shared/ui/button';
-import { Chip } from '../../shared/ui/chip';
+
+// What the wardrobe knows about its own shape, counted where the collection
+// lives and passed in rather than fetched here: this bar is given the filters
+// it draws and it is given the numbers it draws, so it stays a component with
+// two inputs and one output. `all` is separate from the map rather than an
+// 'all' key in it, because 'all' is not a Category and typing it as one would
+// make `Record<Category, number>` a lie the compiler stops checking.
+export interface CategoryCounts {
+  readonly all: number;
+  readonly byCategory: ReadonlyMap<Category, number>;
+}
 
 // Presentation, not vocabulary: these are what a swatch is painted, while the
 // words themselves are in en.json, under `vocabulary.*` since 1.9 — a screen's
@@ -40,81 +49,100 @@ const SWATCHES = {
   silver: '#c3c8d0',
 } as const satisfies Record<Color, string>;
 
+// Written here rather than taken from the shared `appChip` directive, and that
+// is a decision rather than an oversight. The directive paints the pre-Atelier
+// chip — 14px, a strong line, a white fill — and it sets its font size in the
+// base string every variant shares, so a caller cannot make an 11px chip out of
+// it: two utilities setting one property are settled by the order of the
+// compiled stylesheet, which is the trap chip.ts itself documents. Five screens
+// still want the chip the directive draws. When they are converted the
+// directive becomes this and these constants go. DECISIONS.md 219.
+const CHIP =
+  'inline-flex min-h-11 shrink-0 items-center gap-x-1.5 rounded-full border px-4 text-[11px] font-medium tracking-[0.18em] uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+const CHIP_STATES = {
+  inactive: 'border-line text-ink-muted',
+  active: 'border-ink bg-ink text-canvas',
+} as const;
+
 @Component({
   selector: 'app-filter-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, Chip],
   template: `
-    <section class="flex flex-col gap-3">
-      <!-- 05-FRONTEND-SPEC.md's mockup draws this row scrolling horizontally
-           rather than wrapping. Nothing scrolls it for the user: scrollIntoView
-           is undefined in jsdom and calling it throws, so a selected chip off
-           the right edge stays there. Measured, not assumed — 06's probe. -->
-      <div class="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
-        <!-- No aria-pressed binding here any more: appChip sets it from the same
-             active input that paints the chip, and a template binding would
-             outrank the directive's host binding and let the two drift. A
-             backtick in a template comment would end the literal, so this one
+    <section class="flex flex-col gap-4">
+      <!-- Wrapping, where 1.8 scrolled. The horizontal row was drawn by
+           05-FRONTEND-SPEC.md's mockup and nothing ever scrolled it for the
+           user — scrollIntoView is undefined in jsdom, so a selected chip off
+           the right edge stayed there. The picked mockup wraps, which also
+           removes the reason that bug existed. -->
+      <div class="flex flex-wrap items-center gap-1.5">
+        <!-- aria-pressed is bound here again, where 1.8 had handed it to
+             appChip. chip.ts's warning was that a template binding outranks a
+             directive host binding and lets the announced state drift from the
+             painted one; with no directive there is nothing to drift against,
+             and one expression paints and announces. The spec asserts it on a
+             selected chip and an unselected one, which is what holds it.
+             A backtick in a template comment would end the literal, so this one
              quotes nothing. -->
         <button
-          appChip
           type="button"
-          [active]="filters().category === undefined"
+          [attr.aria-pressed]="filters().category === undefined"
+          [class]="chipClass(filters().category === undefined)"
           (click)="chooseCategory(undefined)"
-          class="shrink-0"
         >
-          {{ i18n.t('wardrobe.filter.category.all') }}
+          <span>{{ i18n.t('wardrobe.filter.category.all') }}</span>
+          <span [class]="countClass(filters().category === undefined)">{{ counts().all }}</span>
         </button>
         @for (category of categories; track category) {
+          <!-- Every category, including the ones at zero. The chips are the
+               closed vocabulary rather than a summary of what is in the
+               wardrobe, so a row that grew and shrank as garments were tagged
+               would move under the reader's finger — and a zero is a true
+               answer to "how many trousers do I own". -->
           <button
-            appChip
             type="button"
-            [active]="filters().category === category"
+            [attr.aria-pressed]="filters().category === category"
+            [class]="chipClass(filters().category === category)"
             (click)="chooseCategory(category)"
-            class="shrink-0"
           >
-            {{ i18n.t('vocabulary.category.' + category) }}
+            <span>{{ i18n.t('vocabulary.category.' + category) }}</span>
+            <span [class]="countClass(filters().category === category)">{{
+              countOf(category)
+            }}</span>
           </button>
         }
-      </div>
 
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <!-- A disclosure rather than a sheet. A modal over the grid hides the
+        <!-- The one chip with no count, because it counts nothing: it opens the
+             three dimensions below rather than naming a subset of the grid. A
+             disclosure rather than a sheet — a modal over the grid hides the
              thing being filtered, which is 098's own argument for why the
              gallery path closes the upload sheet. O-15 is answered by this
              rather than acted on. DECISIONS.md 113. -->
         <button
-          appButton
-          variant="secondary"
           type="button"
           [attr.aria-expanded]="open()"
+          [class]="chipClass(open())"
           (click)="toggle()"
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="me-2 h-4 w-4"
-            aria-hidden="true"
-          >
-            <path d="M4 6h16M7 12h10M10 18h4" />
-          </svg>
           {{ i18n.t('wardrobe.filter.title') }}
         </button>
+
         @if (isFiltered()) {
-          <button appButton variant="ghost" type="button" (click)="clear()">
+          <button
+            type="button"
+            (click)="clear()"
+            class="inline-flex min-h-11 shrink-0 items-center px-2 text-[11px] font-medium tracking-[0.18em] text-accent uppercase underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
             {{ i18n.t('wardrobe.filter.clear') }}
           </button>
         }
       </div>
 
       @if (open()) {
-        <div class="flex flex-col gap-5 rounded-xl bg-surface p-4 shadow-sm">
-          <fieldset class="flex flex-col gap-2">
-            <legend class="text-sm font-medium">{{ i18n.t('wardrobe.filter.color') }}</legend>
+        <div class="flex flex-col gap-5 rounded-[2px] border border-line p-5">
+          <fieldset class="flex flex-col gap-3">
+            <legend class="text-[10px] font-medium tracking-[0.18em] text-ink-soft uppercase">
+              {{ i18n.t('wardrobe.filter.color') }}
+            </legend>
             <div class="flex flex-wrap gap-2">
               @for (color of colors; track color) {
                 <!-- The label is the only thing distinguishing one swatch from
@@ -132,8 +160,10 @@ const SWATCHES = {
             </div>
           </fieldset>
 
-          <fieldset class="flex flex-col gap-2">
-            <legend class="text-sm font-medium">{{ i18n.t('wardrobe.filter.formality') }}</legend>
+          <fieldset class="flex flex-col gap-3">
+            <legend class="text-[10px] font-medium tracking-[0.18em] text-ink-soft uppercase">
+              {{ i18n.t('wardrobe.filter.formality') }}
+            </legend>
             <div class="flex items-center gap-3">
               <!-- Both handles carry an explicit [value]. An unbound range reads
                    50 in the gate and 3 in a browser, so a test asserting an
@@ -146,7 +176,7 @@ const SWATCHES = {
                 [value]="formalityMin()"
                 [attr.aria-label]="rangeLabel('wardrobe.filter.rangeMin', 'formality')"
                 (input)="setFormality('min', $event)"
-                class="w-full"
+                class="w-full accent-ink"
               />
               <input
                 type="range"
@@ -156,14 +186,18 @@ const SWATCHES = {
                 [value]="formalityMax()"
                 [attr.aria-label]="rangeLabel('wardrobe.filter.rangeMax', 'formality')"
                 (input)="setFormality('max', $event)"
-                class="w-full"
+                class="w-full accent-ink"
               />
-              <span class="shrink-0 text-sm">{{ formalityMin() }}–{{ formalityMax() }}</span>
+              <span class="shrink-0 font-mono text-xs text-ink-muted tabular-nums"
+                >{{ formalityMin() }}–{{ formalityMax() }}</span
+              >
             </div>
           </fieldset>
 
-          <fieldset class="flex flex-col gap-2">
-            <legend class="text-sm font-medium">{{ i18n.t('wardrobe.filter.warmth') }}</legend>
+          <fieldset class="flex flex-col gap-3">
+            <legend class="text-[10px] font-medium tracking-[0.18em] text-ink-soft uppercase">
+              {{ i18n.t('wardrobe.filter.warmth') }}
+            </legend>
             <div class="flex items-center gap-3">
               <input
                 type="range"
@@ -173,7 +207,7 @@ const SWATCHES = {
                 [value]="warmthMin()"
                 [attr.aria-label]="rangeLabel('wardrobe.filter.rangeMin', 'warmth')"
                 (input)="setWarmth('min', $event)"
-                class="w-full"
+                class="w-full accent-ink"
               />
               <input
                 type="range"
@@ -183,9 +217,11 @@ const SWATCHES = {
                 [value]="warmthMax()"
                 [attr.aria-label]="rangeLabel('wardrobe.filter.rangeMax', 'warmth')"
                 (input)="setWarmth('max', $event)"
-                class="w-full"
+                class="w-full accent-ink"
               />
-              <span class="shrink-0 text-sm">{{ warmthMin() }}–{{ warmthMax() }}</span>
+              <span class="shrink-0 font-mono text-xs text-ink-muted tabular-nums"
+                >{{ warmthMin() }}–{{ warmthMax() }}</span
+              >
             </div>
           </fieldset>
         </div>
@@ -197,6 +233,7 @@ export class FilterBar {
   protected readonly i18n = inject(I18nService);
 
   readonly filters = input.required<ItemFilters>();
+  readonly counts = input.required<CategoryCounts>();
   readonly filtersChanged = output<ItemFilters>();
 
   protected readonly categories = CATEGORIES;
@@ -218,6 +255,24 @@ export class FilterBar {
   protected readonly warmthMin = computed(() => this.filters().warmth_min ?? SCALE_MIN);
   protected readonly warmthMax = computed(() => this.filters().warmth_max ?? SCALE_MAX);
 
+  protected countOf(category: Category): number {
+    return this.counts().byCategory.get(category) ?? 0;
+  }
+
+  protected chipClass(active: boolean): string {
+    return `${CHIP} ${active ? CHIP_STATES.active : CHIP_STATES.inactive}`;
+  }
+
+  // The count leaves the chip's letter-spacing and takes the mono face, so a
+  // number on this screen is drawn one way wherever it appears — the piece
+  // count in the header, the temperature in the weather line, these. Inverted
+  // rather than recoloured on an active chip: the ground has gone dark under
+  // it, so a soft grey would be the one unreadable thing in the row.
+  protected countClass(active: boolean): string {
+    const base = 'font-mono text-[10px] font-normal tracking-normal tabular-nums';
+    return active ? `${base} text-canvas/65` : `${base} text-ink-soft`;
+  }
+
   protected toggle(): void {
     this.open.update((open) => !open);
   }
@@ -233,7 +288,7 @@ export class FilterBar {
   protected swatchClass(selected: boolean): string {
     const base =
       'h-11 w-11 rounded-full border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-    return selected ? `${base} border-accent border-4` : `${base} border-black/20`;
+    return selected ? `${base} border-ink border-4` : `${base} border-line`;
   }
 
   // Single-valued, so tapping the selected one clears it. Multi-select was

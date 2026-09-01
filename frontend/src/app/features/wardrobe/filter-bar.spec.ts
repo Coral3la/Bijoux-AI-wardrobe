@@ -6,15 +6,29 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import en from '../../../../public/i18n/en.json';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { ItemFilters } from '../../core/state/wardrobe.store';
-import { FilterBar } from './filter-bar';
+import { Category } from '../../shared/models/enums';
+import { CategoryCounts, FilterBar } from './filter-bar';
 
 let fixture: ComponentFixture<FilterBar>;
 let mock: HttpTestingController;
 let emitted: ItemFilters[] = [];
 
+// The bar is given its numbers rather than counting anything, so this is a
+// literal and not a wardrobe: the page owns the arithmetic. Two categories
+// carry a value and the other seven do not, which is the shape a real wardrobe
+// has and is what makes the zero on an empty category visible here.
+const COUNTS: CategoryCounts = {
+  all: 32,
+  byCategory: new Map<Category, number>([
+    ['top', 10],
+    ['bottom', 5],
+  ]),
+};
+
 async function render(filters: ItemFilters = {}): Promise<void> {
   fixture = TestBed.createComponent(FilterBar);
   fixture.componentRef.setInput('filters', filters);
+  fixture.componentRef.setInput('counts', COUNTS);
   fixture.componentInstance.filtersChanged.subscribe((next) => emitted.push(next));
   await fixture.whenStable();
 }
@@ -29,6 +43,16 @@ function buttonWith(label: string): HTMLButtonElement {
 
 function maybeButtonWith(label: string): HTMLButtonElement | undefined {
   return buttons().find((candidate) => candidate.textContent?.trim() === label);
+}
+
+// A category chip is two spans — the label and its count — so the label alone
+// is what names it, and matching on the button's whole text would mean knowing
+// the number to find the chip that carries it. The disclosure and Clear filters
+// have no spans at all and keep buttonWith above.
+function chipWith(label: string): HTMLButtonElement {
+  return buttons().find(
+    (candidate) => candidate.querySelector('span')?.textContent?.trim() === label,
+  )!;
 }
 
 function swatch(label: string): HTMLButtonElement {
@@ -76,18 +100,24 @@ describe('FilterBar', () => {
     TestBed.resetTestingModule();
   });
 
-  it('renders one chip per category, plus All', async () => {
+  // The counts came onto the chips at the Atelier pass, so the chip is no
+  // longer identified by its whole text and this asserts both halves: an
+  // unwired count renders nothing where a zero renders a zero, and the two
+  // are only distinguishable if the number is read. Accessories is the third
+  // assertion because it is a category the fixture gives no entry for, which
+  // is the case that must print 0 rather than blank. DECISIONS.md 219.
+  it('renders one chip per category with its count, plus All', async () => {
     await render();
 
-    expect(buttonWith('All')).toBeTruthy();
-    expect(buttonWith('Tops')).toBeTruthy();
-    expect(buttonWith('Accessories')).toBeTruthy();
+    expect(chipWith('All').textContent).toContain('32');
+    expect(chipWith('Tops').textContent).toContain('10');
+    expect(chipWith('Accessories').textContent).toContain('0');
   });
 
   it('emits the category a chip names', async () => {
     await render();
 
-    buttonWith('Bottoms').click();
+    chipWith('Bottoms').click();
 
     expect(emitted).toEqual([{ category: 'bottom' }]);
   });
@@ -98,15 +128,15 @@ describe('FilterBar', () => {
   it('marks only the selected chip as pressed', async () => {
     await render({ category: 'top' });
 
-    expect(buttonWith('Tops').getAttribute('aria-pressed')).toBe('true');
-    expect(buttonWith('Bottoms').getAttribute('aria-pressed')).toBe('false');
-    expect(buttonWith('All').getAttribute('aria-pressed')).toBe('false');
+    expect(chipWith('Tops').getAttribute('aria-pressed')).toBe('true');
+    expect(chipWith('Bottoms').getAttribute('aria-pressed')).toBe('false');
+    expect(chipWith('All').getAttribute('aria-pressed')).toBe('false');
   });
 
   it('clears the category through All, leaving the other dimensions alone', async () => {
     await render({ category: 'top', color_primary: 'black' });
 
-    buttonWith('All').click();
+    chipWith('All').click();
 
     expect(emitted).toEqual([{ category: undefined, color_primary: 'black' }]);
   });
@@ -116,6 +146,10 @@ describe('FilterBar', () => {
 
     expect(ranges()).toHaveLength(0);
     expect(buttonWith('Filters').getAttribute('aria-expanded')).toBe('false');
+    // The one chip in the row with no number on it, because it names no subset
+    // of the grid. Asserted as the whole trimmed text, which is what a count
+    // appearing here would break. DECISIONS.md 219.
+    expect(buttonWith('Filters').textContent?.trim()).toBe('Filters');
   });
 
   it('opens the panel on the disclosure', async () => {

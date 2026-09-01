@@ -121,8 +121,11 @@ describe('WeatherStrip', () => {
     await fixture.whenStable();
 
     // 30.4 rounds to 30: the day's high, which is the number `summarize_forecast`
-    // already prints to the model. DECISIONS.md 142.
-    expect(text()).toContain('30°C');
+    // already prints to the model. DECISIONS.md 142. The unit went with the card
+    // at the Atelier pass — one city, one reading a day, so "· 30°" is not
+    // ambiguous — and this asserts the degree sign rather than the C for that
+    // reason. DECISIONS.md 219.
+    expect(text()).toContain('· 30°');
     // The whole sentence rather than the three fragments this asserted before
     // DR.12. Fragments survived the rewrite from two keys to one untouched —
     // '30°C', 'Clear' and 'Tel Aviv' are all still on screen either way — so
@@ -173,7 +176,7 @@ describe('WeatherStrip', () => {
 
     mock.expectNone((candidate) => candidate.url === `${environment.apiUrl}/weather`);
     expect(href(en['wardrobe.weather.setHome'])).toBe('/profile');
-    expect(text()).not.toContain('°C');
+    expect(text()).not.toContain('°');
   });
 
   // Silent on purpose. The forecast is context on a screen that works without
@@ -188,7 +191,7 @@ describe('WeatherStrip', () => {
     );
     await fixture.whenStable();
 
-    expect(text()).not.toContain('°C');
+    expect(text()).not.toContain('°');
     expect(text()).not.toContain(en['wardrobe.weather.setHome']);
     expect(href(en['wardrobe.weather.styleMe'])).toBe('/stylist');
   });

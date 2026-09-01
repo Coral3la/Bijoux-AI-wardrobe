@@ -14,6 +14,10 @@ interface Insights {
   readonly mostWorn: { readonly id: string; readonly line: string } | null;
 }
 
+// Atelier reaches this panel through the tokens and no further: the card is a
+// warm paper on cream rather than a white slab because `--color-surface` moved,
+// and the face, the size and the shadow are still 3.6's. The typographic pass
+// belongs to this panel's own pitch. DECISIONS.md 219.
 @Component({
   selector: 'app-wardrobe-insights',
   changeDetection: ChangeDetectionStrategy.OnPush,

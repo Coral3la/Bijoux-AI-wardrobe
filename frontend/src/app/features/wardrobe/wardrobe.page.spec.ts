@@ -147,7 +147,7 @@ function strip(): HTMLElement | null {
 }
 
 function fab(): HTMLButtonElement {
-  return buttonWith('Add items');
+  return buttonWith('Add piece');
 }
 
 // Fake timers and `await fixture.whenStable()` cannot both be true at once, and
@@ -321,18 +321,21 @@ describe('WardrobePage', () => {
   });
 
   // The count comes from the server's `total`, not from the loaded rows: above
-  // 200 items the grid is a page and the header is the wardrobe.
+  // 200 items the grid is a page and the header is the wardrobe. The chip row
+  // counts the loaded rows instead and the two can disagree above 200, which is
+  // why this asserts the header's word: "pieces" is the header's, the chips
+  // carry a bare number. DECISIONS.md 219.
   it('states the server total rather than the number of tiles', async () => {
     await render([item({ id: 'a' }), item({ id: 'b' })], 138);
 
-    expect(text()).toContain('138 items');
+    expect(text()).toContain('138 pieces');
   });
 
-  it('does not say "1 items"', async () => {
+  it('does not say "1 pieces"', async () => {
     await render([item()], 1);
 
-    expect(text()).toContain('1 item');
-    expect(text()).not.toContain('1 items');
+    expect(text()).toContain('1 piece');
+    expect(text()).not.toContain('1 pieces');
   });
 
   // Both account-row anchors and the sign-out button left at 4.9;
@@ -553,7 +556,7 @@ describe('WardrobePage', () => {
     await fixture.whenStable();
 
     expect(tiles()).toHaveLength(3);
-    expect(text()).toContain('3 items');
+    expect(text()).toContain('3 pieces');
     expect(strip()).toBeNull();
   });
 
@@ -562,7 +565,7 @@ describe('WardrobePage', () => {
     fab().click();
     await fixture.whenStable();
 
-    expect(buttonWith('Add items')).toBeUndefined();
+    expect(buttonWith('Add piece')).toBeUndefined();
   });
   // --- polling, task 1.7 ---------------------------------------------------
 
@@ -649,7 +652,7 @@ describe('WardrobePage', () => {
 
     await press('Tops');
 
-    expect(text()).toContain('1 of 138 items');
+    expect(text()).toContain('1 of 138 pieces');
   });
 
   // The third state. A wardrobe with items in it and nothing on screen is not
@@ -722,7 +725,7 @@ describe('WardrobePage', () => {
     await render([item({ id: 'a', category: 'top' }), item({ id: 'b', category: 'bottom' })]);
 
     expect(tiles()).toHaveLength(2);
-    expect(text()).toContain('2 items');
+    expect(text()).toContain('2 pieces');
   });
 
   it('writes the filter into the URL', async () => {
@@ -816,7 +819,7 @@ describe('WardrobePage', () => {
       signIn('Coral');
       await render([item()]);
 
-      expect(greetingLine()?.textContent).toBe('Good morning, Coral');
+      expect(greetingLine()?.textContent).toBe('Good morning, Coral.');
     });
 
     // The name is theirs and the sentence is ours, so only the name leaves the
@@ -838,7 +841,7 @@ describe('WardrobePage', () => {
       signIn(null);
       await render([item()]);
 
-      expect(greetingLine()?.textContent).toBe('Good morning');
+      expect(greetingLine()?.textContent).toBe('Good morning.');
       expect(greetingLine()?.querySelector('span.font-sans')).toBeNull();
     });
 
@@ -847,7 +850,7 @@ describe('WardrobePage', () => {
       signIn('Coral');
       await render([item()]);
 
-      expect(greetingLine()?.textContent).toBe('Good afternoon, Coral');
+      expect(greetingLine()?.textContent).toBe('Good afternoon, Coral.');
     });
   });
 

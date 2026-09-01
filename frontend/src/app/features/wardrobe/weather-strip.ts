@@ -6,16 +6,22 @@ import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { Weather } from '../../shared/models/weather.model';
 import { AuthoredLine } from '../../shared/ui/authored-line';
-import { Button } from '../../shared/ui/button';
 import { todayInLocalTime } from '../stylist/look-request-form';
 
 @Component({
   selector: 'app-weather-strip',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AuthoredLine, Button, RouterLink],
+  imports: [AuthoredLine, RouterLink],
   template: `
+    <!-- One line and a rule under it, where DR.12 left a card. The card was
+         deferred at DR.12 on the grounds that DR.15 would decide the ground
+         first, and the picked mockup decides both at once: on the cream ground
+         a white panel with a shadow is the only raised object on the screen,
+         and the forecast is the least important thing on it. What is left is
+         the sentence, the reading, and the way into the stylist — which is
+         everything the card ever carried. DECISIONS.md 219. -->
     <section
-      class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-surface p-4 shadow-sm"
+      class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-3 border-b border-line pb-6"
       [attr.aria-label]="i18n.t('wardrobe.weather.region')"
     >
       <!-- One sentence, and the city inside it is content while the sentence
@@ -38,15 +44,27 @@ import { todayInLocalTime } from '../stylist/look-request-form';
            inside the component's template literal, so a backtick would end the
            string. DECISIONS.md 218. -->
       @if (forecast(); as today) {
-        <div class="flex flex-col gap-1">
+        <p
+          class="flex flex-wrap items-baseline gap-x-2 font-prose text-[17px] text-ink-muted italic"
+        >
           <app-authored-line
-            class="block font-prose text-base text-ink-muted"
             key="wardrobe.weather.sentence"
             [params]="today.params"
             [content]="today.content"
           />
-          <p class="font-display text-2xl leading-tight">{{ today.reading }}</p>
-        </div>
+          <!-- The reading leaves the italic and takes the mono face, which is
+               the one rule this screen applies to every number on it: the piece
+               count in the header and the counts on the chips are drawn the
+               same way. It is still chrome — a number this project rounded and
+               formatted — so 071 is unbroken; what changed is which authored
+               face a numeral takes. The middle dot in front of it is in the
+               string table with the degree sign, because it is punctuation
+               joining two clauses of one line rather than a separator this
+               template invented. -->
+          <span class="font-mono text-[15px] text-ink tabular-nums not-italic">{{
+            today.reading
+          }}</span>
+        </p>
       } @else if (!hasHome()) {
         <!-- The degraded state §2.12 specifies, and the only place it points is
              the screen that fixes it. It replaces the temperature; it never
@@ -54,7 +72,7 @@ import { todayInLocalTime } from '../stylist/look-request-form';
              stylist. -->
         <a
           routerLink="/profile"
-          class="inline-flex min-h-11 items-center rounded-md font-prose text-base underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          class="inline-flex min-h-11 items-center font-prose text-[17px] text-ink-muted italic underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           {{ i18n.t('wardrobe.weather.setHome') }}
         </a>
@@ -69,8 +87,16 @@ import { todayInLocalTime } from '../stylist/look-request-form';
            depend on the forecast". A labelled link rather than the whole strip
            being tappable, because the degraded state puts a second link inside
            it and an anchor inside an anchor is not a document — 05 is annotated
-           where it draws the strip itself as the target. -->
-      <a appButton routerLink="/stylist" class="ms-auto">
+           where it draws the strip itself as the target.
+
+           No appButton any more: the directive paints the accent-filled pill
+           the pre-Atelier language uses, and a filled button is the loudest
+           object on a screen whose loudest object is meant to be a photograph.
+           The 44px floor is kept by min-h-11 rather than by the directive. -->
+      <a
+        routerLink="/stylist"
+        class="ms-auto inline-flex min-h-11 items-center gap-x-2 border-b border-accent text-[11px] font-medium tracking-[0.22em] text-accent uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
         {{ i18n.t('wardrobe.weather.styleMe') }}
         <svg
           viewBox="0 0 24 24"
@@ -79,7 +105,7 @@ import { todayInLocalTime } from '../stylist/look-request-form';
           stroke-width="1.5"
           stroke-linecap="round"
           stroke-linejoin="round"
-          class="ms-2 h-4 w-4"
+          class="h-3 w-3"
           aria-hidden="true"
         >
           <path d="M5 12h14M13 6l6 6-6 6" />
@@ -117,8 +143,10 @@ export class WeatherStrip {
       // already means by "the temperature": `summarize_forecast` prints
       // `temp_max_c` to the model and DECISIONS.md 142 settled it there. A
       // strip and a prompt disagreeing about today would be visible on one
-      // screen. It is chrome — a rounded number this project formatted — so it
-      // keeps the display face.
+      // screen. The unit is gone with the card: the line reads "· 27°" now,
+      // because a screen that shows one temperature a day in one city does not
+      // have to say which scale it is on, and the C was the only Latin letter
+      // in a run of digits set in the mono face.
       reading: this.i18n.t('wardrobe.weather.reading', {
         temp: Math.round(weather.temp_max_c),
       }),

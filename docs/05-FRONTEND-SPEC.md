@@ -638,19 +638,58 @@ The re-arm is after each response settles rather than on a fixed interval, so on
 
 ## Visual direction
 
-One decision, made once, applied everywhere: **the clothes are the design.** The interface is a neutral gallery wall.
+**Rewritten at the Atelier pass.** Everything below describes the direction from that pass onward; it replaces the neutral-gallery-wall section DR.1–DR.12 built, and `DECISIONS.md` 219 is why. The one sentence that survives the rewrite unchanged is the first one.
 
-- Background `#FAFAF8`, surfaces white, text `#1A1A1A`, one accent used sparingly.
-- **The accent is `#2F4858`**, a deep desaturated ink-blue, settled at task 0.8. A warm mid-chroma accent — terracotta was the alternative — reads as a garment itself and competes with brown, beige, red and pink, four of the seventeen wardrobe colours it would sit beside in the grid. `DECISIONS.md` 057.
-- **The display typeface is Fraunces**, self-hosted at task 0.9 as a latin-subset variable woff2 in `public/fonts/`, preloaded, `font-display: swap`. Body text uses Tailwind's default `--font-sans`, which is already the system stack this section asks for and is deliberately not overridden. `DECISIONS.md` 065.
-- **The display face is for chrome we author, and the rule is editorial before it is technical.** Chrome is the voice Bijoux authored: page titles, section labels, eyebrows, counts, the weather reading. Content is what flows through the product: garment names, city names, the user's own words, the model's prose. Chrome takes an authored face; content takes the system stack **at every size**. The difference being drawn is *this is us speaking* against *this is your stuff, or someone else's* — which is why content gains size and leading in a redesign and never gains a face. Fraunces is also latin-subset with no Hebrew coverage, so a non-Latin name in a display heading falls back per character; that is true, it is not the reason, and it would stop being available the day the family ships Hebrew. **Six surfaces apply the rule deliberately: item detail (1.9), weather strip (2.2), look card title (2.9), trip header (4.5), the greeting (DR.10), and any authored sentence carrying a content span (DR.12).** `DECISIONS.md` 071.
-- **`--color-danger: #7f2f3c`** is the fifth token, added at 0.9 for validation messages and failure notices. It is used only where something is wrong: the "server may be waking up" notice deliberately does not take it, because task 1.3's failed tiles lean on the same signal and it must not also mean "slow". `DECISIONS.md` 057.
-- The five colours and the display face are declared once, as `@theme` tokens in `frontend/src/tailwind.css`, and generate their own utilities (`bg-canvas`, `text-ink`, `text-danger`, `font-display`). There is no `tailwind.config.js` — Tailwind 4 is CSS-first. `DECISIONS.md` 056.
-- Cut-out garment images on white read as a catalogue. Nothing else should compete with them.
-- No card borders — use shadow and spacing for separation.
-- **Whitespace is a hierarchy of three intervals, not one measurement.** `--spacing-hero` (4rem) is the band above a page title; `--spacing-region` (2.5rem) separates the parts of a screen; `--spacing-group` (0.75rem) binds a label to the thing it labels. They are declared beside the colours in `frontend/src/tailwind.css` and spelled `pt-hero`, `gap-region`, `gap-group`. Tailwind's numeric scale stays available for composition inside a component — `gap-3` between two chips is not a hierarchy decision — but a distance between *regions of a screen* takes a named rung. Until DR.7 every screen container was `gap-6` and there was no hierarchy of space at all. **The rhythm applies at the container level, not inside a composed unit**: a form is one region of a page, so the distance between its own sections is composition — `profile.page.ts` keeps `gap-6` between four sections already divided by rules, and the auth forms keep `gap-4`. **A piece of vertical space is owned by one layer of the layout** — the container, which can see its neighbours, not the component, which can only see itself. If both add, they compound silently and the rhythm decays: an `EmptyState` that gave itself `py-8` would claim 72px where every other region claims 40. Nothing enforces this but review, the same as `gap-3` against `gap-group`. `DECISIONS.md` 212 and 216.
-- **Three type roles, two of them authored.** *Authored display* is Fraunces — titles, headings, counts. *Authored prose* is **Source Serif 4**, self-hosted at DR.9 as a latin-subset variable woff2 in `public/fonts/`, `--font-prose`, not preloaded — for the sentences Bijoux writes: empty-state bodies, hints, wait lines, placeholders, error messages. `DECISIONS.md` 214. *Content* is the system stack at every size. The split is by **who wrote the words**, never by which face is prettier at that size — a model-written outfit title in an authored serif breaks the rule exactly as a display heading would. `DECISIONS.md` 071.
-- Every interactive element ≥ 44px tall. This is a phone app that happens to run in a browser.
+One decision, made once, applied everywhere: **the clothes are the design.** Everything else on the screen gets quieter until they are the only thing on it.
+
+**The direction is Atelier** — the vocabulary of an Aesop store or a COS catalogue. A warm paper ground, one thin serif, chrome that nearly disappears, and a great deal of air. It was picked from three whole-screen mockups rather than assembled from properties, and every rule below is read off the picked mockup rather than argued from first principles.
+
+**A screen is converted whole, in one commit, from a picked mockup.** The wardrobe is converted; the stylist, saved looks, profile, trips and the auth pair are pitched and converted one at a time after it.
+
+**The palette is global and follows through immediately; everything else is per-screen.** The tokens below are the application's only palette — there is no second, prefixed set — so every screen is on Atelier's colours from the day the wardrobe lands. What each screen's own pitch decides is its **typography, layout, states and copy**. Until the last pitch lands the unconverted screens are therefore half-converted, and that is deliberate: a palette is the substrate a design is drawn on, not the design.
+
+### Palette
+
+One set of tokens in `frontend/src/tailwind.css`, spelled `bg-canvas`, `text-ink`, `border-line` and so on — the names the application has always used, now carrying Atelier's values.
+
+| Token | Value | Used for |
+| --- | --- | --- |
+| `--color-canvas` | `#F5F1EA` | the page behind everything |
+| `--color-surface` | `#FAF7F0` | a card or a form field: warm paper, never white |
+| `--color-surface-elevated` | `#EAE4D8` | a tinted panel — inset notices, the skeleton fill |
+| `--color-ink` | `#2A2320` | body text, titles, an inverted chip's fill |
+| `--color-ink-muted` | `#7A7358` | prose, the piece count, secondary text |
+| `--color-ink-soft` | `#B3AC9B` | tile meta, chip counts, field legends |
+| `--color-line` | `#E1DBD1` | every hairline: chip borders, the strip's underline |
+| `--color-line-strong` | `#D0C9B9` | an input's border, a chip's resting edge |
+| `--color-accent` | `#7A7658` | links and only links |
+| `--color-accent-hover` | `#625F45` | the primary button under the pointer |
+| `--color-accent-soft` | `#A8A48C` | an accent chip's border |
+| `--color-accent-wash` | `#EDEBE0` | the navigation bar's active pill |
+| `--color-danger` | `#7F2F3C` | unchanged, and still only where something is wrong |
+
+The accent and the muted differ by one digit and that is not a slip — the accent is the warmer of two olive-taupes, and it is what makes a link legible as a link without a colour arriving on the screen. **`--color-surface-elevated` is darker than `--color-surface`**, which its name does not suggest: on warm paper a panel is lifted by tint and never by white.
+
+**Known and accepted: `--color-accent` on `--color-canvas` is 4.1:1**, under AA for normal text, and `--color-accent` on `--color-accent-wash` is 3.8:1. The picked palette has this property; the accessibility pass that fixes it is not scheduled here.
+
+### Type
+
+- **Cormorant Garamond** answers both authored roles: **display** at weight 300 (`font-display`) for page titles, and **prose** in italic (`font-prose`) for the sentences this project writes — the greeting, the weather line, the tagging line, the wait. One family, told apart by style rather than by a second face, and both tokens keep the names and the callers they had.
+- **Inter** is the body face and the **content** face (`--font-sans`, so `font-sans` and the default body stack are both it). `AuthoredLine` wraps content spans in `font-sans`, so a name inside an authored sentence is Inter inside italic Cormorant — and so is a garment name under its own photograph.
+- **JetBrains Mono** (`font-mono`) draws **every number on the screen**: the piece count in the header, the temperature in the weather line, the counts on the chips, the range readout in the filter panel. One utility face for numerals is the rule, and it is the one that makes a count read as an instrument rather than as prose.
+- All three load from Google Fonts with two `preconnect` hints, against `DECISIONS.md` 065's self-hosting. **Fraunces stays self-hosted and preloaded for one consumer** — the pre-bootstrap marker in `index.html`, which cannot wait on a third-party stylesheet.
+- **Source Serif 4 is retired**, and so is Fraunces as an application face. `--font-prose` and `--font-display` both name Cormorant Garamond.
+- **The three roles from `DECISIONS.md` 071 stand and the rule that decides them is unchanged: who wrote the words.** What changed is which face fills each role. The picked mockup drew the tile caption's garment name in the display face and **the rule won**: a garment name is model-written content and takes the content face, latin-subset Cormorant being the same coverage trap Fraunces was.
+
+### Patterns
+
+- **A chip** is uppercase, letter-spaced, 11px, on a hairline border, full-radius, at least 44px tall. **A category chip carries its count** in the mono face after the label — `TOPS 10` — counted off the loaded wardrobe. **Active inverts**: ink ground, cream text, the count inverted with it. The `Filters` disclosure is the same chip **with no count**, because it names no subset of the grid.
+- **The weather strip is a line, not a card.** One italic sentence, the reading in mono after a middle dot, and a caps-letter-spaced **Style me** link pushed to the far end, over a single hairline rule. No panel, no shadow, no rounded ground. All three states of §2.12 still render and the link is in every one of them.
+- **The grid** is four columns on desktop and two on a phone, **4:5 plates**, no shadow and no tile background — the photograph sits on the paper. Rows are further apart than columns (40px against 28px), because a caption under every tile would otherwise read as a label for the plate below it. **Each tile carries a caption**: the name in the content face, then `Colour · Category` in 10px uppercase meta — the name is the model's words, the meta is our closed vocabulary, and the two are set accordingly.
+- **The floating action is an outlined pill**, not a filled circle: a solid disc of ink over the grid is the one object that would outweigh a photograph, and the word on it removes the need for an icon-only label.
+- **No cards and no shadows on a converted screen.** Separation comes from air and from hairlines. `--shadow-sm/md/lg` remain declared for the screens that have not been converted.
+- **Whitespace is still the three named intervals** `--spacing-hero`, `--spacing-region` and `--spacing-group` (`DECISIONS.md` 212, which survives its own supersession): `pt-hero` above a page title, `gap-region` between the parts of a screen, `gap-group` binding a label to what it labels. Tailwind's numeric scale stays available for composition inside a component. A piece of vertical space is owned by one layer of the layout — the container, which can see its neighbours, not the component, which can only see itself.
+- Every interactive element ≥ 44px tall. This is a phone app that happens to run in a browser. **The mockup draws a 33px chip and the built one is 44px**, which is the one place the implementation deliberately departs from the picture.
 
 ---
 

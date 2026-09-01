@@ -11,12 +11,12 @@ import { ActivatedRoute, Params, Router } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { ItemFilters, WardrobeStore } from '../../core/state/wardrobe.store';
-import { CATEGORIES, COLORS } from '../../shared/models/enums';
+import { CATEGORIES, COLORS, Category } from '../../shared/models/enums';
 import { AuthoredLine } from '../../shared/ui/authored-line';
 import { Button } from '../../shared/ui/button';
 import { EmptyState } from '../../shared/ui/empty-state';
 import { Skeleton } from '../../shared/ui/skeleton';
-import { FilterBar } from './filter-bar';
+import { CategoryCounts, FilterBar } from './filter-bar';
 import { ItemCard } from './item-card';
 import { PendingStrip } from './pending-strip';
 import { UploadSheet } from './upload-sheet';
@@ -83,25 +83,36 @@ function scale(value: string | null): number | undefined {
     WeatherStrip,
   ],
   template: `
-    <main class="mx-auto flex w-full max-w-5xl flex-col gap-region px-6 pt-hero pb-region">
+    <main
+      class="mx-auto flex w-full max-w-[1100px] flex-col gap-region px-6 pt-hero pb-region md:px-14"
+    >
       <header class="flex flex-col gap-group">
         <!-- The first line in the product addressed to the person using it, and
-             the first caller of both DR.9's prose face and 213's split: the
+             the first caller of both the prose face and 213's split: the
              sentence is ours and the name is theirs, so the name renders in the
              content face inside it. Above the title row rather than inside it,
-             so the count keeps the baseline it shares with the heading. -->
+             so the count keeps the baseline it shares with the heading.
+             Italic, because Atelier has one serif doing both authored roles
+             and the italic is what tells prose from display. -->
         <app-authored-line
-          class="block font-prose text-base text-ink-muted"
+          class="block font-prose text-xl text-ink-muted italic"
           [key]="greeting().key"
           [content]="greeting().content"
         />
 
-        <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h1 class="font-display text-4xl leading-tight tracking-tight">
+        <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+          <!-- 96px at the widths that can hold it, and the weight is the
+               point rather than the size: Cormorant at 300 is a hairline at
+               this scale, which is what keeps a word this large quiet. -->
+          <h1
+            class="font-display text-[56px] leading-[0.95] font-light tracking-[-0.02em] md:text-[96px]"
+          >
             {{ i18n.t('wardrobe.title') }}
           </h1>
           @if (!store.isLoading() && store.loadError() === null) {
-            <p class="font-display text-lg text-ink-muted tabular-nums">{{ countLabel() }}</p>
+            <p class="font-mono text-[13px] tracking-[0.02em] text-ink-muted tabular-nums">
+              {{ countLabel() }}
+            </p>
           }
         </div>
       </header>
@@ -134,7 +145,11 @@ function scale(value: string | null): number | undefined {
            the grid and the no-match state, and a bar that lived inside the
            branch it produces could not be cleared from there. -->
       @if (showFilters()) {
-        <app-filter-bar [filters]="store.filters()" (filtersChanged)="onFiltersChanged($event)" />
+        <app-filter-bar
+          [filters]="store.filters()"
+          [counts]="categoryCounts()"
+          (filtersChanged)="onFiltersChanged($event)"
+        />
       }
 
       @if (store.isLoading()) {
@@ -142,14 +157,16 @@ function scale(value: string | null): number | undefined {
              rather than as a spinner — the stylist's wait proved that at 2.8.
              The tiles need no aria-hidden of their own: Skeleton's host carries
              it, so what is announced here is the status line and nothing else.
+             The shape is the grid's, so the two move together: four columns
+             and a 4:5 plate, not the three squares this drew before.
              DECISIONS.md 217. -->
         <div class="animate-deferred flex flex-col gap-group">
-          <div class="grid grid-cols-3 gap-3 md:grid-cols-5">
+          <div class="grid grid-cols-2 gap-x-3.5 gap-y-6 md:grid-cols-4 md:gap-x-7 md:gap-y-10">
             @for (tile of loadingTiles; track tile) {
-              <app-skeleton class="aspect-square" radius="rounded-xl" />
+              <app-skeleton class="aspect-4/5" radius="rounded-[2px]" />
             }
           </div>
-          <p class="font-prose text-base" role="status" aria-live="polite">
+          <p class="font-prose text-base text-ink-muted italic" role="status" aria-live="polite">
             {{ i18n.t('wardrobe.loading') }}
           </p>
         </div>
@@ -161,6 +178,11 @@ function scale(value: string | null): number | undefined {
           </button>
         </div>
       } @else if (store.isEmpty() && store.pending().length === 0) {
+        <!-- These two states still render EmptyState, which still carries the
+             pre-Atelier faces and the pre-Atelier button: it is shared with
+             /saved, and converting it belongs to the commit that converts that
+             screen rather than to this one. It is the one part of this screen
+             the mockup does not yet reach. -->
         <app-empty-state
           [title]="i18n.t('wardrobe.empty.title')"
           [description]="i18n.t('wardrobe.empty.body')"
@@ -198,9 +220,13 @@ function scale(value: string | null): number | undefined {
              caller. DECISIONS.md 212. -->
         <div class="flex flex-col gap-group">
           @if (store.awaitingTags().length > 0) {
-            <p class="text-sm">{{ taggingLabel() }}</p>
+            <p class="font-prose text-base text-ink-muted italic">{{ taggingLabel() }}</p>
           }
-          <ul class="grid grid-cols-3 gap-3 md:grid-cols-5">
+          <!-- Four columns and no shadow, with more air between the rows than
+               between the columns: a caption sits under every tile now, and
+               equal gaps would let a name read as a label for the plate below
+               it as readily as for the one above. DECISIONS.md 219. -->
+          <ul class="grid grid-cols-2 gap-x-3.5 gap-y-6 md:grid-cols-4 md:gap-x-7 md:gap-y-10">
             @for (item of store.visible(); track item.id) {
               <li>
                 <app-item-card
@@ -219,14 +245,17 @@ function scale(value: string | null): number | undefined {
 
     <!-- The second entry point, and the only one once a wardrobe has anything
          in it: the empty state's CTA lives inside the @else if above and goes
-         away after the first upload. Positioned with end-6 rather than
-         right-6 — logical properties only, so Hebrew moves it without a
-         rewrite. -->
+         away after the first upload. An outlined pill rather than a filled
+         circle — a solid disc of ink over the grid is the one object on the
+         screen that would outweigh a photograph, and the word is what makes it
+         legible without an aria-label doing the work. Positioned with end-6
+         rather than right-6 — logical properties only, so Hebrew moves it
+         without a rewrite. -->
     @if (!sheetOpen()) {
       <button
         type="button"
         (click)="openSheet()"
-        class="fixed bottom-6 end-6 z-30 flex h-14 items-center rounded-full bg-ink px-6 text-surface shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        class="fixed bottom-6 end-6 z-30 inline-flex min-h-11 items-center rounded-full border border-ink bg-canvas px-6 text-[11px] font-medium tracking-[0.22em] text-ink uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:bottom-10 md:end-10"
       >
         <svg
           viewBox="0 0 24 24"
@@ -235,7 +264,7 @@ function scale(value: string | null): number | undefined {
           stroke-width="1.5"
           stroke-linecap="round"
           stroke-linejoin="round"
-          class="me-2 h-5 w-5"
+          class="me-2.5 h-3 w-3"
           aria-hidden="true"
         >
           <path d="M12 5v14M5 12h14" />
@@ -292,6 +321,30 @@ export class WardrobePage {
   protected readonly noMatches = computed(
     () => !this.store.isEmpty() && this.store.visible().length === 0,
   );
+
+  // Counted off `items()` and never off `total()`, which is the same split the
+  // header already lives with: `total` is the server's and knows about rows
+  // past the page of 200, where a per-category number can only ever be a count
+  // of what was loaded. So on a wardrobe above 200 garments the All chip and
+  // the header disagree, and the chip is the one telling the truth about the
+  // grid beneath it. `GET /items/stats` carries a `by_category` that would
+  // agree with the header instead — it is the insights panel's request, fetched
+  // for a different question, and a second consumer would tie this row to a
+  // request it does not need.
+  //
+  // A null category is counted nowhere rather than into a tenth bucket: a
+  // processing row has null tags, and a chip called "Untagged" would be a
+  // filter dimension nobody specified. It is why the nine counts can sum to
+  // less than All.
+  protected readonly categoryCounts = computed<CategoryCounts>(() => {
+    const byCategory = new Map<Category, number>();
+    for (const item of this.store.items()) {
+      if (item.category !== null) {
+        byCategory.set(item.category, (byCategory.get(item.category) ?? 0) + 1);
+      }
+    }
+    return { all: this.store.items().length, byCategory };
+  });
 
   // A normalised filter object carries only its active keys, so the key count
   // is the whole question. Kept here rather than on the store because it is a

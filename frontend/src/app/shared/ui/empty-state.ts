@@ -15,6 +15,11 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   },
   // h2 because both callers were h2 before the rework and the document outline
   // has to survive it.
+  //
+  // Atelier reaches this component through the tokens and no further: every
+  // colour here is `--color-*` and follows the palette automatically, while the
+  // faces and sizes are still DR.11a's. The typographic pass belongs to the
+  // /saved pitch, which is the other caller. DECISIONS.md 219.
   template: `
     <h2 class="font-display text-3xl leading-tight">{{ title() }}</h2>
 

@@ -16,6 +16,21 @@
       href="/fonts/fraunces-latin-variable.woff2"
       crossorigin
     />
+    <!-- Cormorant Garamond, Inter and JetBrains Mono are hosted rather than
+         self-hosted, which is DECISIONS.md 065 read the other way: 065 chose
+         self-hosting for one display face and one file, and Atelier is three
+         families with an italic and two weights among them. The two preconnects
+         are what stop the stylesheet's own font requests waiting on a second
+         handshake — the CSS is served from googleapis.com and the woff2 files
+         from gstatic.com, so both origins are opened before either is asked
+         for. `crossorigin` on the second only: font files are fetched in CORS
+         mode and the stylesheet is not. DECISIONS.md 219. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,400&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&display=swap"
+    />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
 
     <style>
