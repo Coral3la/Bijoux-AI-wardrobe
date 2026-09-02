@@ -1887,3 +1887,41 @@ flipped, not deleted), and the two paragraphs that carry the old reasoning:
 delete bullet, both of which 4.10 already marked as expired rather than
 rewriting them on that screen's behalf. Whoever next has reason to open the
 Itinerary should take it; it is smaller than the paragraph describing it.
+
+#### O-35 · `evening` is both a slot and an occasion — opened at task 4.11
+
+`Occasion` has held `evening` since Stage 0, meaning *what the look is for*.
+`Slot` takes `evening` as one of its two values at task 4.12, meaning *when in
+the day it is worn*. One word, two vocabularies, two meanings — and the four
+combinations are all legal: slot `evening` with occasion `work` is an evening
+work event, slot `day` with occasion `evening` is a daytime look in the going-out
+register, and slot `evening` with occasion `evening` is the ordinary dinner.
+
+**Nothing is broken by it.** The two are separate columns in the trip message,
+separate properties in `trip_packing_plan`, and separate fields on the wire;
+`looks.occasion` has meant the what-for since 2.7 and still does. The cost is a
+reader who meets both words in one sentence and has to be told they are different
+axes — `03-AI-CONTRACTS.md` now tells them — and a screen that would print
+`EVENING · EVENING` if nothing stopped it. **4.18 suppresses the doubled label**
+by comparing the two rendered strings and dropping the second when they match,
+which is a mitigation in one component and not a fix.
+
+**Why it is not fixed in this chain.** Dropping `evening` from `Occasion` is not
+a migration — `looks.occasion` is `TEXT` and `trips.occasions` is `JSONB`, and
+no migration ever created an `occasion` type (`02-DATA-MODEL.md`) — but it is
+also not free. Existing rows carry `occasion: "evening"`, `TripDay.slots[].occasion`
+is typed as the enum, and `LookResponse.occasion` is read off the column, so
+removing the value turns every trip and every saved look that used it into a
+`500` on the way out. What it needs is a replacement label, a data migration over
+two columns, the i18n keys, `enums.ts`, and the six-value count that four
+documents state in prose. **This item does not choose the replacement word**, on
+the same rule that keeps names out of an orientation: the vocabulary is the
+developer's, and `03-AI-CONTRACTS.md`'s styling principles read *occasion* in a
+way a badly chosen synonym would damage.
+
+**What closes it.** Either the rename above, taken as a task of its own in Stage
+5 with the data migration written first — or a decision that the collision is
+acceptable and permanent, recorded in `DECISIONS.md`, in which case 4.18's dedupe
+stops being a mitigation and becomes the answer. Both are cheap; leaving it
+undecided is what is not, because the next reader of either vocabulary will
+re-derive this paragraph.

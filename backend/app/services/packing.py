@@ -162,6 +162,10 @@ def _days(request: TripRequest, forecasts: Sequence[Forecast]) -> tuple[TripDay,
     return tuple(
         TripDay(
             day=index + 1,
+            # A literal until task 4.14, and true while it stands: `TripRequest`
+            # carries one occasion per day, so every entry this builds is a day
+            # slot. 4.14 makes both fields come from the request together.
+            slot="day",
             date=forecast.date,
             occasion=request.occasions[index],
             forecast_summary=summarize_forecast(forecast),

@@ -35,7 +35,14 @@ MIGRATION_0001 = Path(__file__).resolve().parents[2] / "alembic" / "versions" / 
 # Indexes are not constraints and are absent here — `Table.constraints` does not
 # hold them — so `idx_items_wardrobe` and the four `0004` and `0005` build are
 # named in exactly one place each and nothing compares them. That is the same seam this file exists
-# to close for constraints, still open one artefact along.
+# to close for constraints, still open one artefact along. **`0006`'s
+# `uq_looks_trip_day_slot` is in that half and not in the set below**, although
+# it is a uniqueness constraint by intent: it is spelled as a partial index
+# because a `UniqueConstraint` cannot carry a `WHERE`, so `Table.constraints`
+# does not hold it either. What covers it is a refusal test in
+# `tests/integration/test_trips_rows.py`, which is stronger than this comparison
+# rather than weaker — a unique index changes a result, where the four above
+# change only a plan.
 EXPECTED_NAMES = {
     "pk_users",
     "uq_users_email",
@@ -51,6 +58,7 @@ EXPECTED_NAMES = {
     "fk_look_items_look_id_looks",
     "fk_look_items_item_id_items",
     "ck_looks_feedback_values",
+    "ck_looks_slot_belongs_to_a_trip",
     "fk_looks_trip_id_trips",
     "pk_trips",
     "fk_trips_user_id_users",

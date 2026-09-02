@@ -58,6 +58,12 @@ class Look(Base):
     # time and emit ck_looks_ck_looks_feedback_values.
     __table_args__ = (
         CheckConstraint(f"feedback IN ({FEEDBACK_DOWN}, {FEEDBACK_UP})", name="feedback_values"),
+        # Both nullables in one statement and in both directions: a look off a
+        # trip has no slot, and a trip look never lacks one. The short name is
+        # deliberate — the convention expands it to
+        # ck_looks_slot_belongs_to_a_trip, which is what migration 0006 spells
+        # out literally as raw DDL for the reason the CHECK above is raw there.
+        CheckConstraint("(trip_id IS NULL) = (slot IS NULL)", name="slot_belongs_to_a_trip"),
         Index("idx_looks_user_id", "user_id"),
         # The referencing side of `0005`'s foreign key, which PostgreSQL does
         # not index for us — so without it the cascade from `trips` and a
@@ -65,6 +71,26 @@ class Look(Base):
         # argument, taken in the migration that creates the key rather than
         # deferred to the stage that reads it, because they are the same stage.
         Index("idx_looks_trip_id", "trip_id"),
+        # A day carries one look or two and never two of the same slot, which is
+        # this object and not the request validator. An Index with unique=True
+        # rather than a UniqueConstraint because a UNIQUE constraint cannot
+        # carry a WHERE.
+        #
+        # The predicate is scope rather than a fix for a collision: under the
+        # default NULLS DISTINCT an unconditional index would refuse nothing
+        # extra, since two NULLs are never equal. It says in the DDL that the
+        # invariant belongs to trip looks, keeps the index off every
+        # POST /looks/suggest row, and survives a future NULLS NOT DISTINCT
+        # that would otherwise refuse every second suggestion sharing a
+        # for_date. Migration 0006 carries the argument in full.
+        Index(
+            "uq_looks_trip_day_slot",
+            "trip_id",
+            "for_date",
+            "slot",
+            unique=True,
+            postgresql_where=text("trip_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -80,6 +106,11 @@ class Look(Base):
     trip_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE")
     )
+    # `day` or `evening`, and NULL off a trip — the CHECK above holds both
+    # halves. Typed `str` and not `Slot` for the reason `occasion` below is: the
+    # column is TEXT, the database refuses no value, and the enum is the wire's
+    # gate rather than the column's.
+    slot: Mapped[str | None] = mapped_column(Text)
 
     title: Mapped[str | None] = mapped_column(Text)
     occasion: Mapped[str | None] = mapped_column(Text)

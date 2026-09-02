@@ -141,6 +141,29 @@ a sentence rather than printing a zero, and a failed request removes it
 silently. **`AUDITS.md` O-16's `/items/stats` half is closed** — the endpoint has
 a reader — and its seven-query-parameter half is untouched. `DECISIONS.md` 188.
 
+### 3.4a Undo a wearing *(added 2026-09-02)*
+An escape hatch for the one control 3.4 built deliberately non-optimistic. A tap on *"I wore this"* is destructive by two measures: it increments `wear_count` on every garment in the look and it moves `last_worn_at` forward, and both feed 3.5's *recently worn* line and 3.6's insights. An accidental tap silently distorts both, with no way back.
+
+**New endpoint** — `DELETE /looks/{id}/wear`, guarded like `POST /looks/{id}/wear` (owner check, `IS DISTINCT FROM` on `worn_at` so a double-tap is a no-op): sets `worn_at` back to `NULL` and decrements `wear_count` by 1 on every item in the look, floored at 0.
+
+**Open decision** — `last_worn_at`. There is no history table (`DECISIONS.md` 184), so on undo the true previous value is unknown. Two options for the task to resolve: (a) if `wear_count` becomes 0 set it to `NULL`, otherwise leave it — the column becomes an *upper bound* rather than a truth, and the recency window over-counts by up to three days per item; (b) recompute it from the max `worn_at` across the user's other looks that share this look's items — one query per item, correct at the cost of a join. The stage file records the choice when the task lands.
+
+**Frontend** — the button on `/saved` prints a toast for ~5 seconds after a successful wear: *"Marked as worn today · Undo"*. The undo calls the new endpoint and, on success, restores the button to its pre-tap state through the same store path 3.4 wrote for the wear.
+
+### 3.5a Soften the *recently worn* hint *(added 2026-09-02)*
+Two changes to `learned_preferences` in `_stylist_shared.py`, one file, one paragraph of prompt output. Both routes that call it (`POST /looks/suggest` and `POST /trips/pack`) inherit both.
+
+**Skip singleton categories.** Before naming an item as recently worn, count what else the user owns in that category. If the count is at most `SINGLETON_THRESHOLD` (start at 1; the task may raise it to 2), drop the item from the list — a hint the model cannot honour without leaving a slot empty is worse than no hint. Categories are the nine in `_CATEGORY_NAMES`; the count runs against `styleable_wardrobe`'s output, which is already in hand.
+
+**Reword the line.** The current sentence is *"Recently worn (avoid repeating): ..."*, and 3.5's own paragraph notes that models over-index on it. Replace with something that ranks below style match — a first-cut candidate is *"Recently worn — prefer other items when the style match is comparable: ..."*. The exact phrasing is the task's to settle and to pin in a test against the assembled message string.
+
+### 3.6a Browse the never-worn *(added 2026-09-02)*
+A view-only extension of 3.6's insights panel. The panel already prints *"N of your M tagged items have never been worn"* — this task makes that number a link that opens the list behind it, so the user can act on it herself.
+
+**Two shapes considered, the task picks one.** (a) A modal or expanded row on `/wardrobe` filtered to `wear_count = 0`, rendered with the same `item-card` the grid uses. (b) A URL such as `/wardrobe?never_worn=true` that reuses the grid with a filter chip, so the state is bookmarkable and the back button behaves. Either way, no new endpoint: `GET /items` already accepts filters, and `wear_count` becomes one of them.
+
+**Not** a stylist change. The list neither hides nor promotes items to the suggester — it exists purely to answer the question *"which ones are they?"* that the count invites.
+
 ---
 
 ## Acceptance criteria
@@ -151,6 +174,9 @@ a reader — and its seven-query-parameter half is untouched. `DECISIONS.md` 188
 - [ ] After 3 rated looks, the preferences block appears in the prompt — assert it in an integration test against the assembled message string
 - [ ] Recently worn items are named in the prompt as items to avoid
 - [x] The insights panel shows a correct never-worn count
+- [ ] `DELETE /looks/{id}/wear` reverses a wearing and the toast on `/saved` calls it — 3.4a
+- [ ] A singleton-category item is not named in the *recently worn* line, and the reworded line is asserted against the assembled prompt — 3.5a
+- [ ] The never-worn count on the insights panel opens a browsable list of those items — 3.6a
 
 ## Commit checkpoints
 

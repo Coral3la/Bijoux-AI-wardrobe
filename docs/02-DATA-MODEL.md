@@ -401,6 +401,7 @@ CREATE TABLE looks (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   trip_id       UUID REFERENCES trips(id) ON DELETE CASCADE,
+  slot          TEXT,                     -- 'day' or 'evening'; NULL off a trip
 
   title         TEXT,
   occasion      TEXT,
@@ -412,7 +413,9 @@ CREATE TABLE looks (
   feedback      SMALLINT CHECK (feedback IN (-1, 1)),
   worn_at       DATE,                     -- the most recent wearing; see below
 
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CHECK ((trip_id IS NULL) = (slot IS NULL))
 );
 
 CREATE TABLE look_items (
@@ -425,6 +428,9 @@ CREATE TABLE look_items (
 
 CREATE INDEX idx_looks_user_id ON looks (user_id);
 CREATE INDEX idx_look_items_item_id ON look_items (item_id);
+
+CREATE UNIQUE INDEX uq_looks_trip_day_slot
+  ON looks (trip_id, for_date, slot) WHERE trip_id IS NOT NULL;
 ```
 
 **Both indexes are migration `0004`'s, not `0002`'s.** They were foreseen when
@@ -446,6 +452,63 @@ over. The sentence above is about the *lookups 2.7 and 2.9 make*, and it is
 still true of those; what it did not anticipate is a second foreign key. Built
 in the migration that creates the key rather than deferred to the stage that
 reads it, because 4.1 and its reader are the same stage.
+
+**`slot` is migration `0006`'s, and it exists because two rows are otherwise
+indistinguishable.** A trip day carries one look or two — `day` and `evening` —
+and both are rows in this table with the same `trip_id` and the same `for_date`.
+Nothing already on the row separates them. **`occasion` cannot**: both slots take
+a value from the same six, and a day of meetings followed by drinks with the same
+colleagues is `work` twice. **`created_at` and `id` cannot**: `id` is
+`gen_random_uuid()`, and `POST /trips/{trip_id}/swap` deletes a look and inserts
+its replacement, so the evening look becomes the newer row the first time
+anybody changes its shoes. **Position in the response cannot**, because that
+ordering is what needs the answer in the first place. Four readers do: the
+`days[].slots` join, the swap's lookup of the look being edited, the order
+`packing_list.item_ids` is built in — which `reuse_summary`'s tie-break reads —
+and the Day/Evening cards themselves. So the slot is a column and not a
+derivation. `DECISIONS.md` 225.
+
+**It is `TEXT` and no `ENUM`, exactly as `occasion` is**, and for the reason
+given under that vocabulary two sections up: nothing in the database refuses a
+value, the Pydantic schema is the gate, and an unknown slot is a `422` before any
+row is written. What the two constraints below refuse is not a bad *value* but a
+bad *shape* — the two states that would make a packed trip unreadable.
+
+**`CHECK ((trip_id IS NULL) = (slot IS NULL))` ties the two nullables together
+in both directions.** A look with no trip has no slot, which is every look
+`POST /looks/suggest` has ever written and the ordinary case rather than a
+missing value; a look with a trip always has one, so no reader has to decide what
+an unslotted trip look means. It is the only constraint in this table that reads
+two columns, and it is raw DDL in the migration for `0004`'s measured reason —
+`op.create_check_constraint` applies the naming convention to a name that already
+carries it and emits `ck_looks_ck_looks_…`.
+
+**`uq_looks_trip_day_slot` is what makes *never `day` twice on one day* a fact of
+the database rather than of the request validator.** `UNIQUE (trip_id, for_date,
+slot) WHERE trip_id IS NOT NULL`.
+
+**The predicate is scope and not a collision fix**, which is worth stating
+because the obvious reading is wrong: under PostgreSQL's default `NULLS
+DISTINCT` two NULLs are never equal, so an unconditional index would refuse
+nothing extra — every detached look and every `POST /looks/suggest` row would
+sit in it harmlessly. `WHERE trip_id IS NOT NULL` earns its place four other
+ways. The invariant is about a **trip's** shape, and the DDL says so rather than
+leaving it to be derived from NULL semantics. The index covers trip looks alone,
+which is the smaller structure and the cheaper write on the path every
+suggestion takes. A future `NULLS NOT DISTINCT` — available since PostgreSQL 15,
+and flippable for reasons having nothing to do with slots — would otherwise
+begin refusing every second suggestion that shares a `for_date`, silently. And a
+wider promise in the DDL invites a wider assumption from the next reader.
+
+It survives both writers as they are already ordered: `_write` detaches the marked looks and deletes the rest
+before inserting any, and `_replace_look` detaches or deletes the one look it is
+replacing before inserting its successor. **This is not the index `AUDITS.md`
+O-25 argues against building early.** That argument is about lookups — an index
+chosen against no measured query — and this object is a constraint that happens
+to be spelled as an index, because a `UNIQUE` constraint cannot carry a `WHERE`.
+It is built with the column it constrains rather than with a reader, for the same
+reason the `CHECK` is: an invariant added after the rows exist is an invariant
+that has to be proved before it can be declared.
 
 **`feedback` is `-1` or `1` and never `0`.** The column has no default, so an
 unrated look is `NULL`: "nobody has rated this" and "somebody rated it
@@ -502,7 +565,7 @@ CREATE TABLE trips (
   start_date   DATE NOT NULL,
   end_date     DATE NOT NULL,
 
-  occasions    JSONB NOT NULL DEFAULT '[]',   -- [{"day":1,"occasion":"work"}, …]
+  occasions    JSONB NOT NULL DEFAULT '[]',   -- [{"day":1,"slot":"day","occasion":"work"}, …]
   forecast     JSONB,                          -- the parsed per-day list; see below
   packing_list JSONB,                          -- {"item_ids":[…],"reuse_summary":{…}} — see below
   notes        TEXT,
@@ -533,6 +596,19 @@ on its own — see the `looks` section above.
 **`looks.trip_id` is nullable and stays nullable.** Every look written before
 Stage 4 belongs to no trip and `POST /looks/suggest` goes on writing them that
 way, so `NULL` is the ordinary case rather than a missing value.
+
+**`occasions` carries one or two entries per day from task 4.11.** A day is one
+entry — `day` — or two, `day` then `evening`, in that order; never zero, and
+never `day` twice. The column enforces none of it, exactly as it enforces nothing
+else (see `packing_list` below): `TripPackRequest` is the gate on the way in,
+`uq_looks_trip_day_slot` is the gate on the rows the plan becomes, and the two
+agree because one list writes both. **Migration `0006` backfills `"slot": "day"`
+into every existing row** rather than letting a reader default it.
+`POST /trips/{id}/repack` rebuilds its request from this column, so a reader that
+filled in the missing key would be a second place in the project that knows the
+pre-slot shape — kept for ever, against a row set that stops existing after one
+`UPDATE`. Every trip packed before `0006` is a trip of `day` slots, which is what
+it always was; the backfill writes that down rather than leaving it inferred.
 
 **`forecast` holds the parsed days, not the provider's body, and 4.3 is what
 settled it.** This line read *"cached Open-Meteo response"*, which reads as the
@@ -577,12 +653,31 @@ through an i18n key and `05-FRONTEND-SPEC.md` §7 needs the same numbers in two
 places — the header's *"8 items · 4 looks"* and the reuse line under the packing
 list. Storing the numbers lets the frontend render both from one row and lets a
 second language render them at all. `item_count` is `len(item_ids)` and
-`look_count` is the number of days, both stored rather than derived so that the
-column answers the header without the looks being loaded. **`most_reused` is
+`look_count` is the number of **looks**, both stored rather than derived so that
+the column answers the header without the looks being loaded. *That read "the
+number of days" until task 4.11, and the two were the same number until a day
+could carry a second look.* They part company from `0006`: a five-day trip with
+two evenings out is five days and seven looks, and it is the looks this field
+counts. That is also where the reuse story gets stronger rather than weaker —
+`item_count` holding still while `look_count` climbs is what reuse looks like as
+arithmetic, and it needs no new field to say so. **`most_reused` is
 `null` when nothing is worn twice**, which is a real state on a short trip and
 not an error; where several items tie, it is the one worn on the most days and
 then the first in the packing list, so the value is a function of the plan and
 not of dictionary ordering.
+
+**`most_reused.days` counts days and not looks, and 4.11 is where those stopped
+being one number.** A garment worn to the office and again to dinner on Monday,
+and on no other date, is worn on **one** day: `05-FRONTEND-SPEC.md` §7 renders
+this number into *"You'll wear the camel trousers on 3 days"*, so counting looks
+here would print a false sentence on the only line in the product that makes the
+feature land. The consequence is taken deliberately rather than papered over —
+that garment reports one day, fails the `> 1` test, leaves `most_reused` as
+`null`, and the reuse line is omitted altogether, which is correct for a line
+about days. **No field is added for cross-slot reuse.** A `slot_reuse` count
+beside these three would have no renderer, and a field with no reader is struck
+in this project rather than shipped: `confidence`, `look_id`, `day` and
+`occasion` all went that way at 2.4, 2.5 and 4.3. `DECISIONS.md` 225.
 
 **Written by `pack_trip` at 4.3 and persisted by `POST /trips/pack` at 4.4.**
 The service computes it and returns it unpersisted, which is what lets the
@@ -628,6 +723,7 @@ One Alembic migration per stage, never a single mega-migration.
 | `0003_vocabulary` | 2 | `item_category` gains `swimwear` and `sleepwear` |
 | `0004_feedback` | 3 | `looks.feedback`, `looks.worn_at`, `items.wear_count`, `items.last_worn_at`, and O-25's two indexes |
 | `0005_trips` | 4 | `trips`, `looks.trip_id`, `idx_trips_user_id`, `idx_looks_trip_id` |
+| `0006_look_slot` | 4 | `looks.slot`, its `CHECK`, `uq_looks_trip_day_slot`, and two backfills |
 
 **`0003` renumbered the two that follow it**, which is what a migration inserted
 mid-project costs; it was scheduled after `0002_looks` precisely so that the
@@ -642,6 +738,16 @@ the transaction `alembic/env.py` opens was **measured on PostgreSQL 18.6 at
 2.6a**, not inferred from the version number.
 
 Stage 3's columns were shown inline in the table definitions above for readability before they existed, and **migration `0004` built them at task 3.1**, so the two now agree. The cut this paragraph anticipated did not happen. Had it, `0004` would indeed never have been written: the one task that survives the cut is 3.2, and both columns it needs — `is_saved` and `title` — are `0002`'s. **`looks.trip_id` was the case this paragraph described, one stage further out, and task 4.1 discharged it.** The `looks` DDL above shows it as a foreign key to a table that did not exist until Stage 4: migration `0002` created `looks` **without** it, and `0005` adds it alongside `trips` — one revision, because a `looks.trip_id` pointing at no table is not a schema. Added at the 2026-08-18 audit, when the migrations table already said so and this paragraph did not; closed at 4.1.
+
+**`0006` is the first migration in this project that carries data as well as
+schema**, and both `UPDATE`s are the same statement said twice: every look with a
+`trip_id` is a `day` look, and every entry in every `trips.occasions` is a `day`
+entry. They run between the `ADD COLUMN` and the two constraints, because the
+`CHECK` is false for every existing trip look until the first of them has run.
+**It is also Stage 4's second revision**, against the "one migration per stage"
+line at the head of this section: `0005` is the stage's migration and `0006` is a
+widening of the feature it built, taken as a revision of its own because one
+already applied to a database cannot be edited.
 
 Migrations are written by hand from the DDL above, never autogenerated — autogenerate does not faithfully reproduce `CITEXT`, partial indexes or `CHECK` constraints. Alembic reads `DATABASE_URL` from `app.core.config.settings`, never from `alembic.ini`, which is committed to the repository.
 

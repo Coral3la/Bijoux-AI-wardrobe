@@ -290,7 +290,17 @@ def _write(
         # unqualified and still take only the unmarked ones. `look_items` goes
         # with them through `0002`'s own cascade, which is a second hop no line
         # of `0005` mentions.
-        db.execute(update(Look).where(Look.trip_id == trip.id, _MARKED).values(trip_id=None))
+        #
+        # **The detach clears `slot` with `trip_id`**, from migration `0006`:
+        # `ck_looks_slot_belongs_to_a_trip` reads the two together, so a row
+        # keeping its slot on the way out of a trip is a row the database
+        # refuses. The three columns the detach exists to preserve —
+        # `is_saved`, `feedback`, `worn_at` — are still named by neither
+        # statement, and the slot it drops is a fact no reader has: a look on
+        # `/saved` has no trip to be an evening of.
+        db.execute(
+            update(Look).where(Look.trip_id == trip.id, _MARKED).values(trip_id=None, slot=None)
+        )
         db.execute(delete(Look).where(Look.trip_id == trip.id))
 
     db.flush()
@@ -307,6 +317,13 @@ def _write(
             # struck from both AI schemas at 4.3 and the value that is certainly
             # legal is the one the user sent. `DECISIONS.md` 193.
             occasion=packed.occasion,
+            # A literal until task 4.15, and true while it stands: every trip
+            # look written today is a `day` look, because no request can ask for
+            # anything else until `occasions` carries a slot. Written as the raw
+            # string the way `occasion` is above rather than through `Slot`,
+            # because a literal that is about to become a variable is clearer
+            # than an enum member standing in for one.
+            slot="day",
             reasoning=packed.reasoning,
             weather_note=packed.weather_note,
             # The day this look is *for*, which is the column `looks` has. The
@@ -627,9 +644,11 @@ def _replace_look(
     `UPDATE` claims the look out of the trip when it was saved, rated or worn, so
     the `DELETE` under it needs no `_MARKED` of its own — it is keyed on
     `trip_id` as well as `id`, and a row the `UPDATE` just detached no longer
-    matches. Writing `trip_id = NULL` is the whole of the detach: `is_saved`,
-    `feedback` and `worn_at` are never named by either statement, so a look on
-    `/saved` keeps its heart, its rating and its wearing exactly as they were.
+    matches. The detach writes `trip_id = NULL` **and `slot = NULL`**, which
+    migration `0006` requires of it — `ck_looks_slot_belongs_to_a_trip` reads
+    the two columns together — and nothing else: `is_saved`, `feedback` and
+    `worn_at` are never named by either statement, so a look on `/saved` keeps
+    its heart, its rating and its wearing exactly as they were.
 
     **Unlike a repack, this detach leaves no gap.** The new look takes the day in
     the same transaction, so `days[].look_id` resolves to it rather than to
@@ -637,7 +656,7 @@ def _replace_look(
     and not this one's. And `items.wear_count` is not reversed by the detach, for
     the reason it never is: a garment worn in Berlin was worn.
     """
-    db.execute(update(Look).where(Look.id == old.id, _MARKED).values(trip_id=None))
+    db.execute(update(Look).where(Look.id == old.id, _MARKED).values(trip_id=None, slot=None))
     db.execute(delete(Look).where(Look.id == old.id, Look.trip_id == trip.id))
 
     row = Look(
@@ -648,6 +667,10 @@ def _replace_look(
         # AI schemas at 4.3, so the value that is certainly legal is the one the
         # user sent. `DECISIONS.md` 193.
         occasion=occasion,
+        # `_write`'s literal, for `_write`'s reason: no request can name a slot
+        # until 4.15, so every look this endpoint replaces is a `day` look and
+        # so is its replacement.
+        slot="day",
         reasoning=answer.reasoning,
         weather_note=answer.weather_note,
         # Computed from the ordinal rather than copied from `trips.forecast`'s

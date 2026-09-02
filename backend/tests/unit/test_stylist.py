@@ -174,16 +174,26 @@ def test_a_look_carries_exactly_the_four_documented_keys() -> None:
     ]
 
 
-def test_a_trip_look_is_the_same_four_keys_with_a_day_in_front() -> None:
+def test_a_trip_look_is_the_same_four_keys_with_a_day_and_a_slot_in_front() -> None:
     # One shared dict rather than two literals, so a change to what a look holds
-    # cannot land on one schema and not the other. `DECISIONS.md` 189, 193.
+    # cannot land on one schema and not the other. `DECISIONS.md` 189, 193 — and
+    # 4.13 is where that mitigation was paid for, with a second trip-only field.
     assert list(stylist.TRIP_SCHEMA["schema"]["properties"]["looks"]["items"]["properties"]) == [
         "day",
+        "slot",
         "title",
         "item_ids",
         "reasoning",
         "weather_note",
     ]
+
+
+def test_the_slot_property_admits_exactly_the_two_the_vocabulary_holds() -> None:
+    # An `enum` where `missing_pieces.category` deliberately has none: this one
+    # has a reader — rule 10 matches the pair against the request — so a third
+    # value could match nothing and refusing it in the schema is free.
+    slot = stylist.TRIP_SCHEMA["schema"]["properties"]["looks"]["items"]["properties"]["slot"]
+    assert slot == {"type": "string", "enum": ["day", "evening"]}
 
 
 def test_the_trip_schema_is_named_for_the_contract_it_answers() -> None:
@@ -837,9 +847,10 @@ JEANS_TWO = _item("SHTS47", category="bottom", subcategory="shorts")
 TRIP_WARDROBE = [TOP, JEANS, BOOTS, BLAZER, TOP_TWO, JEANS_TWO]
 
 
-def _trip_day(number: int, **overrides: Any) -> stylist.TripDay:
+def _trip_day(number: int, slot: str = "day", **overrides: Any) -> stylist.TripDay:
     fields: dict[str, Any] = {
         "day": number,
+        "slot": slot,
         "date": datetime.date(2026, 3, 13 + number),
         "occasion": "work",
         "forecast_summary": SUMMARY,
@@ -857,13 +868,68 @@ def _trip_context(days: int = 4, **overrides: Any) -> stylist.TripContext:
     return stylist.TripContext(**(fields | overrides))
 
 
-def test_the_trip_message_carries_one_line_per_day_in_the_documents_order() -> None:
+def test_the_trip_message_carries_one_line_per_slot_in_the_documents_order() -> None:
     message = stylist._user_message(WARDROBE, _trip_context(days=2))
 
     assert "Destination: Berlin" in message
     assert "Dates: 2026-03-14 to 2026-03-15 (2 days)" in message
-    assert f"Day 1 | work | {SUMMARY} | {RULE}" in message
-    assert f"Day 2 | work | {SUMMARY} | {RULE}" in message
+    assert f"Day 1 day | work | {SUMMARY} | {RULE}" in message
+    assert f"Day 2 day | work | {SUMMARY} | {RULE}" in message
+    assert "Build one look per line above — 2 looks for 2 days." in message
+
+
+def test_a_date_with_an_evening_writes_two_lines_and_counts_as_one_day() -> None:
+    # The two numbers part company here: three looks over two dates. The date
+    # line counts days because it is about the trip's length; the build line
+    # counts looks because that is what is being asked for.
+    context = stylist.TripContext(
+        destination="Berlin",
+        days=(_trip_day(1), _trip_day(1, slot="evening", occasion="evening"), _trip_day(2)),
+        reuse_target=12,
+    )
+
+    message = stylist._user_message(WARDROBE, context)
+
+    assert "Dates: 2026-03-14 to 2026-03-15 (2 days)" in message
+    assert f"Day 1 day | work | {SUMMARY} | {RULE}" in message
+    assert f"Day 1 evening | evening | {SUMMARY} | {RULE}" in message
+    assert "Build one look per line above — 3 looks for 2 days." in message
+
+
+def test_both_slots_of_one_date_carry_the_same_weather_sentence() -> None:
+    # One forecast row per calendar day, so the evening is dressed against the
+    # afternoon's numbers. What separates the two looks is the occasion, which
+    # moves formality rather than warmth. `DECISIONS.md` 225.
+    context = stylist.TripContext(
+        destination="Berlin",
+        days=(
+            _trip_day(1, weather_rule=COLD_RULE),
+            _trip_day(1, slot="evening", occasion="evening", weather_rule=COLD_RULE),
+        ),
+        reuse_target=12,
+    )
+
+    # `Day ` rather than the pipe: the serialised wardrobe above is pipe-separated
+    # too, and this is asking about the day list alone.
+    lines = [
+        line
+        for line in stylist._user_message(WARDROBE, context).splitlines()
+        if line.startswith("Day ")
+    ]
+
+    assert len(lines) == 2
+    assert all(line.endswith(COLD_RULE) for line in lines)
+
+
+def test_the_packing_constraint_asks_for_reuse_between_the_slots_of_one_day() -> None:
+    # Prompt text and not a numbered rule: a hiking day before a formal dinner
+    # has no honest shared garment, and refusing that answer would spend the
+    # retry and then `502` on the one plan that obeyed every other instruction.
+    # `DECISIONS.md` 193's argument for the reuse target, one slot along.
+    message = stylist._user_message(WARDROBE, _trip_context(days=2))
+
+    assert "Where a day has both a day and an" in message
+    assert "evening look, reuse items between the two wherever the weather rule and" in message
 
 
 def test_the_trip_message_states_the_reuse_target_as_a_number() -> None:
@@ -894,10 +960,31 @@ def test_a_trip_message_carries_the_wardrobe_and_the_profile_like_any_other() ->
 
 
 @pytest.mark.asyncio
-async def test_the_fake_builds_one_look_per_day_numbered_in_order(fake: None) -> None:
+async def test_the_fake_builds_one_look_per_entry_numbered_in_order(fake: None) -> None:
     answer = await stylist.suggest_looks(WARDROBE, _trip_context(days=3))
 
-    assert [look.day for look in answer.looks] == [1, 2, 3]
+    assert [(look.day, look.slot) for look in answer.looks] == [
+        (1, "day"),
+        (2, "day"),
+        (3, "day"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_the_fake_gives_a_two_slot_day_two_different_looks(fake: None) -> None:
+    # The rotation is keyed on the entry index and not on `day.day`, which is
+    # what stops a date's two looks being identical — rule 11 refuses that, and
+    # the flag exists to make E2E journeys deterministic rather than to `502`.
+    context = stylist.TripContext(
+        destination="Berlin",
+        days=(_trip_day(1), _trip_day(1, slot="evening", occasion="evening")),
+        reuse_target=12,
+    )
+
+    answer = await stylist.suggest_looks(TRIP_WARDROBE, context)
+
+    assert [(look.day, look.slot) for look in answer.looks] == [(1, "day"), (1, "evening")]
+    assert len({frozenset(look.item_ids) for look in answer.looks}) == 2
 
 
 @pytest.mark.asyncio

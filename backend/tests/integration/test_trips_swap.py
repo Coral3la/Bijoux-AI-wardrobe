@@ -105,6 +105,11 @@ def plan(wardrobe: dict[str, Item], days: int) -> StylistResponse:
     looks = tuple(
         StylistLook(
             day=day,
+            # `slot` is required on the trip path from task 4.13 — rule 10 matches
+            # the `(day, slot)` pair against what the request asked for, and a
+            # look carrying one and not the other is refused before any other
+            # trip rule runs. `day` while nothing can request an evening.
+            slot="day",
             title=f"Day {day}",
             item_ids=tuple(wardrobe[name].short_id for name in OUTFITS[day - 1]),
             reasoning="The straight jean balances the oversized shirt.",
@@ -851,7 +856,14 @@ def test_a_day_with_no_look_is_item_not_in_look(
     before = client.get(f"/api/v1/trips/{trip_id}", headers=authorization(user)).json()
     orphan = db.scalar(select(Look).where(Look.id == uuid.UUID(day_look(before, DAY)["id"])))
     assert orphan is not None
+    # Both columns, because `0006`'s CHECK reads them together: a look leaving a
+    # trip with its slot still set is a row the database refuses, which is what
+    # `_write` and `_replace_look` do in one `UPDATE`. Detaching by hand here
+    # rather than through a repack, so the day is empty without a second model
+    # call — the same shortcut this test has always taken, now with the second
+    # column the detach owns.
     orphan.trip_id = None
+    orphan.slot = None
     db.commit()
 
     response = swap(client, user, authorization, trip_id, item_id=str(wardrobe[REPLACED].id))

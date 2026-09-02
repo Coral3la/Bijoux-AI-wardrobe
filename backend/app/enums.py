@@ -155,7 +155,27 @@ class Occasion(Vocabulary):
     TRAVEL = "travel"
 
 
-# The third that is not a column type, and the only one that is a wire value
+# Which part of a trip day a look is worn in, and the fourth vocabulary here
+# that is not a column type: `looks.slot` is `TEXT` and `trips.occasions` is
+# `JSONB`, so nothing in the database refuses a value outside these two — what
+# migration `0006` does refuse is a *shape*, a trip look with no slot or a slot
+# with no trip.
+#
+# **A slot is `when` and an occasion is `what for`**, and the two are
+# independent axes that overlap by one word: `Slot.EVENING` with
+# `Occasion.WORK` is an evening work event, and `looks.occasion` always holds
+# the what-for. `AUDITS.md` O-35 carries the collision; `03-AI-CONTRACTS.md`
+# states the distinction for the model. `DECISIONS.md` 225.
+#
+# The order is load-bearing twice over: it is the order `POST /trips/pack`
+# requires the entries of one day to arrive in, and the order the trip page
+# stacks its cards in.
+class Slot(Vocabulary):
+    DAY = "day"
+    EVENING = "evening"
+
+
+# The fourth that is not a column type, and the only one that is a wire value
 # before it is anything else. `look_items.role` is `TEXT` and stays `NULL`
 # (`DECISIONS.md` 175), so what these six validate is
 # `LookSuggestRequest.replace_role` — the same shape as `Occasion` one task

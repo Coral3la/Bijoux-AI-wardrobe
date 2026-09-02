@@ -124,6 +124,16 @@ export type Condition = (typeof CONDITIONS)[number];
 export const OCCASIONS = ['casual', 'work', 'evening', 'sport', 'formal', 'travel'] as const;
 export type Occasion = (typeof OCCASIONS)[number];
 
+// Which part of a trip day a look is worn in. Not an item column either, and
+// nothing in the database refuses a value outside it: `looks.slot` is TEXT, so
+// the request schema on POST /trips/pack and POST /trips/{id}/swap is the whole
+// of the enforcement. A slot is *when* and an occasion is *what for*, and the
+// two overlap on `evening` without meaning the same thing — AUDITS.md O-35, and
+// §7's kicker prints one label where the two match. The order is the order a
+// day's entries must be sent in and the order its cards are stacked in.
+export const SLOTS = ['day', 'evening'] as const;
+export type Slot = (typeof SLOTS)[number];
+
 // Not an item column either, and the only list here that is a wire value
 // before it is anything else: `look_items.role` is TEXT and stays NULL
 // (DECISIONS.md 175), so what these six validate is `replace_role` on

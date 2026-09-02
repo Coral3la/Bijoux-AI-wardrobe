@@ -109,6 +109,11 @@ def make_trip_look(db: Session) -> Callable[..., Look]:
             trip_id=trip.id,
             title=f"Day {day}",
             occasion="work",
+            # `0006`'s CHECK reads `trip_id` and `slot` together, so a trip look
+            # planted directly carries one. `day` because until task 4.15 no
+            # request can produce anything else — the routes write the same
+            # literal.
+            slot="day",
             reasoning="The straight jean balances the oversized shirt.",
             weather_note="13°C — a light layer.",
             for_date=trip.start_date + timedelta(days=day - 1),

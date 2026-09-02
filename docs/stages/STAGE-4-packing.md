@@ -6,7 +6,13 @@
 
 ## Goal
 
-Enter a destination and dates, get one outfit per day built from the real wardrobe against the real forecast, plus a minimal packing list that maximises item reuse.
+Enter a destination and dates, get an outfit for every occasion of every day —
+one, or two where the evening is different — built from the real wardrobe against
+the real forecast, plus a minimal packing list that maximises item reuse.
+
+*This read "one outfit per day" through 4.10. Tasks 4.11 to 4.18 widen a day to
+one or two slots, `day` and `evening`, because a person wears one thing to the
+office and changes for dinner; `DECISIONS.md` 225.*
 
 **This is the signature feature.** It is the sentence that describes the project — *it packs your suitcase from your closet* — and it is the hardest thing here to fake without a working system underneath. Protect its schedule.
 
@@ -275,11 +281,167 @@ delete still returns to `/wardrobe` — `AUDITS.md` **O-34** is that follow-up.
 
 `DECISIONS.md` 224, `AUDITS.md` O-34.
 
+### 4.11 The slot in the documents
+
+`02`, `03`, `04`, `05`, this file and `PROGRESS.md`, with `DECISIONS.md` 225. No
+code, no migration, no test — **4.3's shape**, which landed its contract in a
+commit of its own before `pack_trip` existed, and the reason is the same: the
+seven tasks below are a schema change, a model contract, an arithmetic change,
+three route changes and two screens, and the cost of finding out at 4.15 that
+`days[].slots` should have been something else is six files rather than one
+paragraph.
+
+**Acceptance criteria — 4.11's own:**
+
+- [x] Every document that describes a day's occasion describes a slot
+- [x] No code, no migration and no test changes in the commit
+
+### 4.12 Migration 0006 and the `Slot` vocabulary
+
+`looks.slot`, `CHECK ((trip_id IS NULL) = (slot IS NULL))` as raw DDL, and the
+partial `uq_looks_trip_day_slot`. Two backfills: every look with a `trip_id`
+becomes a `day` look, and every entry in every `trips.occasions` gains
+`"slot": "day"`. `Slot` joins `app/enums.py` beside `Occasion` and is mirrored in
+`enums.ts`.
+
+**The `CHECK` is false for every existing trip look until the first backfill has
+run**, so the order inside `upgrade()` is column, data, then constraints — which
+is the one thing in this migration that cannot be reordered.
+
+**It touches `routes/trips.py`, which this line did not anticipate.** The CHECK
+binds four statements the moment it lands: `_write` and `_replace_look` insert
+trip looks and now write `slot="day"` — a literal that is true until 4.15,
+because no request can name a slot before then — and both detach statements now
+clear `slot` alongside `trip_id`, or the constraint refuses the row on the way
+out of the trip. Two integration fixtures that plant a trip look directly carry
+the same literal. That is the migration's own blast radius rather than scope
+taken from a later task, and the sentence it makes false —
+`04-API-SPEC.md`'s *"`trip_id = NULL`, and no other column touched"* — is
+amended here rather than deferred.
+
+**The downgrade refuses rather than flattening an evening**, which was measured
+at 4.12 and is the one decision here `DECISIONS.md` 225 does not carry. Drop the
+column with a two-slot day in the database and its two looks become
+indistinguishable rows; the next upgrade gives both `day` and
+`uq_looks_trip_day_slot` cannot build, leaving the database stuck at `0005`. So
+`downgrade()` counts the surviving evenings first and raises with the two
+statements that clear them. It bites from 4.15 and not before, because nothing
+can write an evening yet.
+
+**Acceptance criteria — 4.12's own:**
+
+- [x] `alembic upgrade head` then `downgrade` then `upgrade` is clean on a
+      database holding a packed trip — run against `TEST_DATABASE_URL` over a
+      trip planted at `0005`, and again over the empty schema
+- [x] A second `day` look for one date is refused by the database, not by Python
+- [x] A look with a `trip_id` and no slot is refused, and so is a slot with no trip
+- [x] Every look and every `occasions` entry written before `0006` reads as `day`
+- [x] A downgrade refuses while an evening survives, and leaves the revision where
+      it was
+
+### 4.13 The stylist half
+
+`trip_packing_plan` gains `slot`; the trip user message becomes one line per
+`(day, slot)` with the widened packing constraint; rules 4, 6 and 10 read the
+requested pairs; the trip path's violation prefix splits into `look N:` before
+rule 10 and `day N slot:` after it.
+
+Pure, unit-tested, no database and no route. **The prefix split moves pinned
+strings** — the trip-path assertions in `tests/unit/test_look_validation.py` —
+and that is the visible half of this task.
+
+**Acceptance criteria — 4.13's own:**
+
+- [x] Two looks answered for one `(day, slot)` fail rule 10, with the pair named
+- [x] A look for a slot that was never requested fails rule 10 — pinned against
+      the rule, because rule 4 makes it unreachable through the validator
+- [x] Each look is judged against its own day's rule, and both slots of a date
+      against the same one
+- [x] The single-day path's rules, order and violation strings are untouched
+
+### 4.14 `pack_trip` and the reuse arithmetic
+
+`TripRequest.occasions` becomes the `(day, slot, occasion)` triples;
+`PackedLook` carries its slot; `reuse_summary`'s `look_count` counts looks and
+`most_reused.days` counts **distinct days**.
+
+**The two numbers stop being the same number here**, which is why this is not
+4.13's commit: a contract that is wrong fails loudly on the next model call, and
+arithmetic that is wrong prints a plausible sentence under a packed trip.
+
+**Acceptance criteria — 4.14's own:**
+
+- [ ] A garment worn in both slots of one day and nowhere else reports one day
+      and leaves `most_reused` null
+- [ ] `look_count` exceeds the day count exactly when a day has two slots
+- [ ] The reuse target is still computed from days
+
+### 4.15 The trip routes
+
+`TripPackRequest`'s validator takes the new invariant; `TripDay` grows
+`slots[]` and loses `occasion` and `look_id`; `_by_day` is keyed by `(day, slot)`;
+`_write` writes `looks.slot`; `_looks` orders by `for_date` then slot. Pack,
+repack, list and read.
+
+**`_by_day` returns `dict[int, uuid.UUID]` today and silently keeps one of two
+colliding looks**, which is the concrete failure this task exists to prevent.
+
+**Acceptance criteria — 4.15's own:**
+
+- [ ] A two-slot day answers two `slots[]` entries with two different `look_id`s
+- [ ] The looks of one day come back in `day` then `evening` order
+- [ ] A repack rebuilds the same slots from the stored column
+- [ ] `occasions` that are not one or two per day in order are a `422`
+
+### 4.16 The swap, per slot
+
+`TripSwapRequest.slot`; `_day`, `_replaceable` and `_replace_look` take the slot;
+a slot the day has not got falls to `item_not_in_look`.
+
+**Acceptance criteria — 4.16's own:**
+
+- [ ] A swap on day 2 evening changes that look and not day 2's day look
+- [ ] A swap naming a slot the day has not got is `item_not_in_look`, before the
+      model is called
+- [ ] The replaced look is detached or deleted with its slot's row and no other
+- [ ] The packing list keeps the garment when the day's other slot still wears it
+
+### 4.17 The trip form
+
+One or two occasion rows per day: a control that adds the evening and removes it,
+and a resize that keeps evenings with their days.
+
+**Acceptance criteria — 4.17's own:**
+
+- [ ] A day can be given an evening and have it taken away again
+- [ ] Extending the trip keeps an evening already set on an earlier day
+- [ ] The request carries the entries in day order, `day` before `evening`
+
+### 4.18 The trip page
+
+Day / Evening cards stacked under one day head, the occasion moved into the slot
+head, the still-worn line naming slots, and the swap scoped by `(day, slot)`.
+
+**Acceptance criteria — 4.18's own:**
+
+- [ ] A two-slot day draws two cards under one forecast
+- [ ] A swap spins one tile, on the slot it was asked for
+- [ ] A garment removed from a day look and still worn that evening says so,
+      naming the evening
+- [ ] Exclusions accumulated on one slot do not narrow the other
+
 ---
 
 ## Acceptance criteria
 
-- [ ] A 4-day Berlin trip returns exactly 4 looks, one per day
+- [ ] A 4-day Berlin trip returns exactly 4 looks, one per day *(a trip whose
+      days each carry one occasion; from 4.11 the count is one per requested
+      `(day, slot)` pair, and a 4-day trip with two evenings out returns 6)*
+- [ ] A day given two occasions returns two looks for that date, and they are not
+      the same outfit
+- [ ] Where the weather rule and the two occasions allow it, a day's two looks
+      share at least one garment — measured against the demo wardrobe and
+      recorded, not enforced
 - [ ] Each look obeys that specific day's weather rule — the rainy day gets water-resistant outerwear where the wardrobe allows
 - [ ] The packing list contains strictly fewer items than `days × 4`
 - [ ] Every packed item appears in at least one look, and every look item appears in the packing list
@@ -290,8 +452,16 @@ delete still returns to `/wardrobe` — `AUDITS.md` **O-34** is that follow-up.
 
 ## Commit checkpoints
 
-`feat(db): trips schema` · `feat(weather): multi-day forecast` · `feat(ai): trip packing orchestration` · `feat(api): trip endpoints` · `feat(web): trip form` · `feat(web): packing view` · `feat(api): swap an item on a trip look` · `feat(web): swap an item on a trip look` · `feat(web): packing list export` · `feat(web): global navigation` · `feat(web): trips list`
+`feat(db): trips schema` · `feat(weather): multi-day forecast` · `feat(ai): trip packing orchestration` · `feat(api): trip endpoints` · `feat(web): trip form` · `feat(web): packing view` · `feat(api): swap an item on a trip look` · `feat(web): swap an item on a trip look` · `feat(web): packing list export` · `feat(web): global navigation` · `feat(web): trips list` · `docs: two occasions a day` · `feat(db): the look slot` · `feat(ai): the slot in the stylist contract` · `feat(ai): pack two looks a day` · `feat(api): trip slots` · `feat(api): swap within a slot` · `feat(web): two occasions on the trip form` · `feat(web): day and evening on the trip page`
 
 ## Prompt tuning note
 
 Reuse is the part that needs iteration. Without an explicit numeric target the model reuses almost nothing. Start with `min(days * 4, days + 8)`, run it against the demo wardrobe for 3, 5 and 7 days, and record the actual item counts in `docs/eval-results.md`. Tighten the target until reuse is visible without the looks becoming repetitive.
+
+**Cross-slot reuse is measured here too and is enforced nowhere**, which is the
+same trade the target itself takes: *the two looks on a day share at least one
+item* would `502` on a hiking day followed by a formal dinner, where no honest
+garment is shared. Run the same three lengths with evenings on half the days and
+record how often the two looks of a day share a bottom or an outerwear piece.
+`03-AI-CONTRACTS.md` carries the argument; rule 11 is the only part of it that is
+a refusal.

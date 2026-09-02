@@ -1,7 +1,7 @@
 # Progress
 
 **Current stage:** Stage 4 — Trip Packing
-**Status:** Stage 4 — **4.1 to 4.6b, 4.6a-1, 4.6a, 4.9 and 4.10 are built** (migration `0005`, `get_daily_forecast`, `pack_trip`, and the five `/trips` routes). 4.3 landed in three commits: its contract in the documents, a refactor sharing the stylist's wardrobe filter and retry loop between two routes, and the orchestration itself. **The backend half of the signature feature is complete and reachable**: `POST /trips/pack` calls `pack_trip` and writes the trip, its looks and their items in one transaction, and `AUDITS.md` **O-32** — the last open item on this stage — is closed. **A sixth trip route arrived at 4.6a-1**, `POST /trips/{trip_id}/swap`, which replaces one garment on one day against that day's *stored* plan: it reads the rule sentence out of `trips.forecast` rather than rebuilding it (`DECISIONS.md` 199), so it asks no geocoder and no weather provider and spends exactly one model call. It takes O-32's answer one level down — a saved, rated or worn look is detached and an unmarked one deleted, with the model call first — and it is **the second writer of `trips.packing_list`**, which is a reliance three files asserted and this commit amends in all three. **Its caller arrived at 4.6a**: the ↻ badge on the trip look, in a `trip-look.ts` the page's inline `<article>` became, with a per-tile spinner, per-day exclusions the client accumulates, and a line naming the days that still wear the garment a swap took away. **The frontend calls four of the five after 4.6b**: `/trips` is a form that packs a trip and navigates to `/trips/:id`, which reads the trip back and renders it — the header with the reuse sentence, a day strip, the selected day's look and the packing list — and now re-packs it against a refreshed forecast or deletes it, from a footer row under the list. 4.5's confirmation panel is gone with the navigation that replaced it, and `trip.packed.title` with it. **Every trip route now has a caller, and the last one to get one was never supposed to have it**: `GET /trips` was specified and built with no planned caller ever — `04-API-SPEC.md` recorded that deliberately, in a paragraph task **4.10** has now rewritten. That task is the trips list: `/trips` renders every trip newest first with a delete on each row, and the form it displaced moved to `/trips/new` rather than the navigation bar growing a sixth item (`DECISIONS.md` 224). `POST /trips/{id}/repack` and `DELETE /trips/{id}` had **no owning task anywhere in Stage 4**, which `AUDITS.md` **O-33** opened at 4.6 and **4.6b closes** — the numbered task that item asked for rather than the ad-hoc button it warned against. ***Corrected at 4.6a-1: 4.6a is the per-item swap and it does not reuse `POST /looks/suggest`.*** *This paragraph has claimed that reuse since 4.3, and no session read the handler before this one. That endpoint forecasts the user's **home** coordinates, refuses an account with none, persists a look with no `trip_id` — so the swap would be invisible on the next read — and never touches `trips.packing_list`. The swap is `POST /trips/{trip_id}/swap`, built at **4.6a-1**, which reuses the layer below HTTP unchanged: `StylistContext`, the single-day rule order, rules 7 and 8, and `judged`. This paragraph also said repack was 4.6a's until 4.6 read it; 4.6a never calls repack, and after 4.6a-1 it is the frontend half alone.* **The repack's wait is now shared code**: the four status lines, the interval and the seven-code error table left `trips.page.ts` for `pack-wait.ts`, which both screens import (`DECISIONS.md` 207). Stage 4 no longer ends with a trip that can only be re-created and never refreshed. **And everything links to `/trips` after 4.9**, which is the task that finally built the navigation `AUDITS.md` **O-29** had been asking for since 3.2. One sticky bar in `app.html`, above the outlet and outside every screen, five items and a sign-out, rendered only for a signed-in user; the six back links and two account-row anchors that stood in for it are deleted, with eight i18n keys. **O-29 is closed, and its own count was wrong**: it recorded five bespoke controls and the tree held **ten across nine commits**, six of them the same back link — the item double-booked an ordinal, missed the control 4.5 shipped in the same commit whose refusal it was recording, and never counted the back links that predated it. The closing note in `AUDITS.md` is the census; `DECISIONS.md` 208 is the entry. *The sentence this replaces called `/trips/:id`'s back link "O-29's fifth bespoke control", and it was the tenth.* Stage 4 no longer ends with a signature feature nobody can reach. Stage 3 — **all six tasks are built**, 3.1 to 3.6, the last of them in the two commits its own stage file specifies. Its acceptance criteria are the developer's to run and five of the six are unticked; **the sixth is ticked from tests rather than from a run** — the never-worn count is asserted by `wardrobe-insights.spec.ts` against a mocked response and by the endpoint's own integration tests, and nobody has yet seen the panel in a browser. Stage 2 is built end to end from 2.1 to 2.12 and its acceptance criteria are still the developer's to run: the suites, the demo wardrobe timings and the five-out-of-five anchor check are unmeasured here. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below). **Stage 3 is the designated cut line** and has not been cut.
+**Status:** Stage 4 — **4.1 to 4.6b, 4.6a-1, 4.6a, 4.9 and 4.10 are built** (migration `0005`, `get_daily_forecast`, `pack_trip`, and the five `/trips` routes). 4.3 landed in three commits: its contract in the documents, a refactor sharing the stylist's wardrobe filter and retry loop between two routes, and the orchestration itself. **The backend half of the signature feature is complete and reachable**: `POST /trips/pack` calls `pack_trip` and writes the trip, its looks and their items in one transaction, and `AUDITS.md` **O-32** — the last open item on this stage — is closed. **A sixth trip route arrived at 4.6a-1**, `POST /trips/{trip_id}/swap`, which replaces one garment on one day against that day's *stored* plan: it reads the rule sentence out of `trips.forecast` rather than rebuilding it (`DECISIONS.md` 199), so it asks no geocoder and no weather provider and spends exactly one model call. It takes O-32's answer one level down — a saved, rated or worn look is detached and an unmarked one deleted, with the model call first — and it is **the second writer of `trips.packing_list`**, which is a reliance three files asserted and this commit amends in all three. **Its caller arrived at 4.6a**: the ↻ badge on the trip look, in a `trip-look.ts` the page's inline `<article>` became, with a per-tile spinner, per-day exclusions the client accumulates, and a line naming the days that still wear the garment a swap took away. **The frontend calls four of the five after 4.6b**: `/trips` is a form that packs a trip and navigates to `/trips/:id`, which reads the trip back and renders it — the header with the reuse sentence, a day strip, the selected day's look and the packing list — and now re-packs it against a refreshed forecast or deletes it, from a footer row under the list. 4.5's confirmation panel is gone with the navigation that replaced it, and `trip.packed.title` with it. **Every trip route now has a caller, and the last one to get one was never supposed to have it**: `GET /trips` was specified and built with no planned caller ever — `04-API-SPEC.md` recorded that deliberately, in a paragraph task **4.10** has now rewritten. That task is the trips list: `/trips` renders every trip newest first with a delete on each row, and the form it displaced moved to `/trips/new` rather than the navigation bar growing a sixth item (`DECISIONS.md` 224). **Stage 4 gains eight tasks at 4.11, and a trip day gains a second look.** A day carries one occasion or two — `day` and `evening` — because a person wears one thing to the office and changes for dinner; two occasions on a date are two `looks` rows sharing a `trip_id` and a `for_date` and separated by a new `looks.slot` column, which migration `0006` adds with a `CHECK`, a partial unique index and two backfills. **4.11 is the documents alone and is what has shipped**: the slot in `02`, `03`, `04`, `05`, this file and the stage file, with `DECISIONS.md` 225. 4.12 to 4.18 are the migration, the stylist contract, the reuse arithmetic, the routes, the swap and the two screens, in that order. **This breaks the trip object** — `days[].occasion` and `days[].look_id` move into a new `days[].slots[]` — on all five endpoints that answer a trip, `GET /trips` included. `POST /trips/{id}/repack` and `DELETE /trips/{id}` had **no owning task anywhere in Stage 4**, which `AUDITS.md` **O-33** opened at 4.6 and **4.6b closes** — the numbered task that item asked for rather than the ad-hoc button it warned against. ***Corrected at 4.6a-1: 4.6a is the per-item swap and it does not reuse `POST /looks/suggest`.*** *This paragraph has claimed that reuse since 4.3, and no session read the handler before this one. That endpoint forecasts the user's **home** coordinates, refuses an account with none, persists a look with no `trip_id` — so the swap would be invisible on the next read — and never touches `trips.packing_list`. The swap is `POST /trips/{trip_id}/swap`, built at **4.6a-1**, which reuses the layer below HTTP unchanged: `StylistContext`, the single-day rule order, rules 7 and 8, and `judged`. This paragraph also said repack was 4.6a's until 4.6 read it; 4.6a never calls repack, and after 4.6a-1 it is the frontend half alone.* **The repack's wait is now shared code**: the four status lines, the interval and the seven-code error table left `trips.page.ts` for `pack-wait.ts`, which both screens import (`DECISIONS.md` 207). Stage 4 no longer ends with a trip that can only be re-created and never refreshed. **And everything links to `/trips` after 4.9**, which is the task that finally built the navigation `AUDITS.md` **O-29** had been asking for since 3.2. One sticky bar in `app.html`, above the outlet and outside every screen, five items and a sign-out, rendered only for a signed-in user; the six back links and two account-row anchors that stood in for it are deleted, with eight i18n keys. **O-29 is closed, and its own count was wrong**: it recorded five bespoke controls and the tree held **ten across nine commits**, six of them the same back link — the item double-booked an ordinal, missed the control 4.5 shipped in the same commit whose refusal it was recording, and never counted the back links that predated it. The closing note in `AUDITS.md` is the census; `DECISIONS.md` 208 is the entry. *The sentence this replaces called `/trips/:id`'s back link "O-29's fifth bespoke control", and it was the tenth.* Stage 4 no longer ends with a signature feature nobody can reach. Stage 3 — **all six tasks are built**, 3.1 to 3.6, the last of them in the two commits its own stage file specifies. Its acceptance criteria are the developer's to run and five of the six are unticked; **the sixth is ticked from tests rather than from a run** — the never-worn count is asserted by `wardrobe-insights.spec.ts` against a mocked response and by the endpoint's own integration tests, and nobody has yet seen the panel in a browser. Stage 2 is built end to end from 2.1 to 2.12 and its acceptance criteria are still the developer's to run: the suites, the demo wardrobe timings and the five-out-of-five anchor check are unmeasured here. Stage 1 is closed with **1.11 deliberately unrun** (see the 2.1 entry below). **Stage 3 is the designated cut line** and has not been cut.
 
 *"The header is moved with the task this time rather than four tasks later"* — that stood here from 2.11 until Stage 3 falsified it. This header still said *3.1, 3.2, 3.3 and 3.4 are built; 3.5 and 3.6 are not started* through the whole of 3.5 and through 3.6's endpoint commit, and it is corrected here at 3.6's second — **one task late rather than four**, which is a smaller drift and not a fixed one. The log below has no entries for 3.5 or for the endpoint half of 3.6 either, and this line does not invent them; their record is `DECISIONS.md` 185 and 186 and the annotations in `stages/STAGE-3-feedback.md`.
 
@@ -76,6 +76,9 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Wear tracking — and the one control that is deliberately not optimistic
 - [x] Preferences fed into the prompt
 - [x] Wardrobe insights
+- [ ] Undo a wearing *(3.4a, added 2026-09-02)*
+- [ ] Soften the *recently worn* hint *(3.5a, added 2026-09-02)*
+- [ ] Browse the never-worn *(3.6a, added 2026-09-02)*
 
 ## Stage 4 — Trip Packing  *(signature feature — do not cut)*
 `stages/STAGE-4-packing.md` · target 5 days
@@ -92,6 +95,14 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [ ] Export
 - [x] Global navigation *(4.9, added 2026-08-31)*
 - [x] The trips list *(4.10, added 2026-09-02)*
+- [x] The slot in the documents *(4.11, added 2026-09-02)*
+- [x] Migration 0006 and the `Slot` vocabulary *(4.12, written 2026-09-02, unapplied)*
+- [x] The stylist half *(4.13)*
+- [ ] `pack_trip` and the reuse arithmetic *(4.14)*
+- [ ] The trip routes *(4.15)*
+- [ ] The swap, per slot *(4.16)*
+- [ ] The trip form *(4.17)*
+- [ ] The trip page *(4.18)*
 
 *The middle two boxes were ticked at 4.9, not at the tasks that earned them —
 `282c7df` and `8e21c2a` are the commits, and this list said neither had shipped
@@ -131,6 +142,176 @@ single-day call (189), and a trip's dates are bounded on the **last** day,
 ## Log
 
 _Append one line per completed stage: date, what shipped, what changed from the plan._
+
+**2026-09-02 — task 4.13, the slot in the stylist contract.** **1144 backend
+tests pass (1134 before, 10 added)**, the full suite in the scratchpad mirror;
+`ruff`, `ruff format` and `mypy` are clean on every file this task touched.
+Frontend untouched and not run: this task ships no screen and changes no wire
+shape the browser reads. Changed: `backend/app/services/stylist.py`,
+`backend/app/services/packing.py` (one literal),
+`backend/tests/unit/test_look_validation.py`, `backend/tests/unit/test_stylist.py`,
+`backend/tests/unit/test_packing.py`, `backend/tests/integration/test_trips_pack.py`,
+`backend/tests/integration/test_trips_swap.py`, and this file. No migration, no
+route, no `DECISIONS.md` entry — 225 carries the contract this implements.
+
+- **`TripDay` is one slot of one day now, not one day.** Flat rather than a day
+  holding a tuple of slots, because the message writes one line per entry and the
+  answer returns one look per entry; nesting would make both a two-level walk to
+  produce a flat thing. The accepted cost is that a date's two entries repeat
+  `date`, `forecast_summary` and `weather_rule` — the same duplication
+  `04-API-SPEC.md` refuses on the wire, taken here because it is built in one
+  function from one forecast row and never stored.
+- **Rule 6 stopped being positional, and nothing would have failed loudly when it
+  broke.** It read `context.days[look.day - 1]`, which is the right entry only
+  while index and ordinal are the same number; with two entries for one date, day
+  3's look would have been judged against whatever entry sat third. It reads a
+  map keyed by ordinal now.
+- **The violation prefix is two shapes**, which is the split this task was
+  chartered for: `look 3:` before rule 10, `day 2 evening:` after it. Every
+  trip-path string in `test_look_validation.py` moved, and the single-day strings
+  2.5 pinned are untouched.
+- **Rule 10's "unexpected" shape cannot be reached through
+  `validate_look_response`**, and the test says so rather than pretending
+  otherwise. Rule 4 makes the counts agree and rule 10 rejects duplicates first,
+  so once every returned pair is distinct and there are as many as were asked
+  for, an unexpected pair implies a missing one. The string is pinned against the
+  rule directly, which is the only place it is reachable.
+- **A duplicate is reported alone.** Rule 4 has already made the counts agree, so
+  a pair returned twice means another is missing; naming both would be one
+  violation describing itself twice.
+- **`_in_day_order`'s sort was not total and is now.** Keying on `day` alone left
+  a date's two looks in whatever order the model answered, so rule 11 could name
+  either as the duplicate of the other and one plan would summarise two ways.
+- **The fake needed one field, not the fix the orientation predicted.** Its
+  rotation was already keyed on the entry index rather than on `day.day`, so a
+  two-slot date already produces two different looks; what it lacked was
+  `slot=day.slot`. The property is now written down where the offset is computed,
+  because it was luck at 4.3 and is load-bearing from here.
+- **59 integration tests failed on one missing field in three fakes.** Every
+  `plan()` in `test_trips_pack.py` and `test_trips_swap.py` built trip looks
+  without a slot, so rule 10 refused them and the routes answered `502`. The
+  suite cross-imports nothing, so the same two-line addition lands in each file —
+  which is the trade that convention makes, and it made the blast radius obvious
+  rather than hidden.
+- **`slot` means two things in `_slot_conflict` and they are unrelated** —
+  `SLOT_RULES` is the wardrobe slot a garment occupies, `Look.slot` is the half
+  of the day it is worn in. Recorded in the docstring rather than renamed, and
+  it is the second vocabulary collision this feature has produced after
+  `AUDITS.md` O-35's.
+- **`app/main.py` fails `ruff format --check` and is untouched by this task**,
+  as at 4.12 and 4.9.
+
+**2026-09-02 — task 4.12, migration `0006` and the `Slot` vocabulary.** **1134
+backend tests pass (1126 before, 8 added)** — the full suite in the scratchpad
+mirror against `TEST_DATABASE_URL`, with `0006` applied by the session fixture —
+and 9 frontend tests in `enums.spec.ts`. `ruff`, `ruff format`, `mypy` and
+`prettier` are clean on every file this task touched. **The down-and-up cycle was
+run against the test database and is recorded below**; the developer's
+`DATABASE_URL` was never a target of it. New:
+`backend/alembic/versions/0006_look_slot.py`. Changed:
+`backend/app/models/look.py`, `backend/app/enums.py`,
+`backend/app/api/v1/routes/trips.py`, `backend/tests/unit/test_enums.py`,
+`backend/tests/unit/test_db_naming.py`,
+`backend/tests/integration/test_trips_rows.py`,
+`backend/tests/integration/test_trips_read.py`,
+`backend/tests/integration/test_trips_swap.py`,
+`frontend/src/app/shared/models/enums.ts` and its spec, and three documents. No
+`DECISIONS.md` entry: 225 carries the decisions, and the one thing decided here
+that it does not carry is the downgrade guard below.
+
+- **The CHECK's blast radius was four statements in `routes/trips.py` and one
+  more the first pass missed.** Two inserts with no slot and two detaches that
+  would have left a slot behind were found before the migration was written;
+  `test_trips_swap.py`'s `test_a_day_with_no_look_is_item_not_in_look` detaches
+  by hand with `orphan.trip_id = None` and was found by grepping for the
+  assignment form after the constructor form had already been fixed. **The two
+  greps are not the same grep** — `trip_id=` misses `trip_id = None` — and the
+  second one is the one that mattered.
+- **The downgrade is not reversible in the presence of a two-slot day, and that
+  was measured rather than reasoned about.** A planted evening look, a
+  `downgrade`, then an `upgrade`: the column goes, both looks of one date become
+  indistinguishable, the backfill gives both `day`, and
+  `CREATE UNIQUE INDEX uq_looks_trip_day_slot` fails with `UniqueViolation` —
+  leaving the database stuck at `0005` with nothing saying why. **`downgrade()`
+  now refuses** when any evening look or occasion entry survives, printing the
+  two statements that clear them. Deleting the rows itself was rejected: a
+  downgrade that destroys rows it never announced it would touch is worse than
+  one that stops. Verified in both directions — the refusal fires and leaves the
+  revision at `0006`, and the cycle is clean once the evening is gone. **This
+  bites at 4.15 and not before**, because nothing can write an evening yet.
+- **The conditional backfill does not do what the first draft claimed.** It
+  makes the fill idempotent, which is worth having; it does *not* protect an
+  evening across a cycle, because `downgrade()` strips the key before the
+  re-upgrade sees it. The comment now says so and points at the guard.
+- **`slot="day"` is a literal in both routes and both fixtures, and it is true
+  rather than provisional.** Until 4.15 no request can name a slot. Written as a
+  raw string beside `occasion` rather than through `Slot`, because an enum member
+  standing in for a variable reads as a choice that was made.
+- **The unique index is asserted by what it refuses; its predicate cannot be,
+  and that took a correction.** Under the default `NULLS DISTINCT` two NULLs are
+  never equal, so deleting `WHERE trip_id IS NOT NULL` refuses nothing new and no
+  behavioural test can see it go. The first draft claimed the reverse in five
+  places. The predicate is scope: the invariant belongs to trip looks, the index
+  stays off every `POST /looks/suggest` row, a future `NULLS NOT DISTINCT` cannot
+  turn it into a refusal of every second suggestion sharing a `for_date`, and the
+  DDL states its own reach. One assertion against `pg_indexes.indexdef` is what
+  fails when it goes.
+- **The backfill was verified over real pre-`0006` rows**, not over an empty
+  schema: a trip planted at `0005` with two slotless `occasions` entries, two
+  trip looks and one loose look came back as two `day` entries, two `day` looks
+  and one look with `slot NULL`. Every planted row was removed afterwards and the
+  test database is back at `head` and empty.
+- **`app/main.py` fails `ruff format --check` and is untouched by this task**, as
+  `src/main.ts` and `profile.page.spec.ts` failed `prettier` at 4.9. Recorded
+  rather than fixed, because a formatting commit inside a migration is a diff
+  nobody can review.
+
+**2026-09-02 — task 4.11, two occasions a day, in the documents.** **No tests
+were run and none changed**: this task writes eight documents and no code, which
+is 4.3's contract commit one feature along. Changed: `02-DATA-MODEL.md`,
+`03-AI-CONTRACTS.md`, `04-API-SPEC.md`, `05-FRONTEND-SPEC.md`, `AUDITS.md`,
+`stages/STAGE-4-packing.md` and this file. One entry, `DECISIONS.md` 225, and
+**`AUDITS.md` O-35 opened**. No
+migration in this commit — `0006` is 4.12's, and the DDL above describes a
+database that does not yet have it, which is the state `02-DATA-MODEL.md` was in
+for the whole of Stage 3's columns before 3.1.
+
+- **The one assumption the orientation had to overturn was the migration.** The
+  reading it started from was that `occasions` is `JSONB` and `looks` already
+  links to a trip, so nothing needs DDL. What that misses is that two `looks` rows with
+  the same `trip_id` and the same `for_date` are indistinguishable: `occasion`
+  cannot separate them because both slots may be `work`, and `id` and
+  `created_at` cannot because the swap deletes a look and inserts its
+  replacement. The slot has to be on the row. `0006` is in.
+- **Two constraints rather than one, and neither is an index O-25 would refuse.**
+  `CHECK ((trip_id IS NULL) = (slot IS NULL))` ties the two nullables in both
+  directions; `uq_looks_trip_day_slot` is `UNIQUE (trip_id, for_date, slot) WHERE
+  trip_id IS NOT NULL`, partial because every detached look carries a `NULL`
+  trip. It is a constraint spelled as an index because a `UNIQUE` constraint
+  cannot carry a `WHERE`, not a lookup chosen against no query.
+- **Cross-slot reuse is prompt text, not a twelfth rule.** Every numbered rule is
+  a refusal that spends the retry and then `502`s, and *the two looks on a day
+  share an item* would refuse a hiking day followed by a formal dinner — the
+  honest answer. What is enforced is rule 11, unchanged, which is the line
+  between reuse and repetition. `DECISIONS.md` 193's argument for the reuse
+  target, one slot along.
+- **`reuse_summary` gains no field, and one of its three changes meaning.**
+  `look_count` counts looks, which stops equalling the day count; `most_reused.days`
+  counts **distinct days**, so a garment worn twice on one day reports one day and
+  the reuse line is omitted. A `slot_reuse` count would have no renderer, which is
+  what struck `confidence`, `look_id`, `day` and `occasion` at 2.4, 2.5 and 4.3.
+- **`evening` is a value in two vocabularies now, and only one of them is
+  `looks.occasion`.** A slot is *when* and an occasion is *what for*, so slot
+  `evening` with occasion `work` is an evening work event and the column still
+  holds the what-for it has held since 2.7. `03-AI-CONTRACTS.md` states the
+  distinction where both words meet on one line, the trip page prints one label
+  where the two match, and **O-35** carries the question of dropping `evening`
+  from `Occasion` — a later stage's, with a data migration over two columns in
+  front of it, and deliberately not this chain's.
+- **The trip path's violation prefix splits**, because position and `day` stopped
+  being the same number: `look 3:` before rule 10, `day 2 evening:` after it. That
+  moves strings pinned by `tests/unit/test_look_validation.py`, which is 4.13's
+  visible cost and is written down here so it is not found there.
 
 **2026-09-02 — task 4.10, the trips list.** **731 frontend tests pass (719 before, 12 added)**, the full suite in the scratchpad mirror; `ng build`, `ng lint` and `prettier --check` are clean on every file this task touched, and **six mutations were all caught with the control green at both ends** — the restore index, the day-count lookup, the arming branch, the load-failure key, the blur handler, and the route order. Backend untouched and not run: `GET /trips` and `DELETE /trips/{id}` shipped at 4.4. New: `features/trips/trip-list.page.ts` and its spec (8 tests). Changed: `shared/models/trip.model.ts` (`TripList`), `core/api/trips.api.ts` (`list`, six methods for six endpoints), `app.routes.ts` and its spec (4 tests), `public/i18n/en.json` (twelve keys), and six documents besides this one. One entry, `DECISIONS.md` 224. **`AUDITS.md` O-34 opened**; O-33's closing note corrected where 4.10 expired half a sentence in it. No migration, no backend change, no new store, and `nav-bar.ts` deliberately untouched.
 

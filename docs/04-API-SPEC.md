@@ -505,11 +505,12 @@ always a **sibling key** rather than a field inside it. Settled at task 4.3;
   "start_date": "2026-03-14", "end_date": "2026-03-17",
   "notes": "one dinner out",
   "days": [
-    { "day": 1, "date": "2026-03-14", "occasion": "work",
+    { "day": 1, "date": "2026-03-14",
       "temp_min_c": 8, "temp_max_c": 12, "precip_mm": 4.2, "wind_kph": 11,
       "condition": "rain",
       "rule": "Outerwear is REQUIRED, warmth 3-4. Rain expected. Strongly prefer water_resistant outerwear and closed water_resistant shoes.",
-      "look_id": "uuid" }
+      "slots": [ { "slot": "day",     "occasion": "work",    "look_id": "uuid" },
+                 { "slot": "evening", "occasion": "evening", "look_id": "uuid" } ] }
   ],
   "packing_list": {
     "item_ids": [ "uuid", "uuid" ],
@@ -520,27 +521,43 @@ always a **sibling key** rather than a field inside it. Settled at task 4.3;
 ```
 
 **`days` is the day strip, and it is the join.** `05-FRONTEND-SPEC.md` §7 needs a
-temperature and an icon per day and a look under the selected one, and
-`LookResponse` carries no day number — one shape for every look since
-`DECISIONS.md` 182, and a trip is not a reason to widen it for the other three
-endpoints. So the day carries `look_id` and the client indexes the sibling
-`looks` array by it. The alternative, pairing `days[i]` with `looks[i]`
-positionally, is an ordering contract nothing enforces and a rendering bug that
-would be invisible until a day was missing.
+temperature and an icon per day and the looks under it, and `LookResponse`
+carries no day number — one shape for every look since `DECISIONS.md` 182, and a
+trip is not a reason to widen it for the other three endpoints. So the day
+carries `look_id` and the client indexes the sibling `looks` array by it. The
+alternative, pairing `days[i]` with `looks[i]` positionally, is an ordering
+contract nothing enforces and a rendering bug that would be invisible until a day
+was missing.
+
+**`slots[]` arrived at task 4.11, and it took `occasion` and `look_id` down with
+it.** A day carries one slot entry or two — `day`, then `evening` — and the split
+is by what each field is a property of: the four numbers, the condition and the
+rule belong to the **date**, and the occasion and the look belong to the **slot**.
+The alternative was one `days[]` row per `(day, slot)` with the forecast repeated
+in both, which puts one measurement in two places with nothing keeping them
+equal — the same failure `DECISIONS.md` 195 refused when it declined to pair days
+and looks positionally. **This is a breaking change to the trip object**, and the
+trip object is answered by all five endpoints that answer a trip, `GET /trips`
+included. `DECISIONS.md` 225.
 
 **`look_id` is nullable**, and that is what the join buys over the positional
 pairing. A day with no look renders as a gap; paired positionally, day 3's look
 would silently slide onto day 2. The route computes the ordinal back from
-`looks.for_date` — `LookResponse` carries no day number and Stage 4 is not a
-reason to widen it — so a look with no `for_date` is placed on no day at all.
+`looks.for_date` and reads the slot from `looks.slot` — `LookResponse` carries
+neither and Stage 4 is not a reason to widen it — so a look with no `for_date` is
+placed on no day at all. **The gap is now per slot**: a repack that detaches
+Monday's evening look leaves Monday's day look exactly where it is.
 
 **`day` here is `03-AI-CONTRACTS.md`'s ordinal** — 1-based within the trip, day 1
 is `start_date` — and `date` is printed beside it so no client does calendar
-arithmetic to label a tab.
+arithmetic to label a tab. From 4.11 it is half of a key rather than a whole one:
+`(day, slot)` is what names a look, on this wire and in the model's answer alike.
 
 **Two of the row's columns are deliberately not on the wire.** `trips.occasions`
-is the request as it arrived; `days[].occasion` is that value merged with the
-forecast, so the raw column would be the same data in a second shape.
+is the request as it arrived; `days[].slots[].occasion` is that value merged with
+the forecast, so the raw column would be the same data in a second shape — and
+after 4.11 the merge is what turns one flat list of `(day, slot, occasion)`
+entries into a day carrying its slots.
 `trips.forecast` is the cached provider response — `days` is its parsed
 projection, and the provider's own field names and units are not this API's
 contract (`DECISIONS.md` 143).
@@ -558,13 +575,26 @@ one day. `02-DATA-MODEL.md` carries the stored shape, which is this one.
 ### `POST /trips/pack`
 ```json
 → { "destination": "Berlin", "start_date": "2026-03-14", "end_date": "2026-03-17",
-    "occasions": [ { "day": 1, "occasion": "work" }, { "day": 2, "occasion": "work" },
-                   { "day": 3, "occasion": "casual" }, { "day": 4, "occasion": "evening" } ],
+    "occasions": [ { "day": 1, "slot": "day",     "occasion": "work" },
+                   { "day": 2, "slot": "day",     "occasion": "work" },
+                   { "day": 2, "slot": "evening", "occasion": "evening" },
+                   { "day": 3, "slot": "day",     "occasion": "casual" },
+                   { "day": 4, "slot": "day",     "occasion": "work" } ],
     "notes": "one dinner out" }
 ← 200 { "trip": { …trip object… }, "looks": [ …LookResponse… ], "missing_pieces": [ … ] }
 ```
 
 Server-side: geocode destination → fetch daily forecast → build one rule per day → single stylist call → validate → persist trip and looks.
+
+**`occasions` carries one or two entries per day from task 4.11**, in day order,
+`day` before `evening` within a day: never zero entries for a day, and never
+`day` twice. The example above is a four-day trip with five looks — one dinner
+out on the second night, which is the `notes` field of every trip anybody has
+ever taken. The list stays flat rather than nesting slots inside days, because
+`pack_trip` reads it positionally and one entry per look is what the model's
+message and its answer are both shaped like; what checks it is
+`TripPackRequest`'s validator, and what the rows it becomes are held to is
+`uq_looks_trip_day_slot` (`02-DATA-MODEL.md`). `DECISIONS.md` 225.
 
 `looks` are full `LookResponse` objects, the same shape `POST /looks/suggest`
 answers with, each carrying `trip_id`'s row and hydrated items in the model's own
@@ -608,9 +638,13 @@ is beyond the provider's horizon and `502` `forecast_unavailable` when Open-Mete
 does not answer, exactly as `GET /weather` splits them; `502`
 `geocoding_unavailable` when the geocoder does not answer at all; `502`
 `stylist_failed` after the model has failed validation twice; `422`
-`validation_error` for a malformed body — an `occasions` list whose days are not
-`1..n`, an occasion outside the six, `end_date` before `start_date`; `401`
-`invalid_token`.
+`validation_error` for a malformed body — an `occasions` list that is not one or
+two entries per day for days `1..n` in order, a day whose two entries are not
+`day` then `evening`, an occasion outside the six, a slot outside the two,
+`end_date` before `start_date`; `401` `invalid_token`. **The slot shapes are
+`validation_error` and earn no code of their own**, which is the same test 2.4
+and 2.5 applied to fields and 4.3 to `occasion`: a code exists to be rendered,
+and nothing on `/trips/new` renders a body the form cannot produce.
 
 **`trip_too_long` is two bounds, and task 4.4 is where the second one had to be
 written.** `DECISIONS.md` 190 moved the bound onto the trip's last day and this
@@ -735,8 +769,8 @@ dates and occasions, and replaces the existing looks. Same body shape as
 
 **"Replaces the existing looks" is `AUDITS.md` O-32's other half, and task 4.4
 took the audit's option 2.** A look that was saved, rated or marked worn is
-**detached** — `trip_id = NULL` — and the rest are deleted. A tap meant to
-refresh the weather does not empty three days out of `/saved` or switch the
+**detached** — `trip_id = NULL` and `slot = NULL`, from task 4.12 — and the rest
+are deleted. A tap meant to refresh the weather does not empty three days out of `/saved` or switch the
 stylist's learned preferences back off. The cost is a look on `/saved` belonging
 to no trip, whose `weather_note` describes a forecast for a city the row no
 longer names; that is accepted, because the alternative destroys the signal
@@ -750,10 +784,10 @@ that detached and deleted before calling the model would answer `502
 stylist_failed` having already emptied a trip the user still has. The detach, the
 delete and the new looks are one transaction, downstream of the model call.
 
-**It takes no body, and it re-geocodes.** The destination, the dates, the
-occasions and the notes are the trip's own — a repack that accepted new ones
-would be an edit endpoint this document does not describe. The stored
-`dest_lat`/`dest_lon` are re-derived from the destination string rather than
+**It takes no body, and it re-geocodes.** The destination, the dates, the notes
+and the occasions — slots and all, read back from the column `0006` backfilled —
+are the trip's own, and a repack that accepted new ones would be an edit endpoint
+this document does not describe. The stored `dest_lat`/`dest_lon` are re-derived from the destination string rather than
 reused, because `pack_trip` owns the lookup; so a repack can answer
 `destination_not_found` for a trip that packed cleanly last week, and a trip's
 coordinates can move between two packs. `DECISIONS.md` 200 and 202.
@@ -770,14 +804,14 @@ interface says so. `AUDITS.md` **O-33**, `DECISIONS.md` 207.
 
 ### `POST /trips/{trip_id}/swap`
 ```json
-→ { "day": 3, "item_id": "uuid", "replace_role": "shoes",
+→ { "day": 3, "slot": "evening", "item_id": "uuid", "replace_role": "shoes",
     "exclude_item_ids": ["uuid"] }
 ← 200 { "trip": { …trip object… }, "looks": [ …LookResponse… ] }
 ```
 
-One garment on one day, replaced against that day's **stored** plan. The trip
-object comes back whole because `packing_list` has moved, so the day strip, the
-reuse summary and every look are answered together — `GET /trips/{id}`'s shape
+One garment in one slot of one day, replaced against that day's **stored** plan.
+The trip object comes back whole because `packing_list` has moved, so the day
+strip, the reuse summary and every look are answered together — `GET /trips/{id}`'s shape
 exactly, and no `missing_pieces`: a gap described against one day is not the
 trip's.
 
@@ -805,6 +839,15 @@ of being repackable (`DECISIONS.md` 201) can still have its shoes changed,
 because the forecast this endpoint reads was taken while it was inside the
 horizon.
 
+**`slot` is required, and it arrived with the feature at task 4.11.** `day`
+alone stopped naming a look the moment a day could hold two, and the badge that
+sends this body sits inside one of them — so the client already knows which, and
+a server that guessed would guess wrong half the time on exactly the days this
+feature exists for. It is required rather than defaulted to `day` for
+`replace_role`'s reason one field along: this endpoint does one thing, the caller
+always knows the answer, and a default would accept a body no correct client
+sends. `DECISIONS.md` 225.
+
 **The client sends the role; the server derives the locks.** `locked_item_ids`
 is the day's look minus `item_id`, read off the row rather than sent — a
 client-supplied copy is a second description of a look the server is holding,
@@ -824,14 +867,24 @@ the accumulated half: the looks that carried those rejections have been replaced
 by this endpoint and are gone.
 
 **What happens to the look that was there is `AUDITS.md` O-32 one level down.**
-A look that was saved, rated or worn is **detached** — `trip_id = NULL`, and no
-other column touched — and an unmarked one is deleted. Same three columns, same
-reasoning, and the same predicate the repack uses. Two differences from the
-repack are worth stating: this detach leaves **no gap**, because the new look
+A look that was saved, rated or worn is **detached** — `trip_id = NULL` and
+`slot = NULL`, and no other column touched — and an unmarked one is deleted. Same
+three columns, same reasoning, and the same predicate the repack uses. Two
+differences from the repack are worth stating: this detach leaves **no gap**, because the new look
 takes the day in the same transaction, and `items.wear_count` is not reversed,
 for the reason it never is. And **the model runs first**: the detach, the
 delete, the new look and the `packing_list` write are one transaction downstream
 of the answer, so a `502` costs the user nothing.
+
+**The slot is the second column the detach clears, and migration `0006` is why.**
+`ck_looks_slot_belongs_to_a_trip` reads `trip_id` and `slot` together in both
+directions, so a row that kept its slot on the way out of a trip is one the
+database refuses — the detach would fail and take the repack or the swap with it.
+Nothing a reader has is lost: a detached look has no trip to be the evening of,
+and `/saved` filters on `is_saved` alone. The three columns the paragraph above
+promises — `is_saved`, `feedback` and `worn_at` — are still named by neither
+statement, and the repack's detach clears the slot for the same reason.
+`DECISIONS.md` 225, `02-DATA-MODEL.md` under `looks`.
 
 **`packing_list` is recomputed here**, which makes this the column's second
 writer after `POST /trips/pack`. Survivors keep their existing positions, an id
@@ -843,11 +896,16 @@ over every look rather than patched around the one that changed, which makes
 *every look item appears in the packing list* true by construction.
 
 `422` with `code: "item_not_in_look"` when `item_id` names no garment in that
-day's look. Its own code rather than `validation_error`, on
+slot's look. Its own code rather than `validation_error`, on
 `locked_unavailable`'s reasoning: it is the `422` a **correct** client provokes,
-by holding a look that a repack in another tab has since replaced. **A day with
+by holding a look that a repack in another tab has since replaced. **A slot with
 no look answers the same code** — there is no look, so the item is not in it —
 rather than earning a twentieth code for a state the screen draws no badge on.
+**And a slot this day has not got answers it too**, from 4.11: a body naming
+`evening` on a day packed with one look is the same sentence as a body naming a
+garment that is not there, and both are what a stale screen sends after a repack.
+The bound on `day` keeps its own `validation_error` below, because that one is
+about a trip's shape rather than a day's.
 
 `422` with `code: "validation_error"` when `day` is outside `1..n`. The bound is
 the route's rather than the request schema's, for `trip_too_long`'s reason: the

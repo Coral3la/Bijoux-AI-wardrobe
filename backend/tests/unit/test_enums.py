@@ -19,6 +19,7 @@ from app.enums import (
     Length,
     Occasion,
     Role,
+    Slot,
     Vocabulary,
     is_valid_subcategory,
     validate_tag_dict,
@@ -124,6 +125,15 @@ def test_occasion_values_are_the_documented_six_in_order() -> None:
     # task 2.7. Nothing in the database enforces this list — `looks.occasion` is
     # TEXT — so this test and `LookSuggestRequest` are the whole of it.
     assert Occasion.values() == ["casual", "work", "evening", "sport", "formal", "travel"]
+
+
+def test_slot_values_are_the_documented_two_in_order() -> None:
+    # Transcribed from 02-DATA-MODEL.md, which took them from the trip contract
+    # at task 4.11. The order is load-bearing twice: it is the order one day's
+    # entries must reach `POST /trips/pack` in, and the order the trip page
+    # stacks its two cards in. Nothing in the database enforces the list —
+    # `looks.slot` is TEXT — so this test and `TripOccasion` are the whole of it.
+    assert Slot.values() == ["day", "evening"]
 
 
 def test_role_values_are_the_documented_six_in_order() -> None:

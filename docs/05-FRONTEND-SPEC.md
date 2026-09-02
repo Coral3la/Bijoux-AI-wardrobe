@@ -505,9 +505,9 @@ placard, and the rows.
 
 #### The form — `/trips/new`
 
-Destination (autocomplete via `/me/locations/search`), date range, one occasion
-chip row per day defaulting to `casual`, and an optional notes field. The whole
-control sits in **one stone panel** — `bg-surface-elevated`, `rounded-sm`,
+Destination (autocomplete via `/me/locations/search`), date range, one or two
+occasion chip rows per day defaulting to a single `casual`, and an optional
+notes field. The whole control sits in **one stone panel** — `bg-surface-elevated`, `rounded-sm`,
 `p-6` — which is the treatment the stylist's form took at its own pass and the
 only raised object on either trip screen. Every label is a 10px caps eyebrow,
 every field is a hairline box on the canvas colour, the chip rows **wrap** where
@@ -538,6 +538,15 @@ changed by the restyle:
   so a day already set to *work* survives extending the trip. The rows are built
   in day order because the request schema requires the numbers to arrive as
   `1..n` *in* order rather than as a permutation of them.
+- **A day carries one occasion or two, and the second one is the evening**
+  *(task 4.17)*. Every day starts with a single `day` slot; a control on the day
+  adds an `evening` row under it with its own chip row, and removes it again. The
+  resize above keeps evenings with their days — extending a trip pads with
+  single-slot days and truncates from the end, so an evening set on day 2
+  survives a change to `end_date`. There is no way to build a day with no
+  occasion and no way to build one with two `day` slots, which is the same
+  invariant the request schema checks and `uq_looks_trip_day_slot` holds the rows
+  to; the form's job is that a correct client cannot express the refusal.
 - **The notes field is unbounded.** `TripPackRequest.notes` is stripped and not
   length-checked, so a counter or a cap here would be a refusal the API does not
   make.
@@ -566,7 +575,8 @@ to want the treatment and the directive's only remaining caller. `DECISIONS.md`
   2026-09-10 – 2026-09-14
   Packed 12 pieces across 5 looks. You'll wear the camel trousers on 3 days.
   ──────────────────────────────────────────────────────────────────────────
-  DAY 1 · 2026-09-10   Arrival day.            ⛅ 24°C partly cloudy · Casual
+  DAY 1 · 2026-09-10                            ⛅ 24°C partly cloudy
+  DAY · CASUAL         Arrival day.
   ┌────┐┌────┐┌────┐┌────┐
   │    ││   ↻││    ││    │
   └────┘└────┘└────┘└────┘
@@ -575,7 +585,12 @@ to want the treatment and the directive's only remaining caller. `DECISIONS.md`
   Traveling comfort with room for the evening.
   The trench catches the airplane chill.
   ──────────────────────────────────────────────────────────────────────────
-  DAY 2 · 2026-09-11   Meetings and dinner.            ☀ 26°C clear · Work
+  DAY 2 · 2026-09-11                                    ☀ 26°C clear
+  DAY · WORK           Meetings.
+  ┌────┐┌────┐┌────┐┌────┐
+  …
+  EVENING              Dinner at the Navigli.
+  ┌────┐┌────┐┌────┐
   …
   ──────────────────────────────────────────────────────────────────────────
 
@@ -596,12 +611,42 @@ view state: there is no selected day, so there is no opening selection to defend
 nothing to clear when the reader moves, and nothing for a repack to preserve.
 
 **The day head belongs to the page, not to the look.** A mono kicker naming the
-day and its date, the look's title beside it on the same baseline, and the
-forecast on the far end as italic prose with a mono reading and a decorative
-glyph: `⛅ 24°C partly cloudy · Casual`. The head renders for **every** day,
-including one whose look a repack detached — which is why the title is drawn
-here rather than inside `TripLook`, and why the condition and the occasion are
-one authored key with the dot inside it.
+day and its date, and the forecast on the far end as italic prose with a mono
+reading and a decorative glyph: `⛅ 24°C partly cloudy`. The head renders for
+**every** day, including one whose looks a repack detached.
+
+**A day carries one slot card or two, stacked, and the occasion moved down into
+them** *(task 4.18)*. Each slot gets a head of its own — a mono kicker reading
+`DAY · CASUAL` or `EVENING · WORK`, with the look's title beside it on the same
+baseline — and the tile strip, the prose and the still-worn line sit under that.
+
+**Where the two labels are the same word, only one is printed.** `Occasion` and
+`Slot` overlap on `evening` (`AUDITS.md` **O-35**), so the commonest evening
+there is — slot `evening`, occasion `evening` — would render `EVENING · EVENING`,
+which reads as a stutter rather than as two facts. The kicker compares the two
+rendered strings and drops the second when they match, so that day reads
+`EVENING` and every other combination keeps both halves: `EVENING · WORK` for the
+work dinner, `DAY · EVENING` for the daytime look in the going-out register. **It
+compares the rendered labels and not the two enum values**, because what the
+reader sees doubled is the word, and a second language may collide on a different
+pair or on none.
+
+**`trip.view.day.weather` splits in two** as a consequence: it was one
+authored key printing `⛅ 24°C partly cloudy · Casual`, with the dot inside it on
+the argument that a template assembling a line out of typed punctuation puts
+untranslatable text in the markup. That argument is unchanged and is why the
+split is into **two whole keys** rather than into spans — the forecast half stays
+on the day head and a new slot key carries the slot name and the occasion with
+its own dot. The slot head renders for a slot whose look is missing, for the same
+reason the day head renders for a day with no looks at all: the occasion is
+something the user asked for, and it is still true when the outfit is gone.
+`DECISIONS.md` 225.
+
+**Why the weather is on the day and not on the slot:** there is one forecast row
+per date. Both slots of the 11th are dressed against the same numbers and the
+same rule sentence — `03-AI-CONTRACTS.md` carries the argument and what it would
+cost to change — so printing it twice would be one measurement rendered as two
+facts.
 
 **The dates are printed as they arrive.** `10–14 September` needs a month name
 and a range collapser, and this project formats no date on this screen:
@@ -617,11 +662,20 @@ still-worn line, the reasoning and the weather note. The garments are in
 re-recorded: that card ends in *Try again*, carries a heart and two thumbs, and
 sorts by layer.
 
-**A day can have no look, and it renders as a quiet line rather than an error.**
-`days[].look_id` is nullable because a repack detaches a look that was saved,
-rated or worn (`AUDITS.md` **O-32**, `DECISIONS.md` 200), so the day keeps its
-forecast and loses its outfit. It is italic prose on the canvas, not a raised
-card: a gap in an itinerary is a quiet day, not an object.
+**A slot can have no look, and it renders as a quiet line rather than an error.**
+`days[].slots[].look_id` is nullable because a repack detaches a look that was
+saved, rated or worn (`AUDITS.md` **O-32**, `DECISIONS.md` 200), so the slot
+keeps its occasion, the day keeps its forecast, and the outfit is gone. It is
+italic prose on the canvas, not a raised card: a gap in an itinerary is a quiet
+evening, not an object. **The gap is per slot from 4.18** — a detached evening
+look leaves the day look exactly where it was, which is what the nullable
+`look_id` moving inside `slots[]` buys.
+
+**The look strip is per slot, and it is one component drawn twice.** `TripLook`
+takes one look, so a two-slot day renders it twice under two slot heads rather
+than growing a mode; the four-column tile strip, the `look_items.position`
+ordering, the still-worn line, the reasoning and the weather note are all
+unchanged inside it.
 
 **The header is four lines**: a mono caption (`Trip · 5 days`), the destination
 at 56px in the **content face** — `DECISIONS.md` 071 names this screen, and a
@@ -629,7 +683,14 @@ geocoded place name in a latin-subset serif falls back per character — the ISO
 date range in mono, and the summary. **The summary is two whole sentences**,
 *"Packed 8 pieces across 4 looks."* and *"You'll wear the white oversized shirt
 on 3 days."*, set in italic prose with the garment name rendered through
-`AuthoredLine` so that it, and only it, takes the content face. The reuse
+`AuthoredLine` so that it, and only it, takes the content face. **The two
+sentences count different things from 4.11 and both keys are already right**:
+`look_count` is looks, so a five-day trip with two evenings out reads *"Packed 12
+pieces across 7 looks"*, and `most_reused.days` is **days**, so the second
+sentence still says *on 3 days* and means three dates. A garment worn to the
+office and again to dinner on one day is worn on one day, the reuse line is
+omitted, and that is correct rather than a miscount — `02-DATA-MODEL.md` carries
+the arithmetic. The reuse
 sentence is the line that makes the feature land, and it is **omitted entirely**
 when `most_reused` is null, when the garment has no `display_name`, and when the
 item is in none of the response's looks — never rendered as *Untitled item*.
@@ -704,38 +765,51 @@ orientation and one the Itinerary added:
   nothing to show for twenty seconds; this one has the whole trip, and covering
   it would throw away the only thing that makes a four-to-eight second wait
   legible.
-- **The waiting tile is matched to its day before it is drawn, and this is the
+- **The waiting tile is matched to its slot before it is drawn, and this is the
   Itinerary's addition.** `swappingItemId` is an item id, and a garment worn on
   Monday and Thursday is the same id on both — so with every day on screen, one
-  press would have spun two tiles. `TripLook` is handed a day-scoped id for the
-  spinner and a separate **`busy`** flag for the badges, because every badge in
-  the trip locks while one request is in flight and the day it is locking for may
-  have nothing waiting on it. `DECISIONS.md` 222.
+  press would have spun two tiles. **Scoped by `(day, slot)` from 4.18**, which is
+  the same argument one level down and now a case the user meets on purpose: the
+  trousers reused between Monday's office and Monday's dinner are one id on the
+  same date, so a day-scoped spinner would spin both of them. `TripLook` is
+  handed a slot-scoped id for the spinner and a separate **`busy`** flag for the
+  badges, because every badge in the trip locks while one request is in flight
+  and the slot it is locking for may have nothing waiting on it. `DECISIONS.md`
+  222.
 - **There is no preview and no confirmation, and there is no undo.** The swap
   *is* the answer, and a second tap on the tile that came back is the user
   saying *not that one either* — which is what makes the exclusions a
   conversation rather than a form. The cost is recorded rather than mitigated:
   a garment swapped away cannot be swapped back except by taking what the model
   offers next. `DECISIONS.md` 210.
-- **The exclusions are per day, client-held, and fresh on every mount.** A shoe
-  that is wrong for Tuesday's rain is the right answer for Thursday, so one
-  shared list would narrow six days on the strength of one. The server cannot
+- **The exclusions are per `(day, slot)`, client-held, and fresh on every mount.**
+  A shoe that is wrong for Tuesday's rain is the right answer for Thursday, so one
+  shared list would narrow six days on the strength of one — and a shoe rejected
+  for Monday's meetings is a candidate again for Monday's dinner, which is the
+  same sentence with the same reasoning and is why 4.18 takes the key one level
+  down rather than leaving it on the date. The server cannot
   rebuild them — the looks that carried those rejections were replaced by the
   swaps that rejected them — and a repack clears them, because it rebuilds every
   day against a forecast the rejections were never judged against.
-- **Where the garment that left is still worn, the screen names the days**, under
-  the tile grid of **the day it left** and above that day's prose: *"You'll still
-  wear the white shirt on Day 2."* This is `STAGE-4` 4.6a's third property and
-  the reason the feature is not a wiring job — without it, taking the jeans off
-  Tuesday reads as taking them out of the suitcase while Thursday still wears
-  them. The days are joined with `trip.swap.daysSeparator` and there is **no
+- **Where the garment that left is still worn, the screen names the days and the
+  slots**, under the tile grid of **the slot it left** and above that slot's
+  prose: *"You'll still wear the white shirt on Day 2 evening."* **The slot is
+  named from 4.18 and it is not decoration**: the commonest cross-slot reuse this
+  feature produces is one garment in both looks of one day, so a swap out of
+  Monday's day look that said only *"on Day 1"* would name the day the reader is
+  looking at and read as a contradiction. Where a garment survives in several
+  places the days are listed as before, each with its slot. This is `STAGE-4`
+  4.6a's third property and the reason the feature is not a wiring job — without
+  it, taking the jeans off Tuesday reads as taking them out of the suitcase while
+  Thursday still wears them. The days are joined with `trip.swap.daysSeparator` and there is **no
   "and"**: `Intl` would write one and take the browser's locale with it, on a
   screen whose every other word came from `en.json`, which is `DECISIONS.md`
   206's refusal of a date formatter one sentence along.
-- **A failed swap says so under the day it was asked for**, not in the page's
+- **A failed swap says so under the slot it was asked for**, not in the page's
   `actionError` above the actions row — that line means *the whole trip's action
-  failed*, and a swap that fails costs one day nothing. The day's look stays
-  exactly as it was. **Two of the pack's messages could not be reused**:
+  failed*, and a swap that fails costs one day nothing. That slot's look stays
+  exactly as it was, and so does the other slot of the same day. **Two of the
+  pack's messages could not be reused**:
   `wardrobe_too_small` says *eight* and the swap threshold is **six**, and the
   pack's `stylist_failed` says *"We couldn't pack this trip"* in answer to a tap
   on one shoe. Both got keys of their own, which is `DECISIONS.md` 207's finding

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CATEGORIES, CONDITIONS, OCCASIONS, ROLES, SUBCATEGORIES, roleOf } from './enums';
+import { CATEGORIES, CONDITIONS, OCCASIONS, ROLES, SLOTS, SUBCATEGORIES, roleOf } from './enums';
 
 describe('the closed vocabulary mirror', () => {
   it('gives every category a subcategory list', () => {
@@ -59,6 +59,14 @@ describe('the closed vocabulary mirror', () => {
       'swimwear',
       'sleepwear',
     ]);
+  });
+
+  // Two, and in this order: it is the order a day's entries must reach
+  // POST /trips/pack in and the order the trip page stacks its cards in. A slot
+  // is *when* and an occasion is *what for*, which is why `evening` appears in
+  // both lists in this file without the two meaning the same thing.
+  it('mirrors the two slots in order', () => {
+    expect([...SLOTS]).toEqual(['day', 'evening']);
   });
 
   it('mirrors the six occasions', () => {

@@ -47,6 +47,7 @@ exception — and not five.
 
 import json
 import logging
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
@@ -63,7 +64,7 @@ from openai.types.chat import (
 from openai.types.shared_params.response_format_json_schema import JSONSchema
 
 from app.core.config import settings
-from app.enums import Category, Layer
+from app.enums import Category, Layer, Slot
 from app.schemas.item import ItemResponse
 from app.services.serializer import serialize_wardrobe
 from app.services.weather import requires_outerwear
@@ -92,11 +93,23 @@ _LOOK_PROPERTIES: dict[str, Any] = {
     "weather_note": {"type": "string"},
 }
 
-# The trip look is the single-day look plus its day, from the same dict rather
-# than a second copy — `DECISIONS.md` 189 named this drift as the price of two
-# schemas and this is the mitigation. `day` leads because it is what a reader
-# scans for in a fourteen-element array.
-_TRIP_LOOK_PROPERTIES: dict[str, Any] = {"day": {"type": "integer"}, **_LOOK_PROPERTIES}
+# The trip look is the single-day look plus its day and its slot, from the same
+# dict rather than a second copy — `DECISIONS.md` 189 named this drift as the
+# price of two schemas and this is the mitigation, paid for the first time at
+# 4.13 when a second trip-only field arrived. `day` and `slot` lead because the
+# pair is what a reader scans for in a fourteen-element array, and together they
+# are the key: `(1, "day")` and `(1, "evening")` are two looks for one date.
+#
+# `slot` carries an `enum` where `missing_pieces.category` deliberately does not.
+# The difference is that this one has a reader and a closed vocabulary behind it
+# — rule 10 compares the pair against what was asked for, and a value outside the
+# two could not be matched to any requested slot, so refusing it in the schema
+# turns a retry into a non-event.
+_TRIP_LOOK_PROPERTIES: dict[str, Any] = {
+    "day": {"type": "integer"},
+    "slot": {"type": "string", "enum": list(Slot.values())},
+    **_LOOK_PROPERTIES,
+}
 
 # `category` is a plain string rather than the seven `Category` members. It is
 # display text — 2.9 renders the description, nothing branches on it — and the
@@ -261,7 +274,24 @@ class StylistContext:
 
 @dataclass(frozen=True, slots=True)
 class TripDay:
-    """One day of a trip: what it is for, and what the sky is doing.
+    """One **slot of one day** of a trip: what it is for, and what the sky is doing.
+
+    One entry per look rather than one per date, from task 4.13: a date carries
+    one entry or two, `day` then `evening`, and `(day, slot)` is what names a
+    look everywhere in this contract. Flat rather than a day holding a tuple of
+    slots, because the message writes one line per entry and the answer returns
+    one look per entry — nesting would make both a two-level walk to produce a
+    flat thing. The cost is that a date's two entries repeat `date`,
+    `forecast_summary` and `weather_rule`, which is one measurement in two
+    places; it is built here in one function from one forecast row and never
+    stored, which is why `04-API-SPEC.md` refuses the same duplication on the
+    wire and this accepts it. `DECISIONS.md` 225.
+
+    **Both slots of a date carry the same weather rule**, and that is the
+    contract rather than an accident: `trips.forecast` holds one row per calendar
+    day, so an evening dressed against its own numbers would need an hourly
+    forecast and a second band table. What separates the two looks is the
+    `occasion`, which moves formality rather than warmth.
 
     `day` is a **1-based ordinal within the trip**, not a date component — day 1
     is the trip's `start_date`. `AUDITS.md` O-24 struck a `day` field at 2.5
@@ -279,6 +309,7 @@ class TripDay:
     """
 
     day: int
+    slot: str
     date: date
     occasion: str
     forecast_summary: str
@@ -287,7 +318,7 @@ class TripDay:
 
 @dataclass(frozen=True, slots=True)
 class TripContext:
-    """`StylistContext` with the per-day fields made plural.
+    """`StylistContext` with the per-day fields made plural — one entry per look.
 
     The two are separate types rather than one with optional lists because
     `suggest_looks` and `validate_look_response` both dispatch on which they
@@ -331,11 +362,16 @@ class MissingPiece:
 class Look:
     """One outfit as the model answered it.
 
-    `day` is `None` on the single-day path and an ordinal on the trip path —
+    `day` and `slot` are `None` on the single-day path and set on the trip path —
     one dataclass rather than a parallel `TripLook`, because every shared
     validation rule would otherwise be generic over a union for no gain. Unlike
     a *schema* property, an unused field here costs nothing per call, which is
     the whole difference between this and what `DECISIONS.md` 157 refused.
+
+    The two are only ever `None` together: `trip_packing_plan` requires both, so
+    a look that has one and not the other is an answer that is not the documented
+    shape at all. Rule 10 checks each in turn anyway, because a violation naming
+    which of them is missing is a better retry than one naming neither.
 
     `occasion` is gone; see `_LOOK_PROPERTIES` above and `AUDITS.md` O-26.
     """
@@ -345,6 +381,7 @@ class Look:
     reasoning: str
     weather_note: str
     day: int | None = None
+    slot: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -463,8 +500,11 @@ def _day_request(context: StylistContext) -> str:
 def _trip_request(context: TripContext) -> str:
     """`03-AI-CONTRACTS.md`'s REQUEST block, trip.
 
-    One line per day, in the document's order — number, occasion, forecast,
-    rule — and the numbering the answer is keyed to is the `Day N` on the left.
+    One line per **slot**, in the document's order — number, slot, occasion,
+    forecast, rule — and what the answer is keyed to is the `Day N slot` on the
+    left. A date with an evening writes two lines carrying the same forecast and
+    the same rule, which is `TripDay`'s duplication rendered: the two looks are
+    dressed for the same sky and different occasions.
     The columns are **not** padded to align, unlike the document's illustration:
     alignment is for a human reading a page, and a space-padded occasion is a
     different token to a tokeniser for no gain.
@@ -479,24 +519,35 @@ def _trip_request(context: TripContext) -> str:
     """
     first = context.days[0].date.isoformat()
     last = context.days[-1].date.isoformat()
+    # Dates are counted by distinct ordinal rather than by entry: a four-day trip
+    # with two evenings out is four days and six looks, and the line above the
+    # day list is about the trip's length.
+    dates = len({day.day for day in context.days})
     lines = [
         "REQUEST:",
         f"Destination: {context.destination}",
-        f"Dates: {first} to {last} ({len(context.days)} days)",
+        f"Dates: {first} to {last} ({dates} days)",
     ]
     if context.notes:
         lines.append(f"Notes: {context.notes}")
     lines.append("")
     lines += [
-        f"Day {day.day} | {day.occasion} | {day.forecast_summary} | {day.weather_rule}"
+        f"Day {day.day} {day.slot} | {day.occasion} | {day.forecast_summary} | {day.weather_rule}"
         for day in context.days
     ]
+    # The count is the number of lines and not the number of dates, because it is
+    # the number of looks being asked for. Stating it saves the model arithmetic
+    # over a list it can miscount, which is what `Build one look per day` used to
+    # do for free when the two numbers were the same.
     lines += [
         "",
-        "Build one look per day.",
+        f"Build one look per line above — {len(context.days)} looks for {dates} days.",
         "PACKING CONSTRAINT: minimise the number of distinct items packed. Reuse",
-        "bottoms and outerwear across days. Never repeat an identical full look.",
-        f"Aim for at most {context.reuse_target} distinct items across {len(context.days)} days.",
+        "bottoms and outerwear across days. Where a day has both a day and an",
+        "evening look, reuse items between the two wherever the weather rule and",
+        "the two occasions allow it: the same trousers with a different top is a",
+        "change of outfit. Never repeat an identical full look.",
+        f"Aim for at most {context.reuse_target} distinct items across {dates} days.",
         "Then return the deduplicated packing list.",
     ]
     return "\n".join(lines)
@@ -669,21 +720,28 @@ def _fake_response(wardrobe: Sequence[ItemResponse], context: StylistContext) ->
 
 
 def _fake_trip_response(wardrobe: Sequence[ItemResponse], context: TripContext) -> StylistResponse:
-    """The `USE_FAKE_AI` answer for a trip: one look per day, and a packing list.
+    """The `USE_FAKE_AI` answer for a trip: one look per slot, and a packing list.
 
     Every rule the trip path runs has to pass here or the flag produces a `502`
     on the one journey it exists to make deterministic. Rule 4 by building
-    exactly `len(days)` looks, rule 10 by numbering them in order, rule 11 by
-    rotating the picks with the day index, rule 6 by the outerwear `_fake_items`
-    now picks (`AUDITS.md` O-27), and **rule 5 in both directions** by deriving
-    the packing list from the looks rather than composing it separately — a
-    deduplicated union, in first-worn order, which is the same arithmetic
-    `packing.py` will do to the real answer.
+    exactly one look per entry, rule 10 by carrying each entry's own `(day,
+    slot)`, rule 11 by rotating the picks with the **entry** index, rule 6 by the
+    outerwear `_fake_items` now picks (`AUDITS.md` O-27), and **rule 5 in both
+    directions** by deriving the packing list from the looks rather than
+    composing it separately — a deduplicated union, in first-worn order, which is
+    the same arithmetic `packing.py` will do to the real answer.
+
+    **The rotation was already keyed on the entry index and not on `day.day`**,
+    which is what makes a two-slot date produce two different looks rather than
+    two identical ones that rule 11 would refuse. That was luck rather than
+    foresight at 4.3; 4.13 is where it became load-bearing, so it is written down
+    here as a property the offset must keep.
     """
     looks = tuple(
         Look(
             day=day.day,
-            title=f"Placeholder look for day {day.day}",
+            slot=day.slot,
+            title=f"Placeholder look for day {day.day} {day.slot}",
             item_ids=tuple(
                 item.short_id for item in _fake_items(wardrobe, _day_context(day), offset=index)
             ),
@@ -752,6 +810,7 @@ def _build(payload: Any) -> StylistResponse:
                     # to tell "not the documented shape" from "the other
                     # documented shape".
                     day=look.get("day"),
+                    slot=look.get("slot"),
                 )
                 for look in payload["looks"]
             ),
@@ -859,19 +918,38 @@ def _normalised(response: StylistResponse) -> StylistResponse:
 
 
 def _named(position: int, message: str, trip: bool) -> str:
-    """A violation, with the day it happened on when there is more than one.
+    """A violation from a rule that runs **before** rule 10, named by position.
 
-    **The number is the look's 1-based position in the array, not its returned
-    `day`.** Rules 1 and 2 run *before* rule 10, which is exactly when the
-    returned ordinals are what has not been checked yet: two looks both claiming
-    day 3 would produce two violations naming day 3, and the day nobody dressed
-    would be named in none of them. Position is knowable before any rule has
-    run. `DECISIONS.md` 194.
+    Rules 1 and 2 run before the ordinals have been checked, which is exactly
+    when they cannot be trusted: two looks both claiming day 3 would produce two
+    violations naming day 3, and the day nobody dressed would be named in none of
+    them. Position is knowable before any rule has run. `DECISIONS.md` 194.
+
+    **It says `look 3` and not `day 3` from task 4.13.** While a trip had one look
+    per day, rule 10 made the two numbers identical and the prefix was true
+    either way; with two slots on a date the sixth look of a four-day trip is not
+    day 6, so naming a day here would name one that does not exist.
 
     Single-day violations are unprefixed, and their wording is untouched from
     2.5 — a pinned string in `tests/unit/test_look_validation.py` for every one.
     """
-    return f"day {position + 1}: {message}" if trip else message
+    return f"look {position + 1}: {message}" if trip else message
+
+
+def _at_slot(look: Look, message: str, trip: bool = True) -> str:
+    """A violation from a rule that runs **after** rule 10, named by its pair.
+
+    `_named`'s counterpart and the other half of 4.13's split. Once rule 10 has
+    passed, every look carries a `(day, slot)` that was asked for, so the pair is
+    both trustworthy and the thing the reader is looking at on screen — `day 2
+    evening: the look has no shoes` names a card, where `look 6:` names an array
+    index nobody can see.
+
+    The `trip` flag exists for rule 9, which is the one rule that runs on both
+    paths after everything it depends on: a single-day look has no pair to name
+    and its string is pinned by 2.5.
+    """
+    return f"day {look.day} {look.slot}: {message}" if trip else message
 
 
 def _unknown_id(
@@ -916,24 +994,47 @@ def _wrong_count(looks: tuple[Look, ...], expected_days: int) -> str | None:
     return None
 
 
-def _wrong_days(looks: tuple[Look, ...], expected_days: int) -> str | None:
-    """Rule 10: the days are `1..n`, each exactly once. Trip path only.
+def _wrong_slots(looks: tuple[Look, ...], expected: tuple[tuple[int, str], ...]) -> str | None:
+    """Rule 10: the `(day, slot)` pairs are exactly the ones asked for. Trip only.
 
-    Not rule 4 in different words, which is the whole reason it exists: seven
-    looks numbered 1, 1, 2, 3, 4, 5, 6 satisfy the count exactly, leave day 7
-    undressed and Monday wearing two outfits, and every look in the array looks
-    complete on its own.
+    Not rule 4 in different words, which is the whole reason it exists: two looks
+    both for day 1's morning satisfy a count of two, leave the evening undressed,
+    and each looks complete on its own.
+
+    **It compares against the request rather than against a range**, which is
+    4.13's change. `sorted(day) == 1..n` was a complete description while a date
+    held one look; it now admits two `day` looks for Monday and calls Monday's
+    evening dressed.
+
+    Three shapes, and a duplicate is reported alone. Rule 4 has already made the
+    counts agree, so a pair returned twice means another is missing and naming
+    both would be one violation describing itself twice — the duplicate is the
+    error, and the gap is its shadow.
     """
     for position, look in enumerate(looks):
         if look.day is None:
             return _named(position, "this look has no day number, and every look needs one", True)
+        if look.slot is None:
+            return _named(position, "this look has no slot, and every look needs one", True)
 
-    numbered = sorted(look.day for look in looks if look.day is not None)
-    if numbered != list(range(1, expected_days + 1)):
-        got = ", ".join(str(day) for day in numbered)
-        return (
-            f"the looks are numbered {got} and must be numbered 1 to {expected_days}, "
-            "each day exactly once"
+    returned = [(look.day, look.slot) for look in looks if look.day and look.slot]
+    counts = Counter(returned)
+    repeated = [(pair, count) for pair, count in counts.items() if count > 1]
+    if repeated:
+        return "; ".join(
+            f"day {day} {slot} appears {'twice' if count == 2 else f'{count} times'}"
+            for (day, slot), count in sorted(repeated, key=lambda item: _order(item[0]))
+        )
+
+    asked = set(expected)
+    missing = [pair for pair in expected if pair not in counts]
+    unexpected = [pair for pair in dict.fromkeys(returned) if pair not in asked]
+    if missing or unexpected:
+        # Missing first: it is the half that leaves somebody undressed, and the
+        # unexpected half is usually the same mistake seen from the other side.
+        return "; ".join(
+            [f"day {day} {slot} was asked for and is missing" for day, slot in missing]
+            + [f"day {day} {slot} was not asked for" for day, slot in unexpected]
         )
     return None
 
@@ -946,18 +1047,17 @@ def _duplicate_look(looks: tuple[Look, ...]) -> str | None:
     exactly when the reuse instruction bites hardest — the cheapest way to pack
     twelve items across seven days is to wear Tuesday twice.
     """
-    seen: dict[frozenset[str], int] = {}
-    for position, look in enumerate(looks):
+    seen: dict[frozenset[str], Look] = {}
+    for _, look in _in_day_order(looks):
         worn = frozenset(look.item_ids)
         first = seen.get(worn)
         if first is not None:
-            return _named(
-                position,
-                f"this look wears exactly the same items as day {first + 1}; "
-                "no two days may be dressed identically",
-                True,
+            return _at_slot(
+                look,
+                f"this look wears exactly the same items as day {first.day} {first.slot}; "
+                "no two looks may be dressed identically",
             )
-        seen[worn] = position
+        seen[worn] = look
     return None
 
 
@@ -973,13 +1073,13 @@ def _packing_mismatch(response: StylistResponse) -> str | None:
         return "you returned no packing list, and a trip needs one"
 
     packed = set(response.packing_list)
-    for position, look in enumerate(response.looks):
+    # Named by pair rather than by position: rule 5 runs after rule 10 on this
+    # path, so the pair is checked, and it is what the reader sees on screen.
+    for _, look in _in_day_order(response.looks):
         for item_id in look.item_ids:
             if item_id not in packed:
-                return _named(
-                    position,
-                    f"this look wears {item_id}, which is not in the packing list",
-                    True,
+                return _at_slot(
+                    look, f"this look wears {item_id}, which is not in the packing list"
                 )
 
     worn = {item_id for look in response.looks for item_id in look.item_ids}
@@ -1023,32 +1123,50 @@ def _missing_outerwear_by_day(
 
     **Looks are matched by their own `day`, not by position**, because rule 10
     admits a complete-but-shuffled array. This runs after rule 10, so every
-    `day` is present and in range by the time it is read.
+    `day` is present and was asked for by the time it is read.
+
+    **The lookup is a map and not `context.days[look.day - 1]`**, which 4.13 had
+    to change: with two entries for one date the index and the ordinal are
+    different numbers, so day 3's look would have been judged against whatever
+    entry happened to sit third. Both entries of a date carry the same rule, so
+    the first one found answers for either slot.
     """
-    for position, look in _in_day_order(looks):
-        day = context.days[look.day - 1] if look.day is not None else None
+    rules = {day.day: day for day in context.days}
+    for _, look in _in_day_order(looks):
+        day = rules.get(look.day) if look.day is not None else None
         if day is None or not requires_outerwear(day.weather_rule):
             continue
         if not any(known[item_id].category is Category.OUTERWEAR for item_id in look.item_ids):
-            return _named(
-                position,
-                "the weather rule requires outerwear and the look contains none",
-                True,
-            )
+            return _at_slot(look, "the weather rule requires outerwear and the look contains none")
     return None
 
 
-def _in_day_order(looks: tuple[Look, ...]) -> list[tuple[int, Look]]:
-    """The looks by their day number, each with the position it is reported as.
+# The order two looks of one date are read in, which is the order they were
+# asked for and the order the trip page stacks them. `Slot.values()` rather than
+# a literal pair, so the vocabulary decides it in one place.
+_SLOT_ORDER: Final = {slot: rank for rank, slot in enumerate(Slot.values())}
 
-    Rule 10 checks `sorted(day) == 1..n`, which a **shuffled** array satisfies —
-    day 3 may legitimately arrive first. Every rule that runs after it therefore
-    reads `look.day` to find the day it belongs to, and reports the position it
-    was returned in, so one number identifies a look in the message and another
-    finds its weather. They are the same number whenever the model answers in
-    order, which is every case observed so far. `DECISIONS.md` 194.
+
+def _order(pair: tuple[int, str]) -> tuple[int, int]:
+    day, slot = pair
+    return day, _SLOT_ORDER.get(slot, len(_SLOT_ORDER))
+
+
+def _in_day_order(looks: tuple[Look, ...]) -> list[tuple[int, Look]]:
+    """The looks by their `(day, slot)`, each with the position it is reported as.
+
+    Rule 10 checks the pairs against the request, which a **shuffled** array
+    satisfies — day 3 may legitimately arrive first. Every rule that runs after
+    it therefore reads the pair to find the day it belongs to, and reports the
+    position it was returned in, so one number identifies a look in the message
+    and another finds its weather. `DECISIONS.md` 194.
+
+    **The slot is in the key from 4.13**, and without it the sort is not total:
+    two looks for one date would come back in whichever order the model answered,
+    so rule 11 could name either of them as the duplicate of the other and one
+    plan would report two ways.
     """
-    return sorted(enumerate(looks), key=lambda pair: pair[1].day or 0)
+    return sorted(enumerate(looks), key=lambda pair: _order((pair[1].day or 0, pair[1].slot or "")))
 
 
 def _missing_anchor(looks: tuple[Look, ...], context: StylistContext) -> str | None:
@@ -1138,14 +1256,24 @@ def _slot_conflict(
     It absorbs rule 3, which was this rule with one slot in it. The number
     stays in `03`'s table: eight documents, a test and three code comments name
     it, and renumbering to buy nothing is how a reference becomes wrong.
+
+    **`slot` means two things in this function and they are unrelated.**
+    `SLOT_RULES` is the wardrobe slot a garment occupies — a top, a bottom, a
+    pair of shoes — and `Look.slot` is which half of a trip day it is worn in.
+    The collision is a word rather than a concept; `AUDITS.md` O-35 carries the
+    other one, between `Slot.EVENING` and `Occasion.EVENING`.
+
+    On the trip path it names the pair, because rule 9 runs after rule 10 there
+    and a card on screen is easier to find than an array index. The single-day
+    string is unprefixed and untouched from 2.5.
     """
-    for position, look in enumerate(looks):
+    for _, look in _in_day_order(looks) if trip else list(enumerate(looks)):
         for slot in SLOT_RULES:
             worn = [item_id for item_id in look.item_ids if slot.holds(known[item_id])]
             if len(worn) > slot.limit:
                 named = ", ".join(worn[: slot.limit + 1])
-                return _named(
-                    position,
+                return _at_slot(
+                    look,
                     f"the look contains {len(worn)} {slot.label} "
                     f"and may contain at most {slot.limit}: {named}",
                     trip,
@@ -1157,8 +1285,8 @@ def _slot_conflict(
                 None,
             )
             if separate is not None:
-                return _named(
-                    position,
+                return _at_slot(
+                    look,
                     f"the look contains a dress and the separate item {separate}: "
                     "a dress is worn instead of a top and a bottom, not beside one",
                     trip,
@@ -1197,11 +1325,14 @@ def _violation(
         # fields on this path, and **rule 10 is hoisted above 5 and 6** because
         # rule 6 pairs a look with its day's weather rule and that pairing means
         # nothing until the ordinals are known good. `DECISIONS.md` 194.
+        # Rules 4 and 10 read one argument: 4 counts it, 10 compares against it,
+        # so the count and the set cannot disagree about one request.
+        expected = tuple((day.day, day.slot) for day in context.days)
         return (
             _unknown_id(response.looks, known, trip=True)
             or _incomplete(response.looks, known, trip=True)
-            or _wrong_count(response.looks, len(context.days))
-            or _wrong_days(response.looks, len(context.days))
+            or _wrong_count(response.looks, len(expected))
+            or _wrong_slots(response.looks, expected)
             or _packing_mismatch(response)
             or _missing_outerwear_by_day(response.looks, known, context)
             or _slot_conflict(response.looks, known, trip=True)

@@ -101,6 +101,11 @@ def plan(wardrobe: dict[str, Item], days: int) -> StylistResponse:
     looks = tuple(
         StylistLook(
             day=day,
+            # `slot` is required on the trip path from task 4.13 — rule 10 matches
+            # the `(day, slot)` pair against what the request asked for, and a
+            # look carrying one and not the other is refused before any other
+            # trip rule runs. `day` while nothing can request an evening.
+            slot="day",
             title=f"Day {day}",
             item_ids=tuple(wardrobe[name].short_id for name in OUTFITS[day - 1]),
             reasoning="The straight jean balances the oversized shirt.",

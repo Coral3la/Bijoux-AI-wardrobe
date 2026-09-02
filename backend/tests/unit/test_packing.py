@@ -118,13 +118,14 @@ def _answer(*looks: Look, packing_list: tuple[str, ...] | None = None) -> Stylis
     )
 
 
-def _look(day: int, *item_ids: str) -> Look:
+def _look(day: int, *item_ids: str, slot: str = "day") -> Look:
     return Look(
-        title=f"Day {day}",
+        title=f"Day {day} {slot}",
         item_ids=item_ids,
         reasoning="r",
         weather_note="w",
         day=day,
+        slot=slot,
     )
 
 
