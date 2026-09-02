@@ -168,6 +168,18 @@ class TripSwapRequest(BaseModel):
     so a `ge` here would answer `0` and `99` with two different shapes of the
     same refusal. One check against the trip's own days, one message.
 
+    **`slot` arrived at 4.16 and is required, with no default** — the same
+    refusal `TripOccasion` takes one task back, with a quieter failure behind it.
+    A defaulted slot on the pack request produces a `502`: two `day` entries for
+    one date, refused by rule 10. A defaulted slot *here* produces a `200`, on
+    the wrong look: the badge next to Monday's dinner would rebuild Monday's
+    office outfit and answer as though it had done what was asked. **A slot the
+    day has not got is `item_not_in_look`** — `_by_day` finds nothing for the
+    pair, and `_replaceable` answers the `422` it already answers for a day with
+    no look, before the model is called. The two facts share one code
+    deliberately: with no look for that slot, no item is in it, and the badge
+    only exists beside a look that does. `STAGE-4` 4.16.
+
     `exclude_item_ids` accumulates in the client across taps on one day, which is
     what stops a second swap of the same role handing back the garment the first
     one rejected. The server cannot derive it: the looks that carried those
@@ -177,6 +189,7 @@ class TripSwapRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     day: int
+    slot: Slot
     item_id: uuid.UUID
     replace_role: Role
     exclude_item_ids: list[uuid.UUID] = Field(default_factory=list)

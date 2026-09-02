@@ -78,6 +78,18 @@ OUTFITS: tuple[tuple[str, ...], ...] = (
     ("shoes_b", "top_c", "bottom_b"),
 )
 
+# The second look of a date, for the days a test asks to carry one. Keyed by day
+# rather than a single tuple so that two evenings could never wear the same
+# outfit and trip rule 11; day 2 is `DAY`, the day under test throughout.
+#
+# **`top_b` is the point of this outfit.** It is worn by day 2's day look and by
+# nothing else in `OUTFITS`, so putting it here makes it a garment worn on one
+# date in both slots — which is what the packing list's fourth criterion needs to
+# measure, and what no single-slot trip can produce.
+EVENING_OUTFITS: dict[int, tuple[str, ...]] = {
+    2: ("shoes_b", "top_b", "bottom_b"),
+}
+
 
 class FakeStylist:
     """Answers in order, last repeats — `test_looks_suggest.py`'s fake unchanged."""
@@ -100,22 +112,44 @@ class FakeStylist:
         return len(self.contexts)
 
 
-def plan(wardrobe: dict[str, Item], days: int) -> StylistResponse:
-    """A valid `trip_packing_plan`, built from the planted ids."""
+def pairs(days: int, evenings: tuple[int, ...] = ()) -> list[tuple[int, str]]:
+    """The `(day, slot)` pairs a trip of `days` days with these evenings asks for.
+
+    One list feeds the request body and the fake's answer, which is what keeps
+    rule 10 a real check here rather than a tautology.
+    """
+    return [
+        (day, slot)
+        for day in range(1, days + 1)
+        for slot in (("day", "evening") if day in evenings else ("day",))
+    ]
+
+
+def plan(wardrobe: dict[str, Item], days: int, evenings: tuple[int, ...] = ()) -> StylistResponse:
+    """A valid `trip_packing_plan`, built from the planted ids.
+
+    `evenings` names the dates that carry a second look, from task 4.16. A day
+    slot keeps `OUTFITS[day - 1]` whatever else is asked for — every reuse
+    assertion in this suite is written against who wears what, so an evening must
+    not move an existing day's outfit.
+    """
     looks = tuple(
         StylistLook(
             day=day,
             # `slot` is required on the trip path from task 4.13 — rule 10 matches
             # the `(day, slot)` pair against what the request asked for, and a
             # look carrying one and not the other is refused before any other
-            # trip rule runs. `day` while nothing can request an evening.
-            slot="day",
-            title=f"Day {day}",
-            item_ids=tuple(wardrobe[name].short_id for name in OUTFITS[day - 1]),
+            # trip rule runs.
+            slot=slot,
+            title=f"Day {day} {slot}",
+            item_ids=tuple(
+                wardrobe[name].short_id
+                for name in (EVENING_OUTFITS[day] if slot == "evening" else OUTFITS[day - 1])
+            ),
             reasoning="The straight jean balances the oversized shirt.",
             weather_note="24°C — no coat needed.",
         )
-        for day in range(1, days + 1)
+        for day, slot in pairs(days, evenings)
     )
     return StylistResponse(
         looks=looks,
@@ -213,14 +247,15 @@ def stylist(monkeypatch: pytest.MonkeyPatch) -> Callable[..., FakeStylist]:
     return _install
 
 
-def body(days: int) -> dict[str, Any]:
+def body(days: int, evenings: tuple[int, ...] = ()) -> dict[str, Any]:
     first = date.today() + timedelta(days=2)
     return {
         "destination": "Berlin",
         "start_date": first.isoformat(),
         "end_date": (first + timedelta(days=days - 1)).isoformat(),
         "occasions": [
-            {"day": day, "slot": "day", "occasion": "work"} for day in range(1, days + 1)
+            {"day": day, "slot": slot, "occasion": "evening" if slot == "evening" else "work"}
+            for day, slot in pairs(days, evenings)
         ],
         "notes": "one dinner out",
     }
@@ -282,17 +317,22 @@ def packed(
 ) -> Callable[..., tuple[str, FakeStylist]]:
     """A packed three-day trip, and the fake that will answer the swap next."""
 
-    def _pack(answer: StylistResponse | Exception | None = None) -> tuple[str, FakeStylist]:
+    def _pack(
+        answer: StylistResponse | Exception | None = None,
+        evenings: tuple[int, ...] = (),
+    ) -> tuple[str, FakeStylist]:
         asked_geocoder = geocoder()
         asked_forecast = forecasts()
         fake = stylist(
-            plan(wardrobe, DAYS),
+            plan(wardrobe, DAYS, evenings),
             swap_look(wardrobe, keep=("top_b", "bottom_a"), new=REPLACEMENT)
             if answer is None
             else answer,
         )
         response = client.post(
-            "/api/v1/trips/pack", json=body(days=DAYS), headers=authorization(user)
+            "/api/v1/trips/pack",
+            json=body(days=DAYS, evenings=evenings),
+            headers=authorization(user),
         )
         assert response.status_code == 200
         # Cleared so that "no provider was called" below is a claim about the
@@ -313,6 +353,10 @@ def swap(
 ) -> Any:
     payload: dict[str, Any] = {
         "day": DAY,
+        # Required from 4.16 and defaulted here rather than at every call site:
+        # most of this suite packs single-slot trips, and the ones that do not
+        # override it.
+        "slot": "day",
         "item_id": overrides.pop("item_id"),
         "replace_role": "shoes",
         "exclude_item_ids": [],
@@ -320,11 +364,10 @@ def swap(
     return client.post(f"/api/v1/trips/{trip_id}/swap", json=payload, headers=authorization(user))
 
 
-def day_look(payload: dict[str, Any], day: int) -> dict[str, Any] | None:
-    """The `day`-slot look of one day. Every trip this suite packs is single-slot,
-    and `swap_item` reads that slot alone until 4.16."""
+def day_look(payload: dict[str, Any], day: int, slot: str = "day") -> dict[str, Any] | None:
+    """One slot's look, joined through `days[].slots[].look_id` as a client would."""
     slots = next(entry["slots"] for entry in payload["trip"]["days"] if entry["day"] == day)
-    look_id = next(entry["look_id"] for entry in slots if entry["slot"] == "day")
+    look_id = next((entry["look_id"] for entry in slots if entry["slot"] == slot), None)
     return next((look for look in payload["looks"] if look["id"] == look_id), None)
 
 
@@ -411,6 +454,149 @@ def test_the_swap_survives_a_reload(
 
     assert str(wardrobe[REPLACEMENT].id) in names(day_look(reloaded, DAY))
     assert str(wardrobe[REPLACED].id) not in names(day_look(reloaded, DAY))
+
+
+# --- the slot ---------------------------------------------------------------
+
+
+def test_a_swap_on_an_evening_leaves_the_days_look_alone(
+    client: TestClient,
+    user: User,
+    authorization: Callable[[User], dict[str, str]],
+    wardrobe: dict[str, Item],
+    packed: Callable[..., tuple[str, FakeStylist]],
+) -> None:
+    """The hole 4.15 opened: both looks of a date answered to one lookup key."""
+    trip_id, _ = packed(
+        answer=swap_look(wardrobe, keep=("top_b", "bottom_b"), new=REPLACEMENT),
+        evenings=(DAY,),
+    )
+    before = client.get(f"/api/v1/trips/{trip_id}", headers=authorization(user)).json()
+    unchanged = names(day_look(before, DAY))
+
+    payload = swap(
+        client,
+        user,
+        authorization,
+        trip_id,
+        slot="evening",
+        item_id=str(wardrobe["shoes_b"].id),
+    ).json()
+
+    assert names(day_look(payload, DAY)) == unchanged
+    evening = names(day_look(payload, DAY, "evening"))
+    assert str(wardrobe[REPLACEMENT].id) in evening
+    assert str(wardrobe["shoes_b"].id) not in evening
+
+
+def test_a_slot_the_day_has_not_got_is_item_not_in_look(
+    client: TestClient,
+    user: User,
+    authorization: Callable[[User], dict[str, str]],
+    wardrobe: dict[str, Item],
+    packed: Callable[..., tuple[str, FakeStylist]],
+) -> None:
+    """One code for two facts, taken deliberately: with no look for that slot, no
+    item is in it, and the badge only exists beside a look that does. The
+    assertion that matters is the second — refused before the model is asked, so
+    a broken client costs a query and not a call."""
+    trip_id, fake = packed()
+
+    response = swap(
+        client,
+        user,
+        authorization,
+        trip_id,
+        slot="evening",
+        item_id=str(wardrobe[REPLACED].id),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "item_not_in_look"
+    assert fake.calls == 1
+
+
+def test_the_replaced_look_is_the_slots_row_and_no_other(
+    client: TestClient,
+    db: Session,
+    user: User,
+    authorization: Callable[[User], dict[str, str]],
+    wardrobe: dict[str, Item],
+    packed: Callable[..., tuple[str, FakeStylist]],
+) -> None:
+    """O-32's detach, narrowed to one slot: the evening leaves and the day stays."""
+    trip_id, _ = packed(
+        answer=swap_look(wardrobe, keep=("top_b", "bottom_b"), new=REPLACEMENT),
+        evenings=(DAY,),
+    )
+    before = client.get(f"/api/v1/trips/{trip_id}", headers=authorization(user)).json()
+    evening_id = uuid.UUID(day_look(before, DAY, "evening")["id"])
+    day_id = uuid.UUID(day_look(before, DAY)["id"])
+    saved = db.get(Look, evening_id)
+    assert saved is not None
+    saved.is_saved = True
+    db.commit()
+
+    swap(
+        client,
+        user,
+        authorization,
+        trip_id,
+        slot="evening",
+        item_id=str(wardrobe["shoes_b"].id),
+    )
+
+    detached = db.get(Look, evening_id)
+    assert detached is not None
+    # `trip_id` and `slot` clear together — `ck_looks_slot_belongs_to_a_trip`
+    # reads the two as one fact, and `0006` refuses the row otherwise.
+    assert detached.trip_id is None
+    assert detached.slot is None
+    assert detached.is_saved is True
+
+    kept = db.get(Look, day_id)
+    assert kept is not None
+    assert kept.trip_id is not None
+    assert kept.slot == "day"
+
+
+def test_the_packing_list_keeps_a_garment_the_evening_still_wears(
+    client: TestClient,
+    user: User,
+    authorization: Callable[[User], dict[str, str]],
+    wardrobe: dict[str, Item],
+    packed: Callable[..., tuple[str, FakeStylist]],
+) -> None:
+    """`top_b` is worn by day 2's two slots and by no other date.
+
+    Swapping it out of the day look must leave it in the suitcase, because the
+    evening still wears it — the same property `shoes_a` measures across two
+    *days*, one level down. It holds because `_swapped_ids` reads every look the
+    trip still has rather than the one that changed.
+    """
+    trip_id, _ = packed(
+        answer=swap_look(wardrobe, keep=("shoes_a", "bottom_a"), new="top_c"),
+        evenings=(DAY,),
+    )
+
+    payload = swap(
+        client,
+        user,
+        authorization,
+        trip_id,
+        item_id=str(wardrobe["top_b"].id),
+        replace_role="top",
+    ).json()
+
+    assert str(wardrobe["top_b"].id) not in names(day_look(payload, DAY))
+    assert str(wardrobe["top_b"].id) in names(day_look(payload, DAY, "evening"))
+    assert str(wardrobe["top_b"].id) in payload["trip"]["packing_list"]["item_ids"]
+    # The occasion of the slot that was swapped, not of the date's last entry.
+    # `_swap_context`'s lookup was keyed by day alone until 4.16, and over a
+    # two-slot date it kept the evening's — so this look would have come back
+    # dressed for dinner with nothing on the wire to say so.
+    assert day_look(payload, DAY)["occasion"] == "work"
+    assert day_look(payload, DAY, "evening")["occasion"] == "evening"
 
 
 # --- what reaches the model -------------------------------------------------

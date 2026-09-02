@@ -941,6 +941,7 @@ describe('TripDetailPage', () => {
       expect(request.request.method).toBe('POST');
       expect(request.request.body).toEqual({
         day: 1,
+        slot: 'day',
         item_id: 'item-2',
         replace_role: 'shoes',
         exclude_item_ids: ['item-2'],
@@ -1019,6 +1020,7 @@ describe('TripDetailPage', () => {
 
       expect(swapRequest().request.body).toEqual({
         day: 2,
+        slot: 'day',
         item_id: 'item-1',
         replace_role: 'top',
         exclude_item_ids: ['item-1'],

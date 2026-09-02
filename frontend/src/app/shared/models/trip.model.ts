@@ -148,8 +148,13 @@ export interface PackResponse {
 // the list is what stops a second tap on one day handing back the garment the
 // first tap rejected, and the server cannot rebuild it — the looks carrying
 // those rejections were replaced by this endpoint and are gone.
+//
+// `slot` is required and has no default (4.16). The server would otherwise
+// answer 200 having rebuilt the wrong look of a two-slot day — a quieter failure
+// than the pack request's, where a missing slot is a 502.
 export interface TripSwapRequest {
   readonly day: number;
+  readonly slot: Slot;
   readonly item_id: string;
   readonly replace_role: Role;
   readonly exclude_item_ids: readonly string[];

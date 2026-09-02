@@ -654,6 +654,11 @@ export class TripDetailPage {
     this.api
       .swap(this.id, {
         day,
+        // The literal 'day' until task 4.18, and true while it stands: the badge
+        // is drawn on one look per day and has no second slot to name yet. The
+        // server takes no default — a missing slot there would rebuild the wrong
+        // look of a two-slot day and answer 200 — so it is sent from here.
+        slot: 'day',
         item_id: item.id,
         replace_role: role,
         exclude_item_ids: [...excluded],

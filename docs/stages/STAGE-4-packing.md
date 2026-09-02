@@ -461,13 +461,52 @@ slot until 4.18.
 `TripSwapRequest.slot`; `_day`, `_replaceable` and `_replace_look` take the slot;
 a slot the day has not got falls to `item_not_in_look`.
 
+**Two of the three functions this line names needed nothing, and one it does not
+name needed everything.** `_day` reads `trips.forecast`, which is one row per
+*date* — the slot narrows no lookup there, and both slots of a date are judged
+against the one rule by contract (`DECISIONS.md` 225). `_replaceable` already
+answers `item_not_in_look` for a look that is not there, so once `swap_item`
+looks up `(day, request.slot)` the last criterion holds with no new code. What
+did need the slot is **`_swap_context`**, which held the last of the two dict
+comprehensions `0006` made lossy — `{entry["day"]: entry["occasion"]}`, keeping
+whichever entry came last, so a swap on Monday's day look would have rebuilt it
+for dinner with nothing on the wire to say so. `_trip`'s copy died at 4.15; this
+one dies here.
+
+**A slot the day has not got and a garment that is not in the look share one
+code deliberately.** With no look for that slot, no item is in it; the badge is
+drawn only beside a look that exists, so the case reaches the server from a
+hand-built request or a broken client, and the `4xx` text is not what either
+reads. Three lines — a lookup and a raise — would separate them, and a future
+reader who wants that can add them then. What the test pins is the half that
+matters: the refusal lands **before** the model is called.
+
+**`slot` is required with no default, and the failure behind that is quieter than
+4.15's.** A pack request missing its slot produces two `day` entries for one date
+and a `502` from rule 10. A swap request missing its slot would answer **`200`**,
+having rebuilt the wrong look of a two-slot day. One literal in
+`trip-detail.page.ts` sends `'day'` until 4.18 gives the badge a slot to name —
+4.12, 4.14 and 4.15's pattern, a fourth time.
+
+**The swap suite needed a two-slot trip before it could measure one.** Its fakes
+are copies rather than imports (twenty test modules, zero cross-imports), so
+`pairs`, `evenings` and an `EVENING_OUTFITS` entry land here as they landed in
+`test_trips_pack.py` at 4.15. A day slot keeps `OUTFITS[day - 1]` whatever else
+is asked for, because every reuse assertion in that file is written against who
+wears what.
+
 **Acceptance criteria — 4.16's own:**
 
-- [ ] A swap on day 2 evening changes that look and not day 2's day look
-- [ ] A swap naming a slot the day has not got is `item_not_in_look`, before the
-      model is called
-- [ ] The replaced look is detached or deleted with its slot's row and no other
-- [ ] The packing list keeps the garment when the day's other slot still wears it
+- [x] A swap on day 2 evening changes that look and not day 2's day look — and
+      the lookup reverted to the `day` slot fails it, measured
+- [x] A swap naming a slot the day has not got is `item_not_in_look`, before the
+      model is called — asserted on the code *and* on the fake's call count
+- [x] The replaced look is detached or deleted with its slot's row and no other —
+      a saved evening leaves with `trip_id` and `slot` cleared together, and the
+      day look keeps both
+- [x] The packing list keeps the garment when the day's other slot still wears it
+      — `top_b` is worn by day 2's two slots and by no other date, which is the
+      one shape a single-slot trip cannot produce
 
 ### 4.17 The trip form
 

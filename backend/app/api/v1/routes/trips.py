@@ -629,14 +629,20 @@ def _swap_context(
         locked.append(available)
 
     for_date = trip.start_date + datetime.timedelta(days=request.day - 1)
-    occasions = {entry["day"]: entry["occasion"] for entry in trip.occasions}
+    # Keyed by the pair from 4.16, and by the day alone before it — the last of
+    # the two dict comprehensions `0006` made lossy, the other being `_trip`'s at
+    # 4.15. Over a two-slot date this kept whichever entry came last, so a swap
+    # on Monday's day look would have dressed it for dinner. Indexed rather than
+    # `.get`, so a trip whose two JSON columns disagree is a `500` and not a look
+    # rebuilt against somebody else's occasion.
+    occasions = {(entry["day"], entry["slot"]): entry["occasion"] for entry in trip.occasions}
 
     return StylistContext(
         date=for_date,
         # The trip's stored occasion for this day, never the look's echo of it:
         # `_write` wrote that column from the request and `occasion` was struck
         # from both AI schemas at 4.3. `DECISIONS.md` 193.
-        occasion=occasions[request.day],
+        occasion=occasions[(request.day, request.slot)],
         forecast_summary=summarize_forecast(
             Forecast(
                 date=for_date,
@@ -675,6 +681,7 @@ def _replace_look(
     items: Sequence[ItemResponse],
     for_date: datetime.date,
     occasion: str,
+    slot: str,
 ) -> None:
     """`AUDITS.md` O-32's option 2 for one day, and `DECISIONS.md` 200's ordering.
 
@@ -711,10 +718,11 @@ def _replace_look(
         # AI schemas at 4.3, so the value that is certainly legal is the one the
         # user sent. `DECISIONS.md` 193.
         occasion=occasion,
-        # A literal until task 4.16, and true while it stands: `swap_item` looks
-        # the day slot up and no other, so every look this endpoint replaces is a
-        # `day` look and so is its replacement.
-        slot="day",
+        # The slot of the look being replaced, which is the slot the request
+        # named — `_by_day` found this look by that pair, so the two cannot
+        # disagree. It arrives as a parameter beside `occasion` and for the same
+        # reason: both are the request's, never the model's.
+        slot=slot,
         reasoning=answer.reasoning,
         weather_note=answer.weather_note,
         # Computed from the ordinal rather than copied from `trips.forecast`'s
@@ -993,13 +1001,12 @@ async def swap_item(
 
     rows = _looks(db, trip)
     hydrated = {look.id: look for look in _hydrate(db, rows)}
-    # `"day"` is a literal until task 4.16, and true while it stands: the swap
-    # request carries no slot yet, so the only look it can name is the day one.
-    # A trip packed with an evening is reachable from this commit, and swapping
-    # on it edits the day look whatever the caller meant — which is the hole 4.16
-    # closes, and the reason its first criterion is about day 2's evening.
+    # The pair the request named. A slot this day has not got finds nothing here
+    # and falls to `_replaceable`'s `item_not_in_look` — the same `422` a day
+    # with no look answers, and true in the same way: with no look for the slot,
+    # no item is in it. `STAGE-4` 4.16 takes that conflation deliberately.
     look_id = _by_day(trip.start_date, [(row.id, row.for_date, row.slot) for row in rows]).get(
-        (request.day, Slot.DAY)
+        (request.day, request.slot)
     )
     look, replaced = _replaceable(
         hydrated[look_id] if look_id is not None else None, request.item_id
@@ -1046,6 +1053,7 @@ async def swap_item(
         items,
         trip.start_date + datetime.timedelta(days=request.day - 1),
         context.occasion,
+        request.slot,
     )
 
     # Re-read rather than assembled from what is in hand: the day's look is a new
