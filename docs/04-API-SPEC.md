@@ -641,13 +641,21 @@ Query: `limit`, `offset`. Ordered `created_at DESC` with `id` as the tiebreaker,
 `200`; `total` counts the whole set. No looks — a list of trips is a list of
 trip objects, and the looks for one of them come from `GET /trips/{id}`.
 
-**This endpoint ships with no caller, and after task 4.6b it is the only one
-here that does.** No Stage 4 task lists trips: 4.5 is the form, 4.6 the packing
-view, 4.6b the repack and delete controls, 4.6a-1 and 4.6a the swap and 4.7 the
-export, and `05-FRONTEND-SPEC.md` §7 describes no trips list screen. It is specified and
-built because this document is authoritative and the heading has been here since
-Stage 0 — the same shape as `GET /me/locations/search` shipping ahead of its
-caller, and recorded rather than quietly dropped (`AUDITS.md` **O-16**'s family).
+**Its caller arrived at task 4.10, and what stood here said it never would.**
+The paragraph this replaces recorded that no Stage 4 task listed trips — 4.5 is
+the form, 4.6 the packing view, 4.6b the repack and delete, 4.6a-1 and 4.6a the
+swap, 4.7 the export — and concluded the endpoint was specified and built
+because this document is authoritative rather than because anything would ever
+read it, the same shape as `GET /me/locations/search` shipping ahead of its
+caller (`AUDITS.md` **O-16**'s family). That was true for six tasks. `/trips` is
+now the list, it calls this endpoint on arrival, and `05-FRONTEND-SPEC.md` §7
+draws the screen.
+
+**The caller sends neither `limit` nor `offset`.** It takes both defaults, so a
+browser reads at most 100 trips and the `total` it is handed is rendered
+nowhere. Pagination is not built and no task owns it — which is a real ceiling
+rather than a theoretical one, because nothing on that screen tells a user with
+101 trips that the last one is missing.
 
 Failure codes: `422` `validation_error`, `401` `invalid_token`.
 
@@ -705,6 +713,15 @@ footer row: two presses, the second one sending the request, and `/wardrobe` on
 cascade above is finally said to a user — *"Tap again to delete. Saved looks
 from this trip go too."* — which is the only place in the product that names it.
 `AUDITS.md` **O-33**, `DECISIONS.md` 126 and 207.
+
+**A second caller arrived at task 4.10**, one per row on `/trips`, with the same
+two presses and the same armed sentence — the copy is reused rather than
+rewritten, because a second control destroying the same rows has to say the same
+thing about them. That one removes the row optimistically and puts it back at
+the index it left from when the request fails. **The line above about `/wardrobe`
+is now stale**: it goes there on the reasoning that there is no trips list to
+return to, and there is one. `AUDITS.md` **O-34** carries the change, left
+deliberately unmade here — 4.10 edited no screen it did not build.
 
 ### `POST /trips/{id}/repack`
 ```json

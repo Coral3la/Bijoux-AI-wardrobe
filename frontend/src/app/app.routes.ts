@@ -55,20 +55,32 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/looks/saved-looks.page').then((m) => m.SavedLooksPage),
   },
-  // Above the wildcard like the four before it. It ships with nothing linking
-  // to it, which AUDITS.md O-29 has been counting since 3.2 — its written
-  // recommendation is that the next entry point be the navigation bar rather
-  // than a sixth bespoke link, and building that is not this task's. The screen
-  // is reached by typing the URL until something claims O-29.
+  // The list at 4.10, and the form until then. The comment that stood here said
+  // the screen was reached by typing the URL until something claimed AUDITS.md
+  // O-29; 4.9 claimed it, and this is where that sentence finally goes. The
+  // navigation bar's Trips item points at this path, and because
+  // routerLinkActive matches a link's segments as a prefix, it stays lit on
+  // both of the routes below as well.
   {
     path: 'trips',
     canActivate: [authGuard],
+    loadComponent: () => import('./features/trips/trip-list.page').then((m) => m.TripListPage),
+  },
+  // Above trips/:id, and the order is load-bearing rather than tidy: below it,
+  // 'new' matches the :id segment, the Itinerary asks GET /trips/new for a trip
+  // that does not exist and the form is unreachable at any URL. The spec
+  // asserts the route that matched rather than the resulting address, because a
+  // URL that resolves the wrong screen still looks exactly right in the bar.
+  {
+    path: 'trips/new',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/trips/trips.page').then((m) => m.TripsPage),
   },
-  // Declared after /trips and before the wildcard, exactly as wardrobe/:id sits
-  // after /wardrobe. Unlike the five screens above it, this one has a way in
-  // from the moment it ships: the form navigates here the instant a pack
-  // succeeds, which is what closes the dead end DECISIONS.md 205 accepted.
+  // Declared under both of the routes above and before the wildcard, exactly as
+  // wardrobe/:id sits after /wardrobe. It has had a way in since it shipped —
+  // the form navigates here the instant a pack succeeds, which is what closes
+  // the dead end DECISIONS.md 205 accepted — and 4.10 gives it a second one
+  // that survives a lost URL, which is the whole point of the list.
   {
     path: 'trips/:id',
     canActivate: [authGuard],

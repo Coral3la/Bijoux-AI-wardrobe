@@ -18,6 +18,23 @@ async function navigate(url: string): Promise<string> {
   return router.url;
 }
 
+// The `path` of the route that actually matched, which is a different question
+// from the one `navigate` answers. A URL that resolves the wrong component is
+// still that URL in the address bar, so /trips/new landing on 'trips/:id' would
+// pass every assertion above this line.
+async function matched(url: string): Promise<string | undefined> {
+  TestBed.configureTestingModule({
+    providers: [
+      provideRouter(routes),
+      { provide: AuthService, useValue: { isAuthenticated: () => true } },
+    ],
+  });
+  const router = TestBed.inject(Router);
+  await router.navigateByUrl(url);
+
+  return router.routerState.snapshot.root.firstChild?.routeConfig?.path;
+}
+
 describe('routes', () => {
   afterEach(() => TestBed.resetTestingModule());
 
@@ -54,11 +71,27 @@ describe('routes', () => {
     expect(await navigate('/profile')).toBe('/profile');
   });
 
-  // The one that matters most if it slips below the wildcard: nothing links to
-  // /trips at all, so the URL is the only way in and a redirect would make the
-  // screen unreachable by any means whatsoever.
-  it('resolves the trip form rather than falling through to the wildcard', async () => {
+  // The comment here used to say nothing linked to /trips and the URL was the
+  // only way in. The navigation bar links to it, and since 4.10 it is the list
+  // rather than the form — but the failure if it slips below the wildcard is
+  // unchanged, so the test is.
+  it('resolves the trips list rather than falling through to the wildcard', async () => {
     expect(await navigate('/trips')).toBe('/trips');
+  });
+
+  // Order, not existence. Both of these resolve whichever way round the two
+  // routes are declared; what changes is which component answers, and only the
+  // matched path can see it.
+  it('matches the form on /trips/new rather than reading new as a trip id', async () => {
+    expect(await matched('/trips/new')).toBe('trips/new');
+  });
+
+  it('still matches the detail route for an actual id', async () => {
+    expect(await matched('/trips/trip-1')).toBe('trips/:id');
+  });
+
+  it('matches the list on /trips', async () => {
+    expect(await matched('/trips')).toBe('trips');
   });
 
   it('guards the profile route', async () => {
@@ -96,6 +129,19 @@ describe('routes', () => {
     });
     const router = TestBed.inject(Router);
     await router.navigateByUrl('/trips');
+
+    expect(router.url).toBe('/login');
+  });
+
+  it('guards the trip form on its new path', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter(routes),
+        { provide: AuthService, useValue: { isAuthenticated: () => false } },
+      ],
+    });
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/trips/new');
 
     expect(router.url).toBe('/login');
   });

@@ -164,3 +164,20 @@ export interface TripDetail {
   readonly trip: Trip;
   readonly looks: readonly Look[];
 }
+
+// `GET /trips`, mirroring `TripListResponse`. Wrapped with a count rather than
+// answered as a bare array, which is this API's rule for every list it sends: a
+// top-level array has nowhere to grow a key.
+//
+// `total` counts the whole set and `trips` is one page of it, because `limit`
+// defaults to 100 on the server. 4.10 renders the page and not the count, and
+// the field is typed anyway for this file's standing reason — typing half a
+// response is a claim about the endpoint that is not true.
+//
+// The rows are whole trip objects with every day's forecast inside them, which
+// is DECISIONS.md 195's accepted trade-off. It was recorded there against an
+// endpoint nothing called; 4.10 is what pays it.
+export interface TripList {
+  readonly trips: readonly Trip[];
+  readonly total: number;
+}

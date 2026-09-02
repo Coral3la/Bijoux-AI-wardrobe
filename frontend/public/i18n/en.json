@@ -430,5 +430,17 @@
   "trip.error.swapWardrobeTooSmall": "Bijoux needs at least six tagged items to swap one out. Add a few more and try again.",
   "trip.error.lockedUnavailable": "Bijoux can't rebuild this look — one of the other pieces is no longer in your wardrobe. Re-pack the trip instead.",
   "trip.error.swapStylistFailed": "We couldn't find another piece just now. Please try again.",
-  "trip.error.swapGeneral": "We couldn't swap that piece. Please try again."
+  "trip.error.swapGeneral": "We couldn't swap that piece. Please try again.",
+  "trip.list.caption": "Every trip",
+  "trip.list.title": "Your trips",
+  "trip.list.loading": "Opening your trips…",
+  "trip.list.new": "Pack a trip",
+  "trip.list.meta": "{{start}} – {{end}} · {{days}}",
+  "trip.list.days.one": "1 day",
+  "trip.list.days.other": "{{days}} days",
+  "trip.list.delete.label": "Delete the trip to {{destination}}",
+  "trip.list.empty.title": "No trips yet",
+  "trip.list.empty.body": "Pack one and it will be here, with its looks and its list.",
+  "trip.list.empty.cta": "Pack a trip",
+  "trip.list.error.load": "We couldn't open your trips. Please try again."
 }

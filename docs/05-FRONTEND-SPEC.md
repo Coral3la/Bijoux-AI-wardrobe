@@ -87,8 +87,12 @@ outlet, so it is a sibling of every screen rather than part of one.
 
 **Five items, one per top-level screen**, in `NAV_ITEMS`: Wardrobe, Stylist,
 Trips, Saved, Profile — plus **Sign out**, last and pushed to the end, which is
-the one control here that does not navigate. `/wardrobe/:id` and `/trips/:id`
-get no item of their own: they are children of items that exist.
+the one control here that does not navigate. `/wardrobe/:id`, `/trips/new` and
+`/trips/:id` get no item of their own: they are children of items that exist.
+**The Trips item still points at `/trips`, which since 4.10 is the list rather
+than the form.** The item itself did not move, and non-exact matching is what
+keeps it lit on both of its children — which is the whole reason 4.10 moved the
+form instead of giving the list a path of its own. `DECISIONS.md` 224.
 
 **It renders only for a signed-in user**, gated in the shell on
 `auth.isAuthenticated()`. That signal is the *user*, not the token, so a
@@ -441,13 +445,65 @@ than the one action a new account must take.
 is closed and the sentence that used to stand here — *nothing links to this
 screen* — went with it.
 
-### 7. Trips — `/trips` and `/trips/:id` *(Stage 4)*
+### 7. Trips — `/trips`, `/trips/new` and `/trips/:id` *(Stage 4)*
 
-**Built at tasks 4.5, 4.6, 4.6a and 4.6b. Rewritten at the Atelier pass**, from
-the picked mockup: the direction is **The Itinerary** and `DECISIONS.md` 222 is
-why. The form is `/trips`; the packed trip is `/trips/:id`.
+**Built at tasks 4.5, 4.6, 4.6a, 4.6b and 4.10. Rewritten at the Atelier pass**,
+from the picked mockup: the direction is **The Itinerary** and `DECISIONS.md`
+222 is why. The list is `/trips`; the form is `/trips/new`; the packed trip is
+`/trips/:id`. *This line read "the form is `/trips`" until 4.10 moved it —
+`DECISIONS.md` 224 is why, and it is a `routerLinkActive` argument rather than a
+taste one.*
 
-#### The form — `/trips`
+#### The list — `/trips` *(task 4.10)*
+
+```
+  EVERY TRIP                                        Pack a trip
+  Your trips
+  ──────────────────────────────────────────────────────────────
+  Milan                                                  Delete
+  2026-09-10 – 2026-09-14 · 5 days
+  ──────────────────────────────────────────────────────────────
+  Berlin                                                 Delete
+  2026-03-14 – 2026-03-17 · 4 days
+  ──────────────────────────────────────────────────────────────
+```
+
+Every trip the account owns, newest first, on the Itinerary's 820px measure so
+that a row's destination and the heading it becomes sit in the same column. Text
+only: no photograph, no forecast glyph, no reuse line. Four states — a deferred
+prose line while `GET /trips` is in flight, one message if it fails, the empty
+placard, and the rows.
+
+- **The row is an anchor plus a control, not a clickable row.** A `<button>`
+  inside an `<a>` is invalid and unreachable by keyboard, so the destination and
+  the meta line are one link that grows to the row's free width, and the delete
+  is its sibling. The destination takes the **content face** for the reason
+  `/trips/:id`'s `h1` does — it is a place name off a geocoder, and the display
+  serif is latin-subset.
+- **The meta line is one string.** `trip.list.meta` is `{{start}} – {{end}} ·
+  {{days}}`, dash and middot inside the key, because a template that assembles a
+  line out of three spans and typed punctuation puts untranslatable text in the
+  markup — which is the argument `trip.view.day.weather` already won. The dates
+  are ISO and unformatted (`DECISIONS.md` 206).
+- **The delete is the Itinerary's control at row scale, with its copy
+  unchanged** — two presses, disarming on blur, and the same armed sentence
+  naming the cascade. It is **optimistic**: the row leaves on the second press
+  and returns *at the index it left from* if the server refuses, because a list
+  ordered `created_at DESC` that restores a row to the top would be the failure
+  lying on its way out. `trip.delete.doing` is therefore never rendered here —
+  there is no row left to say *"Deleting…"* on.
+- **The accessible name is dropped once armed.** Idle, each control is *"Delete
+  the trip to Berlin"*, because a column of buttons called *Delete* is a column
+  of identical names. Armed, the `aria-label` goes away so the cascade sentence
+  is what a screen reader announces rather than being overridden by it.
+- **The header's CTA appears only when there are rows**; the empty state carries
+  its own. Both point at `/trips/new` and both read *Pack a trip* — two keys, so
+  a translation may separate them.
+- **No count in the header**, unlike `/saved`. `total` counts the account and
+  the page is capped at 100, so a count drawn from either can be wrong; the
+  screen says nothing rather than something unverifiable.
+
+#### The form — `/trips/new`
 
 Destination (autocomplete via `/me/locations/search`), date range, one occasion
 chip row per day defaulting to `casual`, and an optional notes field. The whole
@@ -626,10 +682,13 @@ restyle:
   trip"* under a packed trip is the wrong sentence.
 - **The delete goes to `/wardrobe`.** There is no trips list, and `/trips` is
   the form — which would drop somebody who has just deleted a trip into a fresh
-  pack request. This does **not** add to `AUDITS.md` **O-29**'s count: that
-  item counts bespoke controls a user can see and press, and this is a
-  redirect after an action, the same shape `item-detail.page.ts` has had since
-  1.9 and which was never counted either.
+  pack request. *Both halves of that expired at task 4.10: there is a list and it
+  is `/trips`, which makes it the honest destination. The screen still navigates
+  to `/wardrobe`; `AUDITS.md` **O-34** owns the change, and 4.10 did not make it
+  because it edited no screen it had not built.* This does **not** add to
+  `AUDITS.md` **O-29**'s count: that item counts bespoke controls a user can see
+  and press, and this is a redirect after an action, the same shape
+  `item-detail.page.ts` has had since 1.9 and which was never counted either.
 
 **The ↻ badge is task 4.6a's**, and the Itinerary changes what it is scoped to
 rather than what it does. It sits on every garment in a day's look that has a

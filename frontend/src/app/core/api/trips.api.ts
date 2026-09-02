@@ -7,6 +7,7 @@ import {
   PackRequest,
   PackResponse,
   TripDetail,
+  TripList,
   TripSwapRequest,
 } from '../../shared/models/trip.model';
 
@@ -14,17 +15,27 @@ import {
 export class TripsApi {
   private readonly http = inject(HttpClient);
 
-  // Five methods for six endpoints, on `looks.api.ts`'s rule: a parameter with
-  // no screen is not written. `GET /trips` is the one left out, and it has no
-  // planned caller at all — 04-API-SPEC.md records that deliberately. *The
-  // previous version of this sentence said the repack and the delete "arrive at
-  // task 4.6b", in the commit that made them arrive; they are the two below.*
+  // Six methods for six endpoints, on `looks.api.ts`'s rule: a parameter with
+  // no screen is not written — which is the whole of why `list` sends neither
+  // `limit` nor `offset`. *The previous version of this sentence said `GET
+  // /trips` "has no planned caller at all"; task 4.10 is the caller, and
+  // 04-API-SPEC.md's paragraph promising it would never have one is amended in
+  // the same commit rather than left to contradict this file.*
   //
   // The body goes out exactly as the caller built it. The request schema
   // rejects an unknown key with a 422 rather than dropping it, so a field added
   // here for convenience would break the request instead of being ignored.
   pack(request: PackRequest): Observable<PackResponse> {
     return this.http.post<PackResponse>(`${environment.apiUrl}/trips/pack`, request);
+  }
+
+  // Ahead of `get` because that is 04-API-SPEC.md's order, and it is the order
+  // a reader meets these in. No `limit` and no `offset`: one page is what the
+  // screen renders, the server's default is 100, and a parameter a caller would
+  // only ever send the default for is a parameter with no screen. Pagination
+  // arrives with the control that asks for it.
+  list(): Observable<TripList> {
+    return this.http.get<TripList>(`${environment.apiUrl}/trips`);
   }
 
   // `TripDetail` rather than `PackResponse`: this endpoint answers everything

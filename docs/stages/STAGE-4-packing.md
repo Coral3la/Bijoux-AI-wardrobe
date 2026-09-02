@@ -238,6 +238,43 @@ prose across eleven weeks and five instances, and the number is wrong.
 
 `DECISIONS.md` 208, `AUDITS.md` O-29.
 
+### 4.10 The trips list
+
+Every trip on the account, newest first, each row opening the trip and carrying
+a delete. **Added after the list at the foot of this file was written**, which
+is 4.6b's shape and 4.9's — the third task in this stage numbered by the session
+that found the gap rather than by the plan.
+
+It answers two things at once: an old trip can be thrown away, and a trip whose
+URL was lost can be found again. `GET /trips` gets its first caller, which four
+documents had recorded it would never have.
+
+**`/trips` becomes the list and the form moves to `/trips/new`.** The
+alternative — a new path under `/trips` with a sixth navigation item — does not
+survive contact with `routerLinkActive`: a link to `/trips` is a prefix of every
+trip URL, so a sixth item would light *beside* the Trips item on the screen it
+points at, and re-pointing the Trips item at a child path would put it out on
+the form and on the Itinerary instead. Moving the form is one route line and
+leaves `nav-bar.ts` untouched. `DECISIONS.md` 224.
+
+Out of scope, each named because a reader will look for it: no filter, sort or
+search; no forecast preview and no photograph on a row; no pagination, though
+the endpoint offers `limit` and `offset`; and no change to `/trips/:id`, whose
+delete still returns to `/wardrobe` — `AUDITS.md` **O-34** is that follow-up.
+
+**Acceptance criteria — 4.10's own**, for the reason 4.6a, 4.6b and 4.9 have theirs:
+
+- [x] The route is reachable from the global navigation, with no address bar
+- [x] An account with no trips gets the empty state and a way to the form
+- [x] A row carries the destination, the dates and the day count, and opens the trip
+- [x] A delete takes two presses and removes the row
+- [ ] The deletion survives a reload *(a browser check against a live API; the
+      suite proves the request, not the persistence)*
+- [x] A refused delete puts the row back where it was, not at the top
+- [x] `trips.page.spec.ts` and `trip-detail.page.spec.ts` still pass
+
+`DECISIONS.md` 224, `AUDITS.md` O-34.
+
 ---
 
 ## Acceptance criteria
@@ -253,7 +290,7 @@ prose across eleven weeks and five instances, and the number is wrong.
 
 ## Commit checkpoints
 
-`feat(db): trips schema` · `feat(weather): multi-day forecast` · `feat(ai): trip packing orchestration` · `feat(api): trip endpoints` · `feat(web): trip form` · `feat(web): packing view` · `feat(api): swap an item on a trip look` · `feat(web): swap an item on a trip look` · `feat(web): packing list export` · `feat(web): global navigation`
+`feat(db): trips schema` · `feat(weather): multi-day forecast` · `feat(ai): trip packing orchestration` · `feat(api): trip endpoints` · `feat(web): trip form` · `feat(web): packing view` · `feat(api): swap an item on a trip look` · `feat(web): swap an item on a trip look` · `feat(web): packing list export` · `feat(web): global navigation` · `feat(web): trips list`
 
 ## Prompt tuning note
 

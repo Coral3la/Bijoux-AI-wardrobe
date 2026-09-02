@@ -1844,7 +1844,10 @@ repack inheriting the whole of `POST /trips/pack`'s surface as predicted, and
 the delete arming and firing in two presses and navigating to `/wardrobe`,
 which is the destination this item named as the only honest one. `TripsApi`
 goes from two methods to four, and `GET /trips` is left as the one endpoint in
-this file with no caller and no plan for one.
+this file with no caller and no plan for one. *Half of that last clause expired
+at task 4.10: `TripsApi` has six methods and `GET /trips` has a caller. This item
+stays closed — what it asked for was a numbered task owning the repack and the
+delete, and it got one.*
 
 **The recommendation was taken in full, and one thing it did not anticipate
 changed the copy.** This item and `DECISIONS.md` 200 both describe the repack
@@ -1863,3 +1866,24 @@ sentence explaining the cascade sits on the control that causes it.
 either, so nothing regressed, but the wear count `DECISIONS.md` 200 declined to
 reverse now has a second unreconcilable neighbour. A "looks from past trips"
 screen would consume all three, and it remains nobody's task.
+
+#### O-34 · `/trips/:id`'s delete still returns to `/wardrobe`, and a trips list now exists — opened at task 4.10
+
+The Itinerary's delete navigates to `/wardrobe` on `204`, and both documents
+that justify it say why in the same words: *there is no trips list, and `/trips`
+is the form*. Task **4.10** made the first half false and the second half false
+— `/trips` is the list and the form moved to `/trips/new` — so a user who
+deletes a trip from its own screen is now sent past the screen that lists what
+they have left, to a wardrobe grid that says nothing about trips at all. It is a
+stale destination rather than a defect: nothing breaks, and the two presses, the
+armed sentence and the cascade are all unchanged. **It is out of scope for 4.10
+by instruction and by principle** — that task was fenced off `trip-detail.page.ts`
+explicitly, and it built the list without editing a screen it did not own, which
+is the discipline that kept its diff reviewable. **What closes it** is a
+one-line change of destination in `trip-detail.page.ts`, its assertion in
+`trip-detail.page.spec.ts` (which asserts `/wardrobe` today and would have to be
+flipped, not deleted), and the two paragraphs that carry the old reasoning:
+`04-API-SPEC.md` under `DELETE /trips/{id}` and `05-FRONTEND-SPEC.md` §7's
+delete bullet, both of which 4.10 already marked as expired rather than
+rewriting them on that screen's behalf. Whoever next has reason to open the
+Itinerary should take it; it is smaller than the paragraph describing it.
