@@ -1,4 +1,4 @@
-import { Condition, Occasion, Role } from './enums';
+import { Condition, Occasion, Role, Slot } from './enums';
 import { Look, MissingPiece } from './look.model';
 
 // The wire shapes of `/trips`, mirrored from `backend/app/schemas/trip.py`
@@ -15,8 +15,13 @@ import { Look, MissingPiece } from './look.model';
 // because the request schema checks the numbers are `1..n` *in order*, and a
 // body whose meaning depends on array order is one a client can get wrong
 // silently.
+//
+// `slot` is required and has no default on either side (4.15). A day carries one
+// entry or two — `day`, then `evening` — and the schema refuses a lone evening,
+// an evening before its day, and a day named twice.
 export interface TripOccasion {
   readonly day: number;
+  readonly slot: Slot;
   readonly occasion: Occasion;
 }
 

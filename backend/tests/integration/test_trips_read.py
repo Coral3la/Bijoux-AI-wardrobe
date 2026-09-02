@@ -179,7 +179,7 @@ def test_the_list_carries_whole_trip_objects_and_no_looks(
     assert listed["packing_list"]["item_ids"] == [str(item.id) for item in garments]
     # The day strip still carries its look ids, which is why the list endpoint
     # cannot skip the join even though it answers no looks.
-    assert listed["days"][0]["look_id"] == str(look.id)
+    assert listed["days"][0]["slots"][0]["look_id"] == str(look.id)
 
 
 def test_the_list_pages_and_counts_the_whole_set(
@@ -269,7 +269,7 @@ def test_the_days_carry_the_stored_rule_and_the_requested_occasion(
         (START + timedelta(days=offset)).isoformat() for offset in range(3)
     ]
     assert {day["rule"] for day in days} == {RULE}
-    assert {day["occasion"] for day in days} == {"work"}
+    assert {entry["occasion"] for day in days for entry in day["slots"]} == {"work"}
 
 
 def test_a_day_with_no_look_answers_a_null_look_id(
@@ -294,7 +294,7 @@ def test_a_day_with_no_look_answers_a_null_look_id(
         "days"
     ]
 
-    assert [day["look_id"] is None for day in days] == [False, True, False]
+    assert [day["slots"][0]["look_id"] is None for day in days] == [False, True, False]
 
 
 def test_the_looks_come_back_in_date_order_however_they_were_written(

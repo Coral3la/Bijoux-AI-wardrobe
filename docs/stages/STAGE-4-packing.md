@@ -418,12 +418,43 @@ repack, list and read.
 **`_by_day` returns `dict[int, uuid.UUID]` today and silently keeps one of two
 colliding looks**, which is the concrete failure this task exists to prevent.
 
+**`_write`'s `look_ids` is the same key and this line did not name it.** It is
+`_by_day`'s answer built from what was just inserted rather than read back, so
+pack and repack would have collided where the three read paths did.
+`list_trips`'s own `SELECT` gains `Look.slot` for the same reason.
+
+**The slot is required on the wire and takes no default**, which is a strictness
+one line in `trips.page.ts` pays for: the form sends `slot: 'day'` as a literal
+until 4.17 gives it a picker. A default of `"day"` would have kept the pre-slot
+body valid and turned the one mistake a client can make into a `502` — an evening
+entry that lost its slot parses as a second `day`, and rule 10 refuses the pair
+after the model call rather than the schema refusing it before. Same blast-radius
+shape as 4.12 reaching into `routes/trips.py`.
+
+**`_looks` sorts by the vocabulary's rank and not the collation's.** `day` sorts
+before `evening` alphabetically by luck, and a third slot would not; the rank is
+built from `Slot.values()`, as `stylist.py`'s `_SLOT_ORDER` is. `Look.id` is
+dropped as the third sort term in the same edit — `uq_looks_trip_day_slot` makes
+`(for_date, slot)` unique within a trip, so a tiebreaker after it is unreachable.
+
+**This task opens the hole 4.16 closes.** A trip with an evening becomes packable
+here, and `swap_item` looks up `(day, "day")` — a literal, like 4.12's and
+4.14's — so a swap on a two-slot day edits the day look whatever the caller
+meant. Nothing in the product can send that request yet: the ↻ badge names no
+slot until 4.18.
+
 **Acceptance criteria — 4.15's own:**
 
-- [ ] A two-slot day answers two `slots[]` entries with two different `look_id`s
-- [ ] The looks of one day come back in `day` then `evening` order
-- [ ] A repack rebuilds the same slots from the stored column
-- [ ] `occasions` that are not one or two per day in order are a `422`
+- [x] A two-slot day answers two `slots[]` entries with two different `look_id`s —
+      and `_by_day` keyed by the ordinal alone fails it, measured
+- [x] The looks of one day come back in `day` then `evening` order — asserted as
+      two independently produced orderings being equal, `days[].slots[]` against
+      `looks`; a reversed slot rank fails it
+- [x] A repack rebuilds the same slots from the stored column — it takes no body,
+      so `trips.occasions` is the only record of the evening
+- [x] `occasions` that are not one or two per day in order are a `422` — four new
+      shapes: a lone evening, an evening before its day, a day revisited after
+      the next, and an entry with no slot
 
 ### 4.16 The swap, per slot
 

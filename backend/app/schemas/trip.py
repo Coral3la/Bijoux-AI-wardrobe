@@ -26,22 +26,32 @@ from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-from app.enums import Condition, Occasion, Role
+from app.enums import Condition, Occasion, Role, Slot
 from app.schemas.look import LookResponse, MissingPieceResponse
 
 
 class TripOccasion(BaseModel):
-    """One day's occasion, in the shape `04-API-SPEC.md`'s body carries it.
+    """One occasion of one slot of one day, in `04-API-SPEC.md`'s shape.
 
     `day` is the trip's own 1-based ordinal, not a date component — day 1 is
     `start_date`. It is spelled out on the wire rather than left positional
     because `03-AI-CONTRACTS.md` numbers the days the same way, and a body whose
     meaning depends on array order is one a client can get wrong silently.
+
+    **`slot` arrived at 4.15 and is required, with no default.** A default of
+    `"day"` would have kept the pre-slot body valid and would have turned the one
+    mistake a client can make here into a `502`: an evening entry that lost its
+    slot parses as a second `day`, which the schema would accept and rule 10
+    would refuse — after the model call, rather than before it. A value that is
+    only ever right for one of two possibilities is not a default. What paid for
+    the strictness is one line in `trips.page.ts`, which sends the literal until
+    4.17 gives it a picker.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     day: int
+    slot: Slot
     occasion: Occasion
 
 
@@ -52,14 +62,19 @@ class TripPackRequest(BaseModel):
     key is an instruction the user gave and the plan did not obey, reported as
     a success.
 
-    **`occasions` is required, one entry per day, numbered `1..n` in order.**
-    `04-API-SPEC.md` asks for a `validation_error` on "an `occasions` list whose
-    days are not `1..n`", and this reads that strictly: the entries must arrive
-    *in* order, not merely be a permutation of the right set. `pack_trip` reads
-    the tuple **positionally** — index 0 is day 1 — so a shuffled body would
-    have to be sorted somewhere, and a sort the route can forget is worse than a
-    refusal the schema cannot. 4.5's chip row is built in day order, so no
-    correct client sends anything else.
+    **`occasions` is required, one or two entries per day, days `1..n` in
+    order.** `04-API-SPEC.md` asks for a `validation_error` on "an `occasions`
+    list whose days are not `1..n`", and this reads that strictly: the entries
+    must arrive *in* order, not merely be a permutation of the right set. A
+    shuffled body would have to be sorted somewhere, and a sort the route can
+    forget is worse than a refusal the schema cannot. 4.5's chip row is built in
+    day order, so no correct client sends anything else.
+
+    *That read "one entry per day" and gave `pack_trip` reading the tuple
+    positionally as the reason, through 4.14. The service stopped reading it that
+    way in the same commit that gave a day two slots; the refusal stands on its
+    own footing, which is that a client cannot be trusted to have meant an order
+    it did not send.*
 
     **The 14-day cap is deliberately not here.** It is `trip_too_long`, a `400`
     the route raises, and putting a `max_length` on `occasions` would answer a
@@ -96,12 +111,38 @@ class TripPackRequest(BaseModel):
         The date check runs first because `days` is meaningless on an inverted
         range: a trip ending before it starts has a negative length, and the
         occasions message would then name a number no client could satisfy.
+
+        **The invariant widened at 4.15 and is two checks now.** A day carries
+        one entry or two, so the days cannot be compared against `1..n`
+        directly; they are grouped first, and the grouping is of **consecutive**
+        entries, which is the whole of what keeps *in order* enforced — a body
+        that revisits day 1 after day 2 groups as `[1, 2, 1]` and fails the first
+        check rather than quietly merging into one day.
+
+        A lone `evening` is refused alongside `day` twice, and for the same
+        reason: `uq_looks_trip_day_slot` would accept either happily, and neither
+        is a day anybody asked for. `02-DATA-MODEL.md` and `DECISIONS.md` 225.
         """
         if self.end_date < self.start_date:
             raise ValueError("end_date: a trip cannot end before it starts")
 
-        if [entry.day for entry in self.occasions] != list(range(1, self.days + 1)):
-            raise ValueError(f"occasions: one entry per day, numbered 1 to {self.days} in order")
+        grouped: list[tuple[int, list[Slot]]] = []
+        for entry in self.occasions:
+            if grouped and grouped[-1][0] == entry.day:
+                grouped[-1][1].append(entry.slot)
+            else:
+                grouped.append((entry.day, [entry.slot]))
+
+        if [day for day, _ in grouped] != list(range(1, self.days + 1)):
+            raise ValueError(
+                f"occasions: one or two entries per day, days 1 to {self.days} in order"
+            )
+
+        for day, slots in grouped:
+            if slots not in ([Slot.DAY], [Slot.DAY, Slot.EVENING]):
+                raise ValueError(
+                    f"occasions: day {day} must be one 'day' entry, or 'day' then 'evening'"
+                )
         return self
 
 
@@ -173,24 +214,45 @@ class PackingList(BaseModel):
     reuse_summary: ReuseSummary
 
 
-class TripDay(BaseModel):
-    """One entry of the day strip: the forecast, the occasion and the look.
+class TripDaySlot(BaseModel):
+    """One slot of one day: what it is for, and what was built for it.
 
-    Three sources in one object — `trips.forecast` for the numbers, the
-    condition and the rule, `trips.occasions` for the occasion, and the trip's
-    looks for `look_id`.
+    The half of a day that belongs to the **slot** rather than to the date. The
+    four numbers, the condition and the rule are properties of the calendar day
+    and stay on `TripDay`; the occasion and the look are properties of the slot
+    and moved down here at 4.15. The alternative — one `days[]` row per
+    `(day, slot)` with the forecast repeated in both — puts one measurement in
+    two places with nothing keeping them equal, which is the failure
+    `DECISIONS.md` 195 refused when it declined to pair days and looks
+    positionally, and 225 refuses again.
 
     **`look_id` is nullable and that is not padding.** A repack detaches a look
     that was saved, rated or worn instead of deleting it (`AUDITS.md` O-32), and
-    between that detach and the new looks landing a day has none; a `null` here
+    between that detach and the new looks landing a slot has none; a `null` here
     renders as a gap where a required field would make the whole trip
-    unreadable. `DECISIONS.md` 195 refused the positional pairing for the same
-    reason — it fails silently the first time a day has no look.
+    unreadable. **The gap is per slot from 4.15**: a detached Monday evening
+    leaves Monday's day look exactly where it was.
+    """
+
+    slot: Slot
+    occasion: Occasion
+    look_id: uuid.UUID | None
+
+
+class TripDay(BaseModel):
+    """One entry of the day strip: the forecast, and what is worn against it.
+
+    Three sources in one object — `trips.forecast` for the numbers, the
+    condition and the rule, `trips.occasions` for the occasions, and the trip's
+    looks for each slot's `look_id`.
+
+    **The occasion and the look moved into `slots[]` at 4.15**, leaving this
+    object holding only what is a property of the date. A day carries one slot
+    entry or two, `day` then `evening`.
     """
 
     day: int
     date: datetime.date
-    occasion: Occasion
     temp_min_c: float
     temp_max_c: float
     precip_mm: float
@@ -201,7 +263,7 @@ class TripDay(BaseModel):
     # string for the same reason: it is what makes the weather behaviour
     # inspectable from outside the process.
     rule: str
-    look_id: uuid.UUID | None
+    slots: list[TripDaySlot]
 
 
 class TripResponse(BaseModel):

@@ -219,7 +219,9 @@ def body(days: int) -> dict[str, Any]:
         "destination": "Berlin",
         "start_date": first.isoformat(),
         "end_date": (first + timedelta(days=days - 1)).isoformat(),
-        "occasions": [{"day": day, "occasion": "work"} for day in range(1, days + 1)],
+        "occasions": [
+            {"day": day, "slot": "day", "occasion": "work"} for day in range(1, days + 1)
+        ],
         "notes": "one dinner out",
     }
 
@@ -319,7 +321,10 @@ def swap(
 
 
 def day_look(payload: dict[str, Any], day: int) -> dict[str, Any] | None:
-    look_id = next(entry["look_id"] for entry in payload["trip"]["days"] if entry["day"] == day)
+    """The `day`-slot look of one day. Every trip this suite packs is single-slot,
+    and `swap_item` reads that slot alone until 4.16."""
+    slots = next(entry["slots"] for entry in payload["trip"]["days"] if entry["day"] == day)
+    look_id = next(entry["look_id"] for entry in slots if entry["slot"] == "day")
     return next((look for look in payload["looks"] if look["id"] == look_id), None)
 
 
@@ -381,7 +386,9 @@ def test_the_new_look_takes_the_day_rather_than_leaving_a_gap(
 
     payload = swap(client, user, authorization, trip_id, item_id=str(wardrobe[REPLACED].id)).json()
 
-    assert all(entry["look_id"] is not None for entry in payload["trip"]["days"])
+    assert all(
+        entry["look_id"] is not None for day in payload["trip"]["days"] for entry in day["slots"]
+    )
     assert len(payload["looks"]) == DAYS
 
 

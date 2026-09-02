@@ -96,22 +96,42 @@ class FakeStylist:
         return len(self.contexts)
 
 
-def plan(wardrobe: dict[str, Item], days: int) -> StylistResponse:
-    """A valid `trip_packing_plan` for `days` days, built from the planted ids."""
+def pairs(days: int, evenings: tuple[int, ...] = ()) -> list[tuple[int, str]]:
+    """The `(day, slot)` pairs a trip of `days` days with these evenings asks for.
+
+    One list feeds the request body and the fake's answer, which is what makes
+    rule 10 a real check here rather than a tautology: it compares what the model
+    returned against what the message asked for, and both are built from this.
+    """
+    return [
+        (day, slot)
+        for day in range(1, days + 1)
+        for slot in (("day", "evening") if day in evenings else ("day",))
+    ]
+
+
+def plan(wardrobe: dict[str, Item], days: int, evenings: tuple[int, ...] = ()) -> StylistResponse:
+    """A valid `trip_packing_plan` for `days` days, built from the planted ids.
+
+    `evenings` names the dates that carry a second look, from task 4.15. Each
+    look takes the next unused entry of `OUTFITS` rather than one indexed by
+    `day`, so the two looks of one date are different outfits and rule 11 holds
+    however many slots were asked for.
+    """
     looks = tuple(
         StylistLook(
             day=day,
             # `slot` is required on the trip path from task 4.13 — rule 10 matches
             # the `(day, slot)` pair against what the request asked for, and a
             # look carrying one and not the other is refused before any other
-            # trip rule runs. `day` while nothing can request an evening.
-            slot="day",
+            # trip rule runs.
+            slot=slot,
             title=f"Day {day}",
-            item_ids=tuple(wardrobe[name].short_id for name in OUTFITS[day - 1]),
+            item_ids=tuple(wardrobe[name].short_id for name in OUTFITS[index]),
             reasoning="The straight jean balances the oversized shirt.",
             weather_note="24°C — no coat needed.",
         )
-        for day in range(1, days + 1)
+        for index, (day, slot) in enumerate(pairs(days, evenings))
     )
     return StylistResponse(
         looks=looks,
@@ -201,13 +221,21 @@ def stylist(monkeypatch: pytest.MonkeyPatch) -> Callable[..., FakeStylist]:
     return _install
 
 
-def body(days: int = 3, start: date | None = None, **overrides: Any) -> dict[str, Any]:
+def body(
+    days: int = 3,
+    start: date | None = None,
+    evenings: tuple[int, ...] = (),
+    **overrides: Any,
+) -> dict[str, Any]:
     first = start or date.today() + timedelta(days=2)
     return {
         "destination": "Berlin",
         "start_date": first.isoformat(),
         "end_date": (first + timedelta(days=days - 1)).isoformat(),
-        "occasions": [{"day": day, "occasion": "work"} for day in range(1, days + 1)],
+        "occasions": [
+            {"day": day, "slot": slot, "occasion": "evening" if slot == "evening" else "work"}
+            for day, slot in pairs(days, evenings)
+        ],
         "notes": "one dinner out",
     } | overrides
 
@@ -230,10 +258,10 @@ def wired(
 ) -> Callable[..., FakeStylist]:
     """The whole outside world faked, with the stylist answering a valid plan."""
 
-    def _install(days: int = 3, **overrides: Any) -> FakeStylist:
+    def _install(days: int = 3, evenings: tuple[int, ...] = (), **overrides: Any) -> FakeStylist:
         geocoder()
         forecasts()
-        return stylist(overrides.pop("answer", plan(wardrobe, days)))
+        return stylist(overrides.pop("answer", plan(wardrobe, days, evenings)))
 
     return _install
 
@@ -330,11 +358,61 @@ def test_the_day_strip_joins_the_forecast_the_occasion_and_the_look(
     days = payload["trip"]["days"]
     look_ids = {look["id"] for look in payload["looks"]}
     assert [day["day"] for day in days] == [1, 2, 3]
-    assert {day["occasion"] for day in days} == {"work"}
+    # The occasion and the look are properties of the slot from 4.15; the four
+    # numbers, the condition and the rule are properties of the date.
+    assert [[entry["slot"] for entry in day["slots"]] for day in days] == [["day"]] * 3
+    assert {entry["occasion"] for day in days for entry in day["slots"]} == {"work"}
     assert {day["temp_max_c"] for day in days} == {CONDITIONS[0]}
     assert all(day["rule"] for day in days)
     # The join `DECISIONS.md` 195 chose over pairing `days[i]` with `looks[i]`.
-    assert {day["look_id"] for day in days} == look_ids
+    assert {entry["look_id"] for day in days for entry in day["slots"]} == look_ids
+
+
+def test_a_two_slot_day_answers_two_slots_with_two_look_ids(
+    client: TestClient,
+    user: User,
+    authorization: Callable[[User], dict[str, str]],
+    wired: Callable[..., FakeStylist],
+) -> None:
+    """The failure `_by_day` used to have: one key per day kept one of two looks."""
+    wired(days=3, evenings=(2,))
+
+    payload = post(client, user, authorization, evenings=(2,)).json()
+
+    days = payload["trip"]["days"]
+    assert [[entry["slot"] for entry in day["slots"]] for day in days] == [
+        ["day"],
+        ["day", "evening"],
+        ["day"],
+    ]
+    assert [entry["occasion"] for entry in days[1]["slots"]] == ["work", "evening"]
+
+    look_ids = [entry["look_id"] for entry in days[1]["slots"]]
+    assert len(set(look_ids)) == 2
+    assert len(payload["looks"]) == 4
+
+
+def test_the_looks_of_one_day_come_back_day_then_evening(
+    client: TestClient,
+    user: User,
+    authorization: Callable[[User], dict[str, str]],
+    wired: Callable[..., FakeStylist],
+) -> None:
+    """Two orderings produced independently, asserted equal.
+
+    `days[].slots[]` is ordered by `trips.occasions`, which the request validator
+    holds to `day` before `evening`; `looks` is ordered by the `ORDER BY` in
+    `_looks`, which reads the vocabulary's own rank rather than the collation's.
+    Nothing but this test makes the two agree.
+    """
+    wired(days=3, evenings=(2,))
+    trip_id = post(client, user, authorization, evenings=(2,)).json()["trip"]["id"]
+
+    payload = client.get(f"/api/v1/trips/{trip_id}", headers=authorization(user)).json()
+
+    assert [look["id"] for look in payload["looks"]] == [
+        entry["look_id"] for day in payload["trip"]["days"] for entry in day["slots"]
+    ]
 
 
 def test_the_packing_list_holds_row_uuids_and_the_reuse_summary(
@@ -755,18 +833,59 @@ def test_a_failed_pack_writes_nothing(
 @pytest.mark.parametrize(
     "overrides",
     [
-        pytest.param({"occasions": [{"day": 1, "occasion": "work"}]}, id="too_few_occasions"),
         pytest.param(
-            {"occasions": [{"day": day, "occasion": "work"} for day in (1, 3, 2)]},
+            {"occasions": [{"day": 1, "slot": "day", "occasion": "work"}]}, id="too_few_occasions"
+        ),
+        pytest.param(
+            {"occasions": [{"day": day, "slot": "day", "occasion": "work"} for day in (1, 3, 2)]},
             id="days_out_of_order",
         ),
         pytest.param(
-            {"occasions": [{"day": day, "occasion": "work"} for day in (0, 1, 2)]},
+            {"occasions": [{"day": day, "slot": "day", "occasion": "work"} for day in (0, 1, 2)]},
             id="days_not_one_based",
         ),
         pytest.param(
-            {"occasions": [{"day": day, "occasion": "brunch"} for day in (1, 2, 3)]},
+            {"occasions": [{"day": day, "slot": "day", "occasion": "brunch"} for day in (1, 2, 3)]},
             id="occasion_outside_the_six",
+        ),
+        # The four shapes 4.15 adds, and every one of them is a row
+        # `uq_looks_trip_day_slot` would have accepted: the index refuses two
+        # `day` looks on one date and nothing else on this list.
+        pytest.param(
+            {
+                "occasions": [
+                    {"day": 1, "slot": "day", "occasion": "work"},
+                    {"day": 2, "slot": "evening", "occasion": "evening"},
+                    {"day": 3, "slot": "day", "occasion": "work"},
+                ]
+            },
+            id="a_day_with_only_an_evening",
+        ),
+        pytest.param(
+            {
+                "occasions": [
+                    {"day": 1, "slot": "day", "occasion": "work"},
+                    {"day": 2, "slot": "evening", "occasion": "evening"},
+                    {"day": 2, "slot": "day", "occasion": "work"},
+                    {"day": 3, "slot": "day", "occasion": "work"},
+                ]
+            },
+            id="evening_before_day",
+        ),
+        pytest.param(
+            {
+                "occasions": [
+                    {"day": 1, "slot": "day", "occasion": "work"},
+                    {"day": 2, "slot": "day", "occasion": "work"},
+                    {"day": 3, "slot": "day", "occasion": "work"},
+                    {"day": 2, "slot": "evening", "occasion": "evening"},
+                ]
+            },
+            id="a_day_revisited_after_the_next",
+        ),
+        pytest.param(
+            {"occasions": [{"day": day, "occasion": "work"} for day in (1, 2, 3)]},
+            id="an_occasion_with_no_slot",
         ),
         pytest.param({"destination": "   "}, id="blank_destination"),
         pytest.param({"tempo": "slow"}, id="unknown_key"),
@@ -804,7 +923,7 @@ def test_an_end_date_before_the_start_is_validation_error(
         authorization,
         start_date=start.isoformat(),
         end_date=(start - timedelta(days=1)).isoformat(),
-        occasions=[{"day": 1, "occasion": "work"}],
+        occasions=[{"day": 1, "slot": "day", "occasion": "work"}],
     )
 
     assert response.status_code == 422
@@ -854,6 +973,30 @@ def test_repack_replaces_the_looks_and_keeps_the_trip(
         {look["id"] for look in first["looks"]}
     )
     assert db.scalar(select(func.count()).select_from(Trip)) == 1
+
+
+def test_a_repack_rebuilds_the_slots_from_the_stored_column(
+    client: TestClient,
+    user: User,
+    authorization: Callable[[User], dict[str, str]],
+    wired: Callable[..., FakeStylist],
+) -> None:
+    """It takes no body, so `trips.occasions` is the only record of the evening."""
+    wired(days=3, evenings=(2,))
+    first = _packed(client, user, authorization, evenings=(2,))
+    trip_id = first["trip"]["id"]
+
+    payload = client.post(f"/api/v1/trips/{trip_id}/repack", headers=authorization(user)).json()
+
+    assert [[entry["slot"] for entry in day["slots"]] for day in payload["trip"]["days"]] == [
+        ["day"],
+        ["day", "evening"],
+        ["day"],
+    ]
+    assert len(payload["looks"]) == 4
+    before = {entry["look_id"] for day in first["trip"]["days"] for entry in day["slots"]}
+    after = {entry["look_id"] for day in payload["trip"]["days"] for entry in day["slots"]}
+    assert before.isdisjoint(after)
 
 
 def test_repack_refreshes_the_forecast(
@@ -986,7 +1129,7 @@ def test_a_detached_look_is_not_on_the_trips_day_strip(
     authorization: Callable[[User], dict[str, str]],
     wired: Callable[..., FakeStylist],
 ) -> None:
-    """O-32's own follow-up: `days[].look_id` must point at the new looks."""
+    """O-32's own follow-up: `days[].slots[].look_id` must point at the new looks."""
     wired(days=3)
     first = _packed(client, user, authorization)
     kept = uuid.UUID(first["looks"][0]["id"])
@@ -999,8 +1142,9 @@ def test_a_detached_look_is_not_on_the_trips_day_strip(
         f"/api/v1/trips/{first['trip']['id']}/repack", headers=authorization(user)
     ).json()
 
-    assert str(kept) not in {day["look_id"] for day in payload["trip"]["days"]}
-    assert all(day["look_id"] is not None for day in payload["trip"]["days"])
+    slots = [entry for day in payload["trip"]["days"] for entry in day["slots"]]
+    assert str(kept) not in {entry["look_id"] for entry in slots}
+    assert all(entry["look_id"] is not None for entry in slots)
 
 
 def test_a_stylist_failure_leaves_the_existing_looks_alone(

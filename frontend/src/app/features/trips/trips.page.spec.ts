@@ -172,10 +172,10 @@ describe('TripsPage', () => {
       start_date: dayFromToday(1),
       end_date: dayFromToday(4),
       occasions: [
-        { day: 1, occasion: 'casual' },
-        { day: 2, occasion: 'casual' },
-        { day: 3, occasion: 'casual' },
-        { day: 4, occasion: 'casual' },
+        { day: 1, slot: 'day', occasion: 'casual' },
+        { day: 2, slot: 'day', occasion: 'casual' },
+        { day: 3, slot: 'day', occasion: 'casual' },
+        { day: 4, slot: 'day', occasion: 'casual' },
       ],
     });
   });
@@ -206,8 +206,8 @@ describe('TripsPage', () => {
     submit();
 
     expect((packRequest().request.body as { occasions: unknown }).occasions).toEqual([
-      { day: 1, occasion: 'casual' },
-      { day: 2, occasion: 'evening' },
+      { day: 1, slot: 'day', occasion: 'casual' },
+      { day: 2, slot: 'day', occasion: 'evening' },
     ]);
   });
 

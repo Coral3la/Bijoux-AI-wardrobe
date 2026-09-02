@@ -591,10 +591,19 @@ Server-side: geocode destination → fetch daily forecast → build one rule per
 `day` twice. The example above is a four-day trip with five looks — one dinner
 out on the second night, which is the `notes` field of every trip anybody has
 ever taken. The list stays flat rather than nesting slots inside days, because
-`pack_trip` reads it positionally and one entry per look is what the model's
-message and its answer are both shaped like; what checks it is
-`TripPackRequest`'s validator, and what the rows it becomes are held to is
-`uq_looks_trip_day_slot` (`02-DATA-MODEL.md`). `DECISIONS.md` 225.
+one entry per look is what the model's message and its answer are both shaped
+like; what checks it is `TripPackRequest`'s validator, and what the rows it
+becomes are held to is `uq_looks_trip_day_slot` (`02-DATA-MODEL.md`).
+`DECISIONS.md` 225.
+*This read "because `pack_trip` reads it positionally" until 4.15. The service
+stopped reading it that way at 4.14, in the commit that gave a day two slots;
+the flat shape stands on the other half of the reason.*
+
+**`slot` is required and takes no default**, which is what makes the four
+malformed lists above `422`s rather than `502`s. A default of `"day"` would have
+kept the pre-slot body valid at the cost of the one mistake a client can make
+here: an evening entry that lost its slot parses as a second `day`, and rule 10
+refuses the pair after the model call instead of the schema refusing it before.
 
 `looks` are full `LookResponse` objects, the same shape `POST /looks/suggest`
 answers with, each carrying `trip_id`'s row and hydrated items in the model's own

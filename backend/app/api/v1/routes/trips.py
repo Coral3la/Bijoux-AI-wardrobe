@@ -53,11 +53,11 @@ import datetime
 import logging
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Annotated, Any
+from typing import Annotated, Any, Final
 
 from fastapi import APIRouter, Depends, Query, status
 from openai import OpenAIError
-from sqlalchemy import ColumnElement, delete, func, or_, select, update
+from sqlalchemy import ColumnElement, case, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.api.v1.routes._stylist_shared import (
@@ -67,7 +67,7 @@ from app.api.v1.routes._stylist_shared import (
 )
 from app.core.deps import get_current_user, get_db
 from app.core.errors import ApiError
-from app.enums import Condition
+from app.enums import Condition, Slot
 from app.models.item import Item
 from app.models.look import Look, LookItem
 from app.models.trip import Trip
@@ -251,7 +251,7 @@ async def _packed(db: Session, user: User, request: TripRequest) -> PackingResul
 
 def _write(
     db: Session, user: User, result: PackingResult, existing: Trip | None = None
-) -> tuple[Trip, list[LookResponse], dict[int, uuid.UUID]]:
+) -> tuple[Trip, list[LookResponse], dict[tuple[int, str], uuid.UUID]]:
     """The eighth step: a trip, its looks and their items, in one commit.
 
     **Nothing here runs until `pack_trip` has returned.** That is the ordering
@@ -307,7 +307,7 @@ def _write(
     db.flush()
 
     looks: list[LookResponse] = []
-    look_ids: dict[int, uuid.UUID] = {}
+    look_ids: dict[tuple[int, str], uuid.UUID] = {}
 
     for packed in result.looks:
         row = Look(
@@ -318,13 +318,12 @@ def _write(
             # struck from both AI schemas at 4.3 and the value that is certainly
             # legal is the one the user sent. `DECISIONS.md` 193.
             occasion=packed.occasion,
-            # A literal until task 4.15, and true while it stands: every trip
-            # look written today is a `day` look, because no request can ask for
-            # anything else until `occasions` carries a slot. Written as the raw
-            # string the way `occasion` is above rather than through `Slot`,
-            # because a literal that is about to become a variable is clearer
-            # than an enum member standing in for one.
-            slot="day",
+            # Which half of the day this is, from the request by way of
+            # `pack_trip` — the same provenance as `occasion` above, and for the
+            # same reason: the value that is certainly legal is the one the user
+            # sent. It was the literal `"day"` from 4.12 until this task gave the
+            # wire a slot to carry.
+            slot=packed.slot,
             reasoning=packed.reasoning,
             weather_note=packed.weather_note,
             # The day this look is *for*, which is the column `looks` has. The
@@ -342,7 +341,7 @@ def _write(
             ]
         )
 
-        look_ids[packed.day] = row.id
+        look_ids[(packed.day, packed.slot)] = row.id
         looks.append(
             LookResponse(
                 id=row.id,
@@ -365,23 +364,34 @@ def _write(
 
 
 def _by_day(
-    start: datetime.date, rows: Iterable[tuple[uuid.UUID, datetime.date | None]]
-) -> dict[int, uuid.UUID]:
-    """The join `04-API-SPEC.md`'s `days[].look_id` needs, keyed by the ordinal.
+    start: datetime.date, rows: Iterable[tuple[uuid.UUID, datetime.date | None, str | None]]
+) -> dict[tuple[int, str], uuid.UUID]:
+    """The join `04-API-SPEC.md`'s `days[].slots[].look_id` needs, keyed by the pair.
 
     `looks` carries `for_date` and no day number — `LookResponse` is one shape
     for every look since `DECISIONS.md` 182, and a trip is not a reason to widen
     what `GET /looks` answers — so the ordinal is computed back from the trip's
-    `start_date`. A look with no `for_date` is dropped rather than guessed at:
-    the column is nullable, nothing this route writes leaves it empty, and a
-    look that names no day cannot be placed on one.
+    `start_date`.
+
+    **Keyed by `(day, slot)` from 4.15, and by the ordinal alone before it**,
+    which is the concrete failure this task exists to prevent: two looks for one
+    date wrote the same key and the dict silently kept the second, so a two-slot
+    Monday would have rendered one look twice and lost the other.
+
+    A look with no `for_date` is dropped rather than guessed at: the column is
+    nullable, nothing this route writes leaves it empty, and a look that names no
+    day cannot be placed on one. The slot is filtered the same way and cannot
+    actually be missing — `ck_looks_slot_belongs_to_a_trip` refuses a trip look
+    without one — so that half is the type narrowing rather than a case.
     """
     return {
-        (for_date - start).days + 1: look_id for look_id, for_date in rows if for_date is not None
+        ((for_date - start).days + 1, slot): look_id
+        for look_id, for_date, slot in rows
+        if for_date is not None and slot is not None
     }
 
 
-def _trip(trip: Trip, look_ids: Mapping[int, uuid.UUID]) -> TripResponse:
+def _trip(trip: Trip, look_ids: Mapping[tuple[int, str], uuid.UUID]) -> TripResponse:
     """The trip object: one row, two of its JSON columns, and the looks' ids.
 
     **`days` is three sources merged.** `trips.forecast` holds the parsed day —
@@ -396,8 +406,18 @@ def _trip(trip: Trip, look_ids: Mapping[int, uuid.UUID]) -> TripResponse:
     somebody else's occasion — `_CATEGORY_NAMES`'s reasoning, one column along.
     Nothing in the database enforces the agreement; `POST /trips/pack` writes
     both from one list.
+
+    **The occasions are grouped rather than indexed by day from 4.15.** The old
+    `{entry["day"]: entry["occasion"]}` was a dict comprehension over a list that
+    can now hold two entries for one day, so it would have dropped the first and
+    rendered the evening's occasion against both slots. The grouping keeps the
+    column's own order, which is `day` then `evening` — the order the request
+    validator refuses to accept anything else in.
     """
-    occasions = {entry["day"]: entry["occasion"] for entry in trip.occasions}
+    occasions: dict[int, list[tuple[str, str]]] = {}
+    for entry in trip.occasions:
+        occasions.setdefault(entry["day"], []).append((entry["slot"], entry["occasion"]))
+
     return TripResponse(
         id=trip.id,
         destination=trip.destination,
@@ -408,7 +428,17 @@ def _trip(trip: Trip, look_ids: Mapping[int, uuid.UUID]) -> TripResponse:
         notes=trip.notes,
         days=[
             TripDay.model_validate(
-                {**day, "occasion": occasions[day["day"]], "look_id": look_ids.get(day["day"])}
+                {
+                    **day,
+                    "slots": [
+                        {
+                            "slot": slot,
+                            "occasion": occasion,
+                            "look_id": look_ids.get((day["day"], slot)),
+                        }
+                        for slot, occasion in occasions[day["day"]]
+                    ],
+                }
             )
             for day in trip.forecast or []
         ],
@@ -426,9 +456,22 @@ def _pieces(result: PackingResult) -> list[MissingPieceResponse]:
     ]
 
 
+# The order two looks of one date are read in, and it is the vocabulary's rather
+# than the collation's: `day` sorts before `evening` alphabetically by luck, and
+# a third slot added to `Slot` would not. `stylist.py` builds the same rank from
+# the same list for the same reason.
+_SLOT_RANK: Final = case({slot: rank for rank, slot in enumerate(Slot.values())}, value=Look.slot)
+
+
 def _looks(db: Session, trip: Trip) -> Sequence[Look]:
+    """Every look of one trip, in `for_date` then slot order.
+
+    `Look.id` was the third sort term until 4.15 and is dropped here rather than
+    kept: `uq_looks_trip_day_slot` makes `(for_date, slot)` unique within a trip,
+    so a tiebreaker after it can never be reached.
+    """
     return db.scalars(
-        select(Look).where(Look.trip_id == trip.id).order_by(Look.for_date, Look.id)
+        select(Look).where(Look.trip_id == trip.id).order_by(Look.for_date, _SLOT_RANK)
     ).all()
 
 
@@ -652,9 +695,9 @@ def _replace_look(
     its heart, its rating and its wearing exactly as they were.
 
     **Unlike a repack, this detach leaves no gap.** The new look takes the day in
-    the same transaction, so `days[].look_id` resolves to it rather than to
-    `null` — which is why `05-FRONTEND-SPEC.md`'s gap is still a repack's story
-    and not this one's. And `items.wear_count` is not reversed by the detach, for
+    the same transaction, so `days[].slots[].look_id` resolves to it rather
+    than to `null` — which is why `05-FRONTEND-SPEC.md`'s gap is still a repack's
+    story and not this one's. And `items.wear_count` is not reversed by the detach, for
     the reason it never is: a garment worn in Berlin was worn.
     """
     db.execute(update(Look).where(Look.id == old.id, _MARKED).values(trip_id=None, slot=None))
@@ -668,9 +711,9 @@ def _replace_look(
         # AI schemas at 4.3, so the value that is certainly legal is the one the
         # user sent. `DECISIONS.md` 193.
         occasion=occasion,
-        # `_write`'s literal, for `_write`'s reason: no request can name a slot
-        # until 4.15, so every look this endpoint replaces is a `day` look and
-        # so is its replacement.
+        # A literal until task 4.16, and true while it stands: `swap_item` looks
+        # the day slot up and no other, so every look this endpoint replaces is a
+        # `day` look and so is its replacement.
         slot="day",
         reasoning=answer.reasoning,
         weather_note=answer.weather_note,
@@ -743,13 +786,13 @@ async def pack(
             destination=request.destination,
             start_date=request.start_date,
             end_date=request.end_date,
-            # `slot="day"` is a literal until task 4.15, and true while it
-            # stands: the wire carries `{day, occasion}` and no request can name
-            # a slot yet, so every look this asks for is a day look.
-            # `TripPackRequest` has already refused any list that is not `1..n`
-            # in order, so the mapping cannot lose a day.
+            # `TripPackRequest` has already refused any list that is not one
+            # or two entries per day, days `1..n` in order, `day` before
+            # `evening` — so this mapping can be the flat pass-through it looks
+            # like, and `pack_trip`'s own two refusals are unreachable through
+            # this route rather than redundant with it.
             occasions=tuple(
-                TripSlot(day=entry.day, slot="day", occasion=entry.occasion)
+                TripSlot(day=entry.day, slot=entry.slot, occasion=entry.occasion)
                 for entry in request.occasions
             ),
             notes=request.notes,
@@ -774,10 +817,10 @@ def list_trips(
     repeating a row between two pages.
 
     **The looks are still queried, and only their ids are.** A trip object
-    carries `days[].look_id` whatever endpoint answers it, so the join cannot be
-    skipped; what can be skipped is loading whole `looks` rows and their items
-    for every trip on the page. One query over the page's trip ids, three
-    columns wide.
+    carries `days[].slots[].look_id` whatever endpoint answers it, so the join
+    cannot be skipped; what can be skipped is loading whole `looks` rows and
+    their items for every trip on the page. One query over the page's trip ids,
+    four columns wide.
     """
     total = (
         db.scalar(select(func.count()).select_from(Trip).where(Trip.user_id == current_user.id))
@@ -791,14 +834,14 @@ def list_trips(
         .offset(offset)
     ).all()
 
-    by_trip: dict[uuid.UUID, list[tuple[uuid.UUID, datetime.date | None]]] = {
+    by_trip: dict[uuid.UUID, list[tuple[uuid.UUID, datetime.date | None, str | None]]] = {
         row.id: [] for row in rows
     }
     if rows:
-        for trip_id, look_id, for_date in db.execute(
-            select(Look.trip_id, Look.id, Look.for_date).where(Look.trip_id.in_(by_trip))
+        for trip_id, look_id, for_date, slot in db.execute(
+            select(Look.trip_id, Look.id, Look.for_date, Look.slot).where(Look.trip_id.in_(by_trip))
         ).all():
-            by_trip[trip_id].append((look_id, for_date))
+            by_trip[trip_id].append((look_id, for_date, slot))
 
     return TripListResponse(
         trips=[_trip(row, _by_day(row.start_date, by_trip[row.id])) for row in rows],
@@ -820,7 +863,9 @@ def read_trip(
     trip = _owned(db, trip_id, current_user.id)
     rows = _looks(db, trip)
     return TripDetailResponse(
-        trip=_trip(trip, _by_day(trip.start_date, [(row.id, row.for_date) for row in rows])),
+        trip=_trip(
+            trip, _by_day(trip.start_date, [(row.id, row.for_date, row.slot) for row in rows])
+        ),
         looks=_hydrate(db, rows),
     )
 
@@ -948,7 +993,14 @@ async def swap_item(
 
     rows = _looks(db, trip)
     hydrated = {look.id: look for look in _hydrate(db, rows)}
-    look_id = _by_day(trip.start_date, [(row.id, row.for_date) for row in rows]).get(request.day)
+    # `"day"` is a literal until task 4.16, and true while it stands: the swap
+    # request carries no slot yet, so the only look it can name is the day one.
+    # A trip packed with an evening is reachable from this commit, and swapping
+    # on it edits the day look whatever the caller meant — which is the hole 4.16
+    # closes, and the reason its first criterion is about day 2's evening.
+    look_id = _by_day(trip.start_date, [(row.id, row.for_date, row.slot) for row in rows]).get(
+        (request.day, Slot.DAY)
+    )
     look, replaced = _replaceable(
         hydrated[look_id] if look_id is not None else None, request.item_id
     )
@@ -1026,6 +1078,8 @@ async def swap_item(
 
     rows = _looks(db, trip)
     return TripDetailResponse(
-        trip=_trip(trip, _by_day(trip.start_date, [(row.id, row.for_date) for row in rows])),
+        trip=_trip(
+            trip, _by_day(trip.start_date, [(row.id, row.for_date, row.slot) for row in rows])
+        ),
         looks=swapped,
     )
