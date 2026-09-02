@@ -70,7 +70,9 @@ def make_trip(db: Session) -> Callable[..., Trip]:
             dest_lon=13.41,
             start_date=start,
             end_date=start + timedelta(days=days - 1),
-            occasions=[{"day": day, "occasion": "work"} for day in range(1, days + 1)],
+            occasions=[
+                {"day": day, "slot": "day", "occasion": "work"} for day in range(1, days + 1)
+            ],
             forecast=[
                 {
                     "day": day,

@@ -369,12 +369,44 @@ and that is the visible half of this task.
 4.13's commit: a contract that is wrong fails loudly on the next model call, and
 arithmetic that is wrong prints a plausible sentence under a packed trip.
 
+**The triples are a `TripSlot`, and the count stopped being the check.**
+`pack_trip` refused `len(occasions) != days`; it now refuses a day of the range
+nobody dressed, and a `(day, slot)` asked for twice. The second is what
+`uq_looks_trip_day_slot` would otherwise refuse four layers down, as a `500` with
+no code on it, after a model call has already been spent.
+
+**`_forecast_column` is the line this task did not name.** `days` holds one entry
+per requested slot from here and that column holds one row per calendar day, so
+the `zip(days, forecasts, strict=True)` that paired them would have raised on the
+first evening — and loosened, would have written day 2 twice and given the trip a
+day it has not got. It reads a `{ordinal: rule}` map instead, which loses nothing
+because both slots of a date are built from the one forecast row.
+
+**It touches `routes/trips.py` at three call sites**, on 4.12's precedent rather
+than as scope taken from 4.15: pack maps the wire's `{day, occasion}` into
+`TripSlot`s with a `slot="day"` literal, repack reads the slot back out of
+`trips.occasions`, and the swap hands `reuse_summary` the dates its looks are
+worn on — `LookResponse` carries none, so the rows it was hydrated from travel
+beside it.
+
+**`trips.occasions` had been writing a shape its own migration had abolished.**
+`0006` backfilled `"slot": "day"` into every existing entry at 4.12, and
+`pack_trip` — the column's only writer — went on writing `{day, occasion}`, so
+for two commits a trip packed *after* the migration held entries older than it.
+Nothing read the key, so nothing failed. The writer is this task's; the key is
+written down rather than defaulted on read, for the reason `02-DATA-MODEL.md`
+gives — a reader that filled it in would be the one place left in the project
+that knows the pre-slot shape.
+
 **Acceptance criteria — 4.14's own:**
 
-- [ ] A garment worn in both slots of one day and nowhere else reports one day
-      and leaves `most_reused` null
-- [ ] `look_count` exceeds the day count exactly when a day has two slots
-- [ ] The reuse target is still computed from days
+- [x] A garment worn in both slots of one day and nowhere else reports one day
+      and leaves `most_reused` null — `most_reused` is null and `look_count` is 2
+- [x] `look_count` exceeds the day count exactly when a day has two slots — three
+      looks over two days, against the two-day two-look case that was already
+      pinned
+- [x] The reuse target is still computed from days — a two-day trip with an
+      evening asks for three looks against day 2's ceiling of eight items
 
 ### 4.15 The trip routes
 

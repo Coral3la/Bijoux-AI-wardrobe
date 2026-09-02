@@ -90,6 +90,7 @@ from app.services.packing import (
     PackingResult,
     StylistRejectedError,
     TripRequest,
+    TripSlot,
     pack_trip,
     reuse_summary,
 )
@@ -742,10 +743,15 @@ async def pack(
             destination=request.destination,
             start_date=request.start_date,
             end_date=request.end_date,
-            # Positional from here down — index 0 is day 1, which is what
-            # `pack_trip` reads. `TripPackRequest` has already refused any list
-            # that is not `1..n` in order, so the flattening cannot lose a day.
-            occasions=tuple(entry.occasion for entry in request.occasions),
+            # `slot="day"` is a literal until task 4.15, and true while it
+            # stands: the wire carries `{day, occasion}` and no request can name
+            # a slot yet, so every look this asks for is a day look.
+            # `TripPackRequest` has already refused any list that is not `1..n`
+            # in order, so the mapping cannot lose a day.
+            occasions=tuple(
+                TripSlot(day=entry.day, slot="day", occasion=entry.occasion)
+                for entry in request.occasions
+            ),
             notes=request.notes,
         ),
     )
@@ -880,12 +886,20 @@ async def repack_trip(
             destination=trip.destination,
             start_date=trip.start_date,
             end_date=trip.end_date,
-            # Sorted rather than trusted in stored order. `pack_trip` reads this
-            # positionally and `POST /trips/pack` wrote the column from one
-            # ordered list, so this changes nothing today; it is what stops a
-            # row edited by hand from dressing Tuesday for Thursday's occasion.
+            # The slot is read and not defaulted: `0006` backfilled the key
+            # into every row written before it, so a `.get("slot", "day")` here
+            # would be the one place left in the project that knows the pre-slot
+            # shape — kept for ever, against a row set that stopped existing
+            # after one `UPDATE`.
+            #
+            # Sorted rather than trusted in stored order, and stable, so a date's
+            # two entries keep the order the column holds them in. `pack_trip`
+            # stopped reading this positionally at 4.14, so the sort is no longer
+            # what pairs a day with its occasion; it is what stops a row edited
+            # by hand from dressing Tuesday before Monday.
             occasions=tuple(
-                entry["occasion"] for entry in sorted(trip.occasions, key=lambda e: e["day"])
+                TripSlot(day=entry["day"], slot=entry["slot"], occasion=entry["occasion"])
+                for entry in sorted(trip.occasions, key=lambda e: e["day"])
             ),
             notes=trip.notes,
         ),
@@ -985,7 +999,8 @@ async def swap_item(
     # Re-read rather than assembled from what is in hand: the day's look is a new
     # row, one look may have left the trip entirely, and the packing list is
     # computed over every look the trip still has. One query answers all three.
-    swapped = _hydrate(db, _looks(db, trip))
+    swapped_rows = _looks(db, trip)
+    swapped = _hydrate(db, swapped_rows)
     # Read back through `PackingList` rather than indexed off the column, which
     # is typed `dict[str, Any] | None`: the shape assertion is the one `_trip`
     # already makes two functions along, and a hand-written row with a `NULL`
@@ -998,7 +1013,14 @@ async def swap_item(
         # `packing.py`'s own arithmetic, shared rather than reimplemented: its
         # tie-break is written down so that one plan cannot summarise two ways,
         # and a second copy here is the one thing that could break that.
-        "reuse_summary": reuse_summary(item_ids, [look.items for look in swapped]),
+        #
+        # The rows come along because `most_reused.days` counts dates from 4.14
+        # and `LookResponse` carries none — `_hydrate` answers in the order it
+        # was given, which is what makes the pairing a `zip`.
+        "reuse_summary": reuse_summary(
+            item_ids,
+            [(row.for_date, look.items) for row, look in zip(swapped_rows, swapped, strict=True)],
+        ),
     }
     db.commit()
 

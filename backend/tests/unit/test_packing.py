@@ -82,12 +82,19 @@ class _User:
     style_notes = "prefer high-rise"
 
 
+def _slot(day: int, slot: str = "day", occasion: str = "work") -> packing.TripSlot:
+    return packing.TripSlot(day=day, slot=slot, occasion=occasion)
+
+
 def _request(days: int = 2, **overrides: Any) -> packing.TripRequest:
     fields: dict[str, Any] = {
         "destination": "Berlin",
         "start_date": START,
         "end_date": START + datetime.timedelta(days=days - 1),
-        "occasions": tuple(["work"] * days),
+        # One `day` slot per day unless a test asks for an evening, which is
+        # what every trip this API can currently send looks like: the wire
+        # carries no slot until 4.15.
+        "occasions": tuple(_slot(day) for day in range(1, days + 1)),
         "notes": None,
     }
     return packing.TripRequest(**(fields | overrides))
@@ -173,6 +180,34 @@ def test_the_reuse_target_is_the_smaller_of_the_two_formulas(days: int, expected
     # addition from day 3 on, which is where a packing list starts to be a
     # packing list rather than a pile of outfits.
     assert packing.reuse_target(days) == expected
+
+
+@pytest.mark.asyncio
+async def test_the_reuse_target_is_computed_from_days_and_not_from_looks(wired: Any) -> None:
+    # A two-day trip with an evening out asks the model for three looks and
+    # still gets day 2's ceiling of eight items. Deliberate pressure toward the
+    # reuse this feature exists for, and `DECISIONS.md` 225 takes it knowingly:
+    # the target may need tuning against the demo wardrobe before it is honest.
+    seen = wired(
+        _answer(
+            _look(1, TOP_ID, JEANS_ID, BOOTS_ID),
+            _look(2, TANK_ID, JEANS_ID, BOOTS_ID),
+            _look(2, TOP_ID, JEANS_ID, BOOTS_ID, slot="evening"),
+        )
+    )
+
+    await packing.pack_trip(
+        _User(),
+        WARDROBE,
+        _request(occasions=(_slot(1), _slot(2), _slot(2, "evening", "evening"))),
+    )
+
+    assert [(day.day, day.slot) for day in seen["context"].days] == [
+        (1, "day"),
+        (2, "day"),
+        (2, "evening"),
+    ]
+    assert seen["context"].reuse_target == packing.reuse_target(2)
 
 
 # --- what reaches the model -------------------------------------------------
@@ -313,6 +348,92 @@ async def test_a_tie_for_most_reused_is_broken_by_the_packing_list_order(wired: 
 
 
 @pytest.mark.asyncio
+async def test_a_garment_worn_in_both_slots_of_one_day_reports_one_day(wired: Any) -> None:
+    # The jeans and the boots are worn twice on the one day this trip has, and
+    # `days` counts **dates**: one day, which fails the `> 1` test and leaves
+    # `most_reused` null. A real reuse that produces no reuse line, taken
+    # deliberately, because the sentence §7 renders is about days.
+    wired(
+        _answer(
+            _look(1, TOP_ID, JEANS_ID, BOOTS_ID),
+            _look(1, TANK_ID, JEANS_ID, BOOTS_ID, slot="evening"),
+        ),
+        days=1,
+    )
+
+    result = await packing.pack_trip(
+        _User(),
+        WARDROBE,
+        _request(days=1, occasions=(_slot(1), _slot(1, "evening", "evening"))),
+    )
+
+    assert result.trip.packing_list["reuse_summary"] == {
+        "item_count": 4,
+        "look_count": 2,
+        "most_reused": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_look_count_exceeds_the_day_count_when_a_day_has_two_slots(wired: Any) -> None:
+    # The other half of this pair is
+    # `test_the_reuse_summary_counts_items_looks_and_the_most_reused`, where two
+    # days of one slot each count two looks: the two numbers part company
+    # exactly when a date carries an evening.
+    wired(
+        _answer(
+            _look(1, TOP_ID, JEANS_ID, BOOTS_ID),
+            _look(2, TANK_ID, JEANS_ID, BOOTS_ID),
+            _look(2, TOP_ID, JEANS_ID, BOOTS_ID, slot="evening"),
+        )
+    )
+
+    result = await packing.pack_trip(
+        _User(),
+        WARDROBE,
+        _request(occasions=(_slot(1), _slot(2), _slot(2, "evening", "evening"))),
+    )
+
+    assert [(look.day, look.slot) for look in result.looks] == [
+        (1, "day"),
+        (2, "day"),
+        (2, "evening"),
+    ]
+    assert [look.for_date for look in result.looks] == [
+        START,
+        START + datetime.timedelta(days=1),
+        START + datetime.timedelta(days=1),
+    ]
+    assert result.trip.packing_list["reuse_summary"]["look_count"] == 3
+    # The jeans are worn in all three looks and on both days; the count is of
+    # days, so it is 2 and not 3.
+    assert result.trip.packing_list["reuse_summary"]["most_reused"]["days"] == 2
+
+
+@pytest.mark.asyncio
+async def test_the_evening_look_takes_its_own_occasion(wired: Any) -> None:
+    # Both entries of a date reach the model with the same weather rule and a
+    # different occasion, which is the whole of what separates the two looks.
+    seen = wired(
+        _answer(
+            _look(1, TOP_ID, JEANS_ID, BOOTS_ID),
+            _look(1, TANK_ID, JEANS_ID, BOOTS_ID, slot="evening"),
+        ),
+        days=1,
+    )
+
+    result = await packing.pack_trip(
+        _User(),
+        WARDROBE,
+        _request(days=1, occasions=(_slot(1), _slot(1, "evening", "evening"))),
+    )
+
+    assert [day.occasion for day in seen["context"].days] == ["work", "evening"]
+    assert all(day.weather_rule == MILD_RULE for day in seen["context"].days)
+    assert [look.occasion for look in result.looks] == ["work", "evening"]
+
+
+@pytest.mark.asyncio
 async def test_the_forecast_column_holds_the_parsed_days_and_each_days_rule(wired: Any) -> None:
     # Not the raw provider body, which this service never holds: what is stored
     # is what `04-API-SPEC.md`'s `days[]` renders, so reopening a trip re-reads
@@ -334,6 +455,29 @@ async def test_the_forecast_column_holds_the_parsed_days_and_each_days_rule(wire
 
 
 @pytest.mark.asyncio
+async def test_the_forecast_column_has_one_row_per_date_and_not_per_look(wired: Any) -> None:
+    # `days` holds one entry per slot from 4.14, and this column holds one per
+    # calendar day — the zip that used to pair them would have written day 2
+    # twice and given the trip a day it has not got.
+    wired(
+        _answer(
+            _look(1, TOP_ID, JEANS_ID, BOOTS_ID),
+            _look(2, TANK_ID, JEANS_ID, BOOTS_ID),
+            _look(2, TOP_ID, JEANS_ID, BOOTS_ID, slot="evening"),
+        )
+    )
+
+    result = await packing.pack_trip(
+        _User(),
+        WARDROBE,
+        _request(occasions=(_slot(1), _slot(2), _slot(2, "evening", "evening"))),
+    )
+
+    assert [day["day"] for day in result.trip.forecast] == [1, 2]
+    assert [day["date"] for day in result.trip.forecast] == ["2026-03-14", "2026-03-15"]
+
+
+@pytest.mark.asyncio
 async def test_the_trip_row_is_built_and_not_persisted(wired: Any) -> None:
     # No `Session` reaches this service, so the row comes back with its server
     # defaults unresolved and 4.4 is what adds it.
@@ -342,7 +486,12 @@ async def test_the_trip_row_is_built_and_not_persisted(wired: Any) -> None:
     result = await packing.pack_trip(_User(), WARDROBE, _request(notes="one dinner out"))
 
     assert result.trip.id is None
-    assert result.trip.occasions == [{"day": 1, "occasion": "work"}, {"day": 2, "occasion": "work"}]
+    # The slot is written down rather than left to be inferred: the repack
+    # rebuilds its request out of this column.
+    assert result.trip.occasions == [
+        {"day": 1, "slot": "day", "occasion": "work"},
+        {"day": 2, "slot": "day", "occasion": "work"},
+    ]
     assert result.trip.notes == "one dinner out"
     assert result.missing_pieces[0].category == "shoes"
 
@@ -394,7 +543,32 @@ async def test_occasions_that_do_not_match_the_dates_are_a_callers_bug(wired: An
     # A `ValueError` rather than a `PackingError`: the route validates this
     # before building the request, so reaching it means the caller is wrong
     # rather than that the trip cannot be packed.
+    #
+    # The count is no longer the check — a two-day trip legitimately sends three
+    # occasions — so what is refused is a day of the range nobody dressed.
     wired(_answer(_look(1, TOP_ID, JEANS_ID, BOOTS_ID)))
 
-    with pytest.raises(ValueError, match="3 occasions for 2 days"):
-        await packing.pack_trip(_User(), WARDROBE, _request(occasions=("work", "work", "casual")))
+    with pytest.raises(ValueError, match=r"days \[1, 2, 3\] and the trip is 2"):
+        await packing.pack_trip(
+            _User(), WARDROBE, _request(occasions=(_slot(1), _slot(2), _slot(3, occasion="casual")))
+        )
+
+
+@pytest.mark.asyncio
+async def test_one_slot_asked_for_twice_is_a_callers_bug(wired: Any) -> None:
+    # `uq_looks_trip_day_slot` would refuse the second row four layers down, as
+    # an `IntegrityError` on a route that has already spent a model call.
+    wired(_answer(_look(1, TOP_ID, JEANS_ID, BOOTS_ID)))
+
+    with pytest.raises(ValueError, match="day 2 evening twice"):
+        await packing.pack_trip(
+            _User(),
+            WARDROBE,
+            _request(
+                occasions=(
+                    _slot(1),
+                    _slot(2, "evening", "evening"),
+                    _slot(2, "evening", "dinner"),
+                )
+            ),
+        )

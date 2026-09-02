@@ -440,7 +440,7 @@ def test_the_trip_row_stores_the_occasions_and_the_parsed_forecast(
 
     trip = db.get(Trip, trip_id)
     assert trip is not None
-    assert trip.occasions == [{"day": day, "occasion": "work"} for day in (1, 2, 3)]
+    assert trip.occasions == [{"day": day, "slot": "day", "occasion": "work"} for day in (1, 2, 3)]
     assert trip.forecast is not None
     # The rule is stored beside the numbers rather than recomputed on read, so a
     # trip packed under one band table cannot re-render under another.

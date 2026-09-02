@@ -25,7 +25,6 @@ exactly what they mean on the two that raise them.
 
 import datetime
 import logging
-from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -54,6 +53,30 @@ class StylistRejectedError(PackingError):
 
 
 @dataclass(frozen=True, slots=True)
+class TripSlot:
+    """One look the trip asks for: which day, which half of it, and what for.
+
+    Named after `stylist.TripDay`, which it becomes one step later — the same row
+    with the forecast added — and not after `enums.Slot`, which is the vocabulary
+    `slot` draws its two values from.
+
+    A dataclass rather than a `(day, slot, occasion)` tuple: two of the three
+    fields are enum values whose meaning is not positional, `entry.slot` reads
+    where `entry[1]` has to be remembered, and mypy checks a field name where it
+    cannot check a tuple index.
+
+    Not `schemas/trip.py`'s `TripOccasion`, which is these three values on the
+    wire. `DECISIONS.md` 196 keeps wire models out of this service; the route
+    maps one into the other, exactly as it maps a look request into
+    `StylistContext`.
+    """
+
+    day: int
+    slot: str
+    occasion: str
+
+
+@dataclass(frozen=True, slots=True)
 class TripRequest:
     """What the user asked for, as this service reads it.
 
@@ -63,17 +86,23 @@ class TripRequest:
     body into this, exactly as `POST /looks/suggest` maps its body into
     `StylistContext`. `DECISIONS.md` 196.
 
-    `occasions` is positional — index 0 is **day 1** — where the wire carries
-    `[{"day": 1, "occasion": "work"}, …]`. The route is what checks that those
-    days are `1..n` before building this, so the tuple cannot be ragged by the
-    time it arrives; `pack_trip` still refuses a length that disagrees with the
-    date range, because a caller's bug should not reach the model.
+    `occasions` is **one entry per look and no longer one per day**, from task
+    4.14: a date carries one `TripSlot` or two, and `(day, slot)` is what names a
+    look in every layer below this one. It stopped being positional in the same
+    move — index 0 was day 1 while the two counts were the same number, and a
+    list that can hold two entries for day 2 cannot be read by index at all.
+
+    The route is what checks that the days are `1..n` in order and that a date's
+    entries are `day` then `evening`, so the tuple cannot be ragged by the time
+    it arrives; `pack_trip` still refuses a set of days that disagrees with the
+    date range, and one `(day, slot)` asked for twice, because a caller's bug
+    should not reach the model.
     """
 
     destination: str
     start_date: datetime.date
     end_date: datetime.date
-    occasions: tuple[str, ...]
+    occasions: tuple[TripSlot, ...]
     notes: str | None = None
 
     @property
@@ -83,7 +112,7 @@ class TripRequest:
 
 @dataclass(frozen=True, slots=True)
 class PackedLook:
-    """One day's outfit, with its items already resolved.
+    """One outfit — one slot of one day — with its items already resolved.
 
     Carries hydrated `ItemResponse`s rather than `short_id`s because both of
     4.4's jobs need them: `item.id` for the `look_items` rows and the whole item
@@ -92,9 +121,14 @@ class PackedLook:
     `for_date` is the day this look is *for*, which is the column `looks` has —
     `day` is the trip's own ordinal and lives only in the AI contract and the
     day strip. The two are the same fact counted from different origins.
+
+    **`for_date` stopped identifying a look at 4.14** and `slot` is what tells
+    two looks of one date apart — which is `looks.slot` on the row, and the
+    reason `0006` put the unique index on the pair rather than on the date.
     """
 
     day: int
+    slot: str
     for_date: datetime.date
     occasion: str
     title: str
@@ -153,26 +187,41 @@ async def _destination(query: str) -> Location:
 
 
 def _days(request: TripRequest, forecasts: Sequence[Forecast]) -> tuple[TripDay, ...]:
-    """One `TripDay` per forecast day: the ordinal, the occasion and the rule.
+    """One `TripDay` per requested slot: the ordinal, the slot, the occasion and
+    the rule.
+
+    One per **entry** rather than one per forecast day, which is the shape change
+    4.14 is: a date with an evening out is two lines in the trip message and two
+    looks in the answer, and it is `(day, slot)` that pairs them.
+
+    The forecast is therefore looked up by ordinal rather than zipped, because
+    the two sequences stopped being the same length. **Both slots of a date get
+    the same summary and the same rule**, which is the contract and not a
+    shortcut: `trips.forecast` holds one row per calendar day, so an evening
+    dressed against its own numbers would need an hourly forecast and a second
+    band table. What separates the two looks is the occasion.
+    `DECISIONS.md` 225.
 
     `build_rule` reads `temp_max_c` for `DECISIONS.md` 142's reason, which is the
     single-day path's: two temperatures arrive and the document's worked example
     is only self-consistent under the maximum.
     """
-    return tuple(
-        TripDay(
-            day=index + 1,
-            # A literal until task 4.14, and true while it stands: `TripRequest`
-            # carries one occasion per day, so every entry this builds is a day
-            # slot. 4.14 makes both fields come from the request together.
-            slot="day",
-            date=forecast.date,
-            occasion=request.occasions[index],
-            forecast_summary=summarize_forecast(forecast),
-            weather_rule=build_rule(forecast.temp_max_c, forecast.precip_mm, forecast.wind_kph),
+    by_ordinal = {index + 1: forecast for index, forecast in enumerate(forecasts)}
+
+    days = []
+    for entry in request.occasions:
+        forecast = by_ordinal[entry.day]
+        days.append(
+            TripDay(
+                day=entry.day,
+                slot=entry.slot,
+                date=forecast.date,
+                occasion=entry.occasion,
+                forecast_summary=summarize_forecast(forecast),
+                weather_rule=build_rule(forecast.temp_max_c, forecast.precip_mm, forecast.wind_kph),
+            )
         )
-        for index, forecast in enumerate(forecasts)
-    )
+    return tuple(days)
 
 
 def _forecast_column(
@@ -191,24 +240,33 @@ def _forecast_column(
     pure function of three of them, so a reader could recompute it — but then a
     trip packed under one version of the band table would render under another,
     and the sentence the model actually obeyed would be lost.
+
+    **One row per calendar day and not per look**, which is where this stopped
+    being a `zip` at 4.14: `days` now holds one entry per requested slot, so a
+    date with an evening out arrived twice and the column would have grown a day
+    the trip has not got. The rules collapse into a `{ordinal: rule}` map, which
+    loses nothing because both slots of a date are built from the one forecast
+    row.
     """
+    rules = {day.day: day.weather_rule for day in days}
     return [
         {
-            "day": day.day,
+            "day": ordinal,
             "date": forecast.date.isoformat(),
             "temp_min_c": forecast.temp_min_c,
             "temp_max_c": forecast.temp_max_c,
             "precip_mm": forecast.precip_mm,
             "wind_kph": forecast.wind_kph,
             "condition": forecast.condition.value,
-            "rule": day.weather_rule,
+            "rule": rules[ordinal],
         }
-        for day, forecast in zip(days, forecasts, strict=True)
+        for ordinal, forecast in enumerate(forecasts, start=1)
     ]
 
 
 def reuse_summary(
-    item_ids: Sequence[str], outfits: Sequence[Sequence[ItemResponse]]
+    item_ids: Sequence[str],
+    outfits: Sequence[tuple[datetime.date | None, Sequence[ItemResponse]]],
 ) -> dict[str, Any]:
     """The numbers `05-FRONTEND-SPEC.md` §7 prints, and not the sentence.
 
@@ -231,21 +289,52 @@ def reuse_summary(
     second, and it holds `LookResponse`s rather than `PackedLook`s. The tie-break
     is the reason it is shared rather than copied — a second implementation of it
     is the one thing that could make one plan summarise two ways — and the
-    parameter narrowed to what this function actually reads, which is a sequence
-    of item lists. `DECISIONS.md` 209.
+    parameter narrowed to what this function actually reads. `DECISIONS.md` 209.
+
+    **`look_count` and `most_reused.days` stopped being the same number at
+    4.14.** One counts the entries in `outfits`, the other counts the distinct
+    **dates** a garment is worn on, so a garment worn to the office and again to
+    dinner on Monday and on no other date reports **one** day — which fails the
+    `> 1` test and leaves `most_reused` null, a real reuse that produces no reuse
+    line. That is taken deliberately: `05-FRONTEND-SPEC.md` §7 renders this
+    number into *"You'll wear the camel trousers on 3 days"*, and a line about
+    days that counted looks would print a false sentence on the one line in the
+    product that makes this feature land. `DECISIONS.md` 225.
+
+    **The date arrives beside each outfit** rather than the outfits arriving
+    grouped by it. Both callers hold it — `pack_trip` on `PackedLook.for_date`,
+    the swap on the `looks` row it hydrated from — where a parallel
+    `Sequence[date]` would be the two-sequences-that-must-agree shape 195
+    refused, and a mapping would make `look_count` a sum over a grouping done
+    twice.
+
+    **The date is nullable because `looks.for_date` is**, and this is where that
+    parts company with `_by_day`, which drops an undated look rather than
+    guessing at one. Dropping is not available here: `look_count` counts the
+    looks it was handed, so a dropped one would make a trip report fewer looks
+    than it has. Undated outfits share the one `None` bucket instead, which can
+    never count as two dates. Nothing this API writes leaves a trip look
+    without a date.
     """
-    worn = Counter(
-        str(item.id) for items in outfits for item in {item.id: item for item in items}.values()
-    )
+    # A set of dates per garment, so that wearing one thing in both slots of a
+    # Monday counts once — which is the same collapse the old `Counter` did
+    # within a single look, one level up.
+    worn: dict[str, set[datetime.date | None]] = {item_id: set() for item_id in item_ids}
+    for for_date, items in outfits:
+        for item in items:
+            worn.setdefault(str(item.id), set()).add(for_date)
+
     # `max` returns the **first** element with the maximal key, and `item_ids`
     # is in packing-list order — so iterating it is the whole of the tie-break
     # and an explicit second key term would be dead weight. A mutation run at 4.3
     # proved it: adding `-item_ids.index(...)` changed no test, because it could
     # not change an answer.
-    best = max(item_ids, key=lambda item_id: worn[item_id], default=None)
+    best = max(item_ids, key=lambda item_id: len(worn[item_id]), default=None)
 
     most_reused = (
-        {"item_id": best, "days": worn[best]} if best is not None and worn[best] > 1 else None
+        {"item_id": best, "days": len(worn[best])}
+        if best is not None and len(worn[best]) > 1
+        else None
     )
     return {
         "item_count": len(item_ids),
@@ -273,13 +362,25 @@ async def pack_trip(
 
     Raises `DestinationNotFoundError`, `StylistRejectedError`, `GeocodingError`,
     `ForecastOutOfRangeError`, `ForecastProviderError`, and `ValueError` for a
-    request whose occasions do not match its dates — a caller's bug rather than
-    a trip that cannot be packed.
+    request whose occasions do not match its dates or ask for one slot twice — a
+    caller's bug rather than a trip that cannot be packed.
     """
-    if len(request.occasions) != request.days:
+    # The count stopped being the check at 4.14, because a trip with an evening
+    # out has more occasions than days. What has to hold is that every day of the
+    # range is dressed and no `(day, slot)` is asked for twice — the second is
+    # what `uq_looks_trip_day_slot` would refuse four layers down, as a `500`
+    # with no code on it.
+    covered = sorted({entry.day for entry in request.occasions})
+    if covered != list(range(1, request.days + 1)):
         raise ValueError(
-            f"The request has {len(request.occasions)} occasions for {request.days} days."
+            f"The request has occasions for days {covered} and the trip is {request.days} days."
         )
+
+    asked: set[tuple[int, str]] = set()
+    for entry in request.occasions:
+        if (entry.day, entry.slot) in asked:
+            raise ValueError(f"The request asks for day {entry.day} {entry.slot} twice.")
+        asked.add((entry.day, entry.slot))
 
     location = await _destination(request.destination)
     forecasts = await get_daily_forecast(
@@ -315,22 +416,36 @@ async def pack_trip(
     answer = validation.response
     known = {item.short_id: item for item in wardrobe}
 
-    # Ordered by the day the model gave, not by the position it answered in.
-    # Rule 10 has passed by here, so every day is present exactly once, and a
-    # complete-but-shuffled array is legal.
-    looks = tuple(
-        PackedLook(
-            day=look.day,
-            for_date=request.start_date + datetime.timedelta(days=look.day - 1),
-            occasion=request.occasions[look.day - 1],
-            title=look.title,
-            items=tuple(known[item_id] for item_id in look.item_ids),
-            reasoning=look.reasoning,
-            weather_note=look.weather_note,
+    # Driven by the slots that were **asked for** rather than by the array that
+    # came back, which is what makes the order total now that a date can hold two
+    # looks: sorting the answer by `day` alone left the two looks of a Monday in
+    # whichever order the model wrote them, and `PackingResult.looks` is what the
+    # response body and the `looks` inserts are both ordered by.
+    #
+    # Rule 10 has passed by here, so every requested pair is answered exactly
+    # once and a complete-but-shuffled array is legal. Reading the answer by its
+    # pair also drops the old `if look.day is not None` skip, which silently
+    # returned a trip one look short of the days it was asked for.
+    answered = {(look.day, look.slot): look for look in answer.looks}
+
+    packed = []
+    for day in days:
+        look = answered[(day.day, day.slot)]
+        packed.append(
+            PackedLook(
+                day=day.day,
+                slot=day.slot,
+                for_date=request.start_date + datetime.timedelta(days=day.day - 1),
+                # From the request rather than the answer, which has carried no
+                # occasion since 4.3 struck it from both schemas.
+                occasion=day.occasion,
+                title=look.title,
+                items=tuple(known[item_id] for item_id in look.item_ids),
+                reasoning=look.reasoning,
+                weather_note=look.weather_note,
+            )
         )
-        for look in sorted(answer.looks, key=lambda look: look.day or 0)
-        if look.day is not None
-    )
+    looks = tuple(packed)
 
     # `short_id` in, UUID out. The model is shown nothing else and the client is
     # given nothing else, so this line is the whole of the boundary between the
@@ -344,11 +459,17 @@ async def pack_trip(
         dest_lon=location.lon,
         start_date=request.start_date,
         end_date=request.end_date,
-        occasions=[{"day": day.day, "occasion": day.occasion} for day in days],
+        # The slot is written down and not inferred. `POST /trips/{id}/repack`
+        # rebuilds its request from this column and `0006` backfilled the key
+        # into every row that predates it, so a reader that defaulted it would be
+        # the one place left in the project that knows the pre-slot shape.
+        occasions=[{"day": day.day, "slot": day.slot, "occasion": day.occasion} for day in days],
         forecast=_forecast_column(days, forecasts),
         packing_list={
             "item_ids": packed_ids,
-            "reuse_summary": reuse_summary(packed_ids, [look.items for look in looks]),
+            "reuse_summary": reuse_summary(
+                packed_ids, [(look.for_date, look.items) for look in looks]
+            ),
         },
         notes=request.notes,
     )
