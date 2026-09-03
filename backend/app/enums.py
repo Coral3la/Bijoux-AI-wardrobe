@@ -177,16 +177,20 @@ class Slot(Vocabulary):
 
 # The fourth that is not a column type, and the only one that is a wire value
 # before it is anything else. `look_items.role` is `TEXT` and stays `NULL`
-# (`DECISIONS.md` 175), so what these six validate is
+# (`DECISIONS.md` 175), so what these seven validate is
 # `LookSuggestRequest.replace_role` — the same shape as `Occasion` one task
 # back: a closed list `04-API-SPEC.md` carried in prose alone until the task
 # that first accepts one.
 #
 # It is not `Category` and does not try to be. `outerwear` the category is
-# `outer` the role, and `dress` is deliberately absent: replacing a dress can
-# legally return a top *and* a bottom, which is not the single-item swap this
-# field names. `swimwear` and `sleepwear` are absent because no look contains
-# one. `AUDITS.md` O-25, whose vocabulary half this closes.
+# `outer` the role — one garment class, two words, and the role's is the one
+# the wire prints. `dress` was originally left out because replacing a dress
+# can legally return a top *and* a bottom under rule 2, which is not the
+# single-item swap this field names; the ↻ badge for a dress tile is now bound
+# to that single-item reading, so `dress` in this vocabulary means "return a
+# different dress" and the prompt-side clarifier in `_locked_block` is what
+# stops the model from substituting a top+bottom pair. `swimwear` and
+# `sleepwear` are absent because no look contains one. `AUDITS.md` O-25.
 class Role(Vocabulary):
     TOP = "top"
     BOTTOM = "bottom"
@@ -194,6 +198,7 @@ class Role(Vocabulary):
     SHOES = "shoes"
     BAG = "bag"
     ACCESSORY = "accessory"
+    DRESS = "dress"
 
 
 SUBCATEGORIES: dict[Category, tuple[str, ...]] = {

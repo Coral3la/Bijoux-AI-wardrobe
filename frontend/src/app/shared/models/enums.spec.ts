@@ -24,26 +24,37 @@ describe('the closed vocabulary mirror', () => {
   // against app/enums.py, which is what makes the literal worth writing out.
   // The order is load-bearing on this one: it is also the item_category type's
   // sort order, which migration 0003 appended to.
-  // Transcribed from docs/02-DATA-MODEL.md, which adopted the list at task
-  // 2.11 from 04-API-SPEC.md's `replace_role`. Six, not nine: `outerwear` is
-  // `outer` here, and `dress`, `swimwear` and `sleepwear` are not roles.
-  it('mirrors the six roles in order', () => {
-    expect([...ROLES]).toEqual(['top', 'bottom', 'outer', 'shoes', 'bag', 'accessory']);
+  // Transcribed from docs/02-DATA-MODEL.md, which adopted the first six at
+  // task 2.11 from 04-API-SPEC.md's `replace_role` and added `dress` when the
+  // ↻ badge grew a dress-for-dress reading. Seven, not nine: `outerwear` is
+  // `outer` here, and `swimwear` and `sleepwear` are not roles.
+  it('mirrors the seven roles in order', () => {
+    expect([...ROLES]).toEqual([
+      'top',
+      'bottom',
+      'outer',
+      'shoes',
+      'bag',
+      'accessory',
+      'dress',
+    ]);
   });
 
   // The map is the ↻ badge's whole rule for which tiles it appears on, so the
-  // three categories with no role are asserted as such rather than left out.
+  // two categories with no role are asserted as such rather than left out.
   it('resolves every category that has a role, and only those', () => {
     expect(CATEGORIES.filter((category) => roleOf(category) !== undefined)).toEqual([
       'top',
       'bottom',
+      'dress',
       'outerwear',
       'shoes',
       'bag',
       'accessory',
     ]);
     expect(roleOf('outerwear')).toBe('outer');
-    expect(roleOf('dress')).toBeUndefined();
+    expect(roleOf('dress')).toBe('dress');
+    expect(roleOf('swimwear')).toBeUndefined();
     expect(roleOf(null)).toBeUndefined();
   });
 

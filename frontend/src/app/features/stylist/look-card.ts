@@ -338,10 +338,12 @@ export class LookCard {
       : `${ICON_BUTTON} border-line text-ink`;
   }
 
-  // No badge on a dress, and that is the vocabulary rather than the layout:
-  // replacing a dress can legally return a top and a bottom, which `04`'s
-  // `replace_role` has no word for and a *single*-item swap is not. Every
-  // other garment in a look has a role. AUDITS.md O-25, DECISIONS.md 175.
+  // The vocabulary decides which tiles carry a badge: every category that
+  // maps to a role does, and the two that do not (`swimwear`, `sleepwear`) do
+  // not. `dress` maps to `dress` and means "swap this dress for a different
+  // dress" — the backend's `_locked_block` prints the clarifier that keeps
+  // rule 2's `top and bottom OR dress` from letting the model answer with a
+  // top+bottom pair. AUDITS.md O-25, DECISIONS.md 175.
   protected isSwappable(item: Item): boolean {
     return roleOf(item.category) !== undefined;
   }

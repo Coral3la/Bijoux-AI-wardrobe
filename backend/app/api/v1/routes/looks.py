@@ -229,9 +229,12 @@ def _persist(
     legal is the one the user sent.
 
     `position` is the model's own ordering, which is otherwise destroyed — the
-    composite primary key imposes none. `role` is left `NULL`: it has no
-    vocabulary, `04`'s six values do not cover `dress`, and 2.11 is the task
-    that first reads one. `AUDITS.md` O-25, `DECISIONS.md` 170.
+    composite primary key imposes none. `role` is left `NULL`: 2.11 reads a
+    role off the item's `category` in the browser rather than off this column,
+    so nothing on the server needs the vocabulary written down. The vocabulary
+    now covers `dress` — the ↻ badge on a dress tile sends `replace_role`
+    `dress` and means "return a different dress" — but the row here still
+    stays `NULL` for the same reason. `AUDITS.md` O-25, `DECISIONS.md` 170.
     """
     suggested: list[LookResponse] = []
 

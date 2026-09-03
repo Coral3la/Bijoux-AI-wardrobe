@@ -154,7 +154,7 @@ export interface PackResponse {
 // serves a plain suggestion as well as a swap, so most of its traffic omits the
 // field; this route does one thing and the badge always knows the role of the
 // tile it sits on. `Role` comes from `enums.ts`, which is the only place the
-// category-to-role map exists — the server validates the six values and derives
+// category-to-role map exists — the server validates the seven values and derives
 // none (AUDITS.md O-25).
 //
 // `exclude_item_ids` has a server-side default and is still required here,

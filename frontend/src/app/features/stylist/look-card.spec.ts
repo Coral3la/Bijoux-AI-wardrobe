@@ -328,11 +328,11 @@ describe('LookCard', () => {
     expect(swapped.map((garment) => garment.id)).toEqual(['b']);
   });
 
-  // The vocabulary decides this, not the layout: `replace_role` has no `dress`
-  // — replacing one can legally return a top and a bottom, which is not a
-  // single-item swap — so the badge that would send it is not drawn.
-  // AUDITS.md O-25.
-  it('draws no badge on a dress', async () => {
+  // The vocabulary decides this, not the layout: `dress` is a role and means
+  // "swap this dress for a different dress" — the backend's `_locked_block`
+  // prints the clarifier that keeps rule 2's `top and bottom OR dress` from
+  // letting the model answer with a top+bottom pair. AUDITS.md O-25.
+  it('draws a badge on a dress alongside the other garments', async () => {
     await render(
       look([
         item({ id: 'a', category: 'dress', layer: 'standalone', display_name: 'slip dress' }),
@@ -341,6 +341,7 @@ describe('LookCard', () => {
     );
 
     expect(badges().map((badge) => badge.getAttribute('aria-label'))).toEqual([
+      'Swap slip dress for something else',
       'Swap heels for something else',
     ]);
   });

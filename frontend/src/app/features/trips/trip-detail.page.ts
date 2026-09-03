@@ -696,9 +696,10 @@ export class TripDetailPage {
     if (this.isSwapping() || this.repacking() || this.deleting()) {
       return;
     }
-    // A dress has no role and therefore no badge, so this is unreachable from
-    // the rendered screen — and it is a return rather than a `!` because
-    // `roleOf` is the only thing standing between a dress and a request the
+    // Only the two categories with no role (`swimwear`, `sleepwear`) reach
+    // this branch, and no look contains one — so this is unreachable from the
+    // rendered screen. Still a return rather than a `!`, because `roleOf` is
+    // the only thing standing between an untyped garment and a request the
     // server would answer `422` to.
     const role = roleOf(item.category);
     if (role === undefined) {

@@ -186,16 +186,17 @@ describe('TripLook', () => {
     expect(badges()).toHaveLength(3);
   });
 
-  // Replacing a dress can legally return a top and a bottom, which is not the
-  // single-item swap `replace_role` names. AUDITS.md O-25.
-  it('draws no badge on a dress', () => {
+  // A dress carries a badge like any other garment with a role: `dress` maps
+  // to `dress` and means "swap this dress for a different dress". AUDITS.md
+  // O-25.
+  it('draws a badge on a dress alongside the other garments', () => {
     render(
       look({
         items: [item({ id: 'a', category: 'dress' }), item({ id: 'b', category: 'shoes' })],
       }),
     );
 
-    expect(badges()).toHaveLength(1);
+    expect(badges()).toHaveLength(2);
     expect(waiting()).toEqual([false, false]);
   });
 

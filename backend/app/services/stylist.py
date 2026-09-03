@@ -64,7 +64,7 @@ from openai.types.chat import (
 from openai.types.shared_params.response_format_json_schema import JSONSchema
 
 from app.core.config import settings
-from app.enums import Category, Layer, Slot
+from app.enums import Category, Layer, Role, Slot
 from app.schemas.item import ItemResponse
 from app.services.serializer import serialize_wardrobe
 from app.services.weather import requires_outerwear
@@ -219,6 +219,15 @@ _ANCHOR_BLOCK: Final = (
 # did not send is an instruction nobody gave.
 _LOCKED_BLOCK: Final = "LOCKED: {locked_ids}\nThese items MUST appear unchanged."
 _REPLACE_LINE: Final = "Replace only the {role} with a different option from the wardrobe."
+# Printed after `_REPLACE_LINE` when the role is `dress`, and never otherwise.
+# Rule 2 admits `one top and one bottom` as an alternative to `one dress`, so
+# without this the swap of a dress could legally answer with a top+bottom pair
+# — which is a different look and not the single-item substitution the ↻ badge
+# on a dress tile is sending. The six other roles have no such alternative in
+# rule 2, so they need no clarifier.
+_REPLACE_DRESS_LINE: Final = (
+    "The replacement MUST itself be a dress. Do not substitute a top and a bottom."
+)
 # Transcribed with `03`'s singular, which is what one tap sends. The ids are
 # joined the way LOCKED's are, so a second swap of the same role reads as a
 # longer list rather than as a second sentence.
@@ -461,6 +470,11 @@ def _locked_block(context: StylistContext) -> str:
     block = _LOCKED_BLOCK.format(locked_ids=", ".join(context.locked_ids))
     if context.replace_role is not None:
         block += "\n" + _REPLACE_LINE.format(role=context.replace_role)
+        # See `_REPLACE_DRESS_LINE` above: rule 2's `top+bottom OR dress`
+        # branch is what makes this clarifier necessary here and pointless
+        # anywhere else.
+        if context.replace_role == Role.DRESS.value:
+            block += "\n" + _REPLACE_DRESS_LINE
     if context.excluded_ids:
         block += "\n" + _REJECTED_LINE.format(excluded_ids=", ".join(context.excluded_ids))
     return block

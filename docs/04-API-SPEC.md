@@ -318,7 +318,7 @@ to build around the garment the user is holding, reported as a success.
 
 **`anchor_item_id`** — build the look around this item. It must appear in the result. This powers "Style around this" from the item detail screen, and it is the direct answer to the original problem: *I am holding this garment and do not know what goes with it.*
 
-**`locked_item_ids` + `replace_role` + `exclude_item_ids`** — swap a single item while keeping the rest of the look. `replace_role` is one of `top · bottom · outer · shoes · bag · accessory`. This powers the ↻ button on each item in a look card. The six live in `02-DATA-MODEL.md`'s closed vocabulary since task 2.11 and are enforced by this request schema; `dress` is not among them, so a look built on a dress has no ↻ on that tile (`AUDITS.md` **O-25**, `DECISIONS.md` 175).
+**`locked_item_ids` + `replace_role` + `exclude_item_ids`** — swap a single item while keeping the rest of the look. `replace_role` is one of `top · bottom · outer · shoes · bag · accessory · dress`. This powers the ↻ button on each item in a look card. The seven live in `02-DATA-MODEL.md`'s closed vocabulary — the first six since task 2.11, `dress` added when the ↻ badge grew a dress-for-dress reading — and are enforced by this request schema. `replace_role: dress` means "return a different dress"; the backend's `_locked_block` prints an extra line saying so, because rule 2's `top and bottom OR dress` would otherwise let the model substitute a top+bottom pair (`AUDITS.md` **O-25**, `DECISIONS.md` 175).
 
 All four fields are optional and default to null or empty. A request with none of them behaves exactly as before.
 
@@ -862,7 +862,7 @@ is the day's look minus `item_id`, read off the row rather than sent — a
 client-supplied copy is a second description of a look the server is holding,
 and the two can disagree. `replace_role` is **not** derived, and that asymmetry
 is deliberate: `ROLE_BY_CATEGORY` lives only in the frontend's `enums.ts`
-because this API validates the six values and derives none, so a map on this
+because this API validates the seven values and derives none, so a map on this
 side would be the second copy of a table kept in one place on purpose
 (`AUDITS.md` **O-25**). `replace_role` is **required** here, unlike on
 `POST /looks/suggest`: the ↻ badge always sends one, so requiring it deletes the

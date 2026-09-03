@@ -417,6 +417,35 @@ def test_the_locked_block_is_the_documented_one() -> None:
     )
 
 
+def test_a_dress_role_appends_the_top_and_bottom_clarifier() -> None:
+    # Rule 2 admits `top and bottom OR dress`, so without this line a
+    # `replace_role: dress` swap could legally answer with a top+bottom pair.
+    # The six other roles have no such alternative, so `_locked_block` prints
+    # the clarifier only for `dress`.
+    message = stylist._user_message(
+        WARDROBE,
+        _context(locked_ids=(BOOTS_ID,), replace_role="dress"),
+    )
+
+    assert message.endswith(
+        f"LOCKED: {BOOTS_ID}\n"
+        "These items MUST appear unchanged.\n"
+        "Replace only the dress with a different option from the wardrobe.\n"
+        "The replacement MUST itself be a dress. "
+        "Do not substitute a top and a bottom."
+    )
+
+
+def test_a_non_dress_role_does_not_print_the_dress_clarifier() -> None:
+    # The clarifier is scoped to the one role rule 2 makes it necessary for.
+    message = stylist._user_message(
+        WARDROBE,
+        _context(locked_ids=(TOP_ID, JEANS_ID), replace_role="shoes"),
+    )
+
+    assert "MUST itself be a dress" not in message
+
+
 def test_locks_with_no_role_and_no_exclusion_print_two_lines() -> None:
     # `_outerwear_line`'s rule on a longer block: a sentence about a field the
     # user did not send is an instruction nobody gave. Without a role there is

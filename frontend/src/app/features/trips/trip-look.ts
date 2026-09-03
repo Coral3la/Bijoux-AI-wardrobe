@@ -201,10 +201,12 @@ export class TripLook {
     return this.i18n.t('trip.swap.stillWorn', { name: worn.name, days });
   });
 
-  // No badge on a dress: replacing one can legally return a top and a bottom,
-  // which `replace_role` has no word for and a single-item swap is not. The
-  // look card's own predicate, duplicated rather than imported — three tokens
-  // against a trips component reaching into a stylist one. AUDITS.md O-25.
+  // Every category that maps to a role gets a badge. `dress` maps to `dress`
+  // and means "swap this dress for a different dress"; the two categories
+  // without a role (`swimwear`, `sleepwear`) get none, because no look
+  // contains one. The look card's own predicate, duplicated rather than
+  // imported — three tokens against a trips component reaching into a stylist
+  // one. AUDITS.md O-25.
   protected isSwappable(item: Item): boolean {
     return roleOf(item.category) !== undefined;
   }

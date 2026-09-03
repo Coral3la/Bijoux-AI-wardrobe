@@ -159,7 +159,7 @@ class TripSwapRequest(BaseModel):
 
     **The role is the client's and is never derived here.** `ROLE_BY_CATEGORY`
     lives in `frontend/src/app/shared/models/enums.ts` and has no counterpart in
-    `app/enums.py` — this API validates the six values and derives none — so a
+    `app/enums.py` — this API validates the seven values and derives none — so a
     map added on this side to turn `item_id` into a role would be the second
     copy of a table deliberately kept in one place. `AUDITS.md` O-25.
 

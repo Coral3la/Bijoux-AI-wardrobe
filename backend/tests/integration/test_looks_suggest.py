@@ -867,7 +867,7 @@ def test_a_role_with_nothing_locked_is_the_schema_s_own_rejection(
     assert fake.calls == 0
 
 
-def test_a_role_outside_the_six_is_refused(
+def test_a_role_outside_the_vocabulary_is_refused(
     client: TestClient,
     user: User,
     wardrobe: list[Item],
@@ -875,9 +875,12 @@ def test_a_role_outside_the_six_is_refused(
     stylist: Callable[..., FakeStylist],
     authorization: Callable[[User], dict[str, str]],
 ) -> None:
-    # `dress` is a category and not a role: replacing a dress can legally
-    # return a top and a bottom, which is not a single-item swap. The
-    # vocabulary is what refuses it. `AUDITS.md` O-25.
+    # `outerwear` is a category and not a role — the role is `outer`, one word
+    # short, and the wire uses that spelling. `swimwear` and `sleepwear` are
+    # not roles either because no look contains one. `dress` is now a role
+    # (see `test_a_dress_role_swap_is_accepted_and_forbids_a_top_and_bottom`),
+    # so this test uses `outerwear` as the value the vocabulary refuses.
+    # `AUDITS.md` O-25.
     fake = stylist(answer("NEVER1"))
 
     response = suggest(
@@ -885,7 +888,7 @@ def test_a_role_outside_the_six_is_refused(
         user,
         authorization,
         locked_item_ids=[str(wardrobe[1].id)],
-        replace_role="dress",
+        replace_role="outerwear",
     )
 
     assert response.status_code == 422
