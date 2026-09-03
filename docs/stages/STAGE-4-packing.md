@@ -513,11 +513,49 @@ wears what.
 One or two occasion rows per day: a control that adds the evening and removes it,
 and a resize that keeps evenings with their days.
 
+**Two controls rather than one, and the line above says "a control".** *Add an
+evening* sits on the day's fieldset; the `×` that takes it away sits on the
+evening row beside its own label. The destination chip one section up already
+removes itself that way, and separating the two means the button that destroys is
+never the button that adds. The cost is a mis-tap on `×` losing a chosen
+occasion, taken deliberately — the occasion goes with the slot rather than being
+held for a re-add, because an evening that is not on the trip has nothing to be
+for. `05-FRONTEND-SPEC.md`'s bullet is amended to match rather than the code
+bent to it.
+
+**The resize criterion cost nothing, and that is what chose the draft's shape.**
+`TripDraft.occasions` is one `TripDayDraft` per **day** — `{ day, evening }`,
+with the field names taken from the slot vocabulary — rather than the wire's flat
+list of slots. An entry carries its own evening, so padding the tail and
+truncating from the end cannot separate the two; a flat list would have had to
+count slots to find a day's boundary. It also makes `evening: null` the only way
+to say *no second slot*, so **a lone evening is structurally unbuildable** rather
+than merely unsent — the form cannot express the body `TripPackRequest` refuses.
+The flattening happens once, in `trips.page.ts`, which is where the day numbering
+already was.
+
+**A new evening opens on occasion `evening`**, not on `casual`. Pressing *Add an
+evening* has already said what the slot is for. It renders as `EVENING · EVENING`
+on the trip page, which is the vocabulary collision `AUDITS.md` **O-35** already
+owns and 4.18's dedupe rule already plans to collapse — this walks into an owned
+problem rather than making a new one.
+
+**`MAX_TRIP_DAYS` bounds days, and evenings are not days.** A fourteen-day trip
+with fourteen evenings is twenty-eight looks in one model call against a
+twenty-two item ceiling, because `reuse_target` is a function of days by 4.14's
+own criterion. Nothing refuses it and nothing here adds a bound the API does not
+have. It is 225's pressure-toward-reuse taken to its limit, and whether a plan
+that size is still sensible is for the prompt-tuning note below to measure; if it
+is not, that is its own task rather than a patch inside this one.
+
 **Acceptance criteria — 4.17's own:**
 
-- [ ] A day can be given an evening and have it taken away again
-- [ ] Extending the trip keeps an evening already set on an earlier day
-- [ ] The request carries the entries in day order, `day` before `evening`
+- [x] A day can be given an evening and have it taken away again — and a
+      `removeEvening` that does nothing fails it, measured
+- [x] Extending the trip keeps an evening already set on an earlier day — a
+      `resize` that rebuilds the day without its evening fails it
+- [x] The request carries the entries in day order, `day` before `evening` —
+      asserted on the request body, and the flattening reversed fails it
 
 ### 4.18 The trip page
 

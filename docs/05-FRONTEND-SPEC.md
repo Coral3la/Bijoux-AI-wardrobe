@@ -539,14 +539,22 @@ changed by the restyle:
   in day order because the request schema requires the numbers to arrive as
   `1..n` *in* order rather than as a permutation of them.
 - **A day carries one occasion or two, and the second one is the evening**
-  *(task 4.17)*. Every day starts with a single `day` slot; a control on the day
-  adds an `evening` row under it with its own chip row, and removes it again. The
+  *(task 4.17)*. Every day starts with a single `day` slot; an *Add an evening*
+  button on the day appends an `evening` row under it with its own chip row and
+  its own sub-label, and that row carries an `×` of its own. **Two controls
+  rather than one toggle**, which 4.17 settled: the destination chip one section
+  up already removes itself with an `×`, and the control that destroys belongs
+  beside the thing it destroys rather than in the position that adds. A new
+  evening opens on occasion `evening` — pressing the button has already said what
+  the slot is for, and `casual` would make every user who adds one re-pick. The
   resize above keeps evenings with their days — extending a trip pads with
   single-slot days and truncates from the end, so an evening set on day 2
-  survives a change to `end_date`. There is no way to build a day with no
-  occasion and no way to build one with two `day` slots, which is the same
-  invariant the request schema checks and `uq_looks_trip_day_slot` holds the rows
-  to; the form's job is that a correct client cannot express the refusal.
+  survives a change to `end_date`. That is free rather than arranged: the draft
+  is indexed by day and an entry carries its own evening, so no code separates
+  the two. There is no way to build a day with no occasion and no way to build
+  one with two `day` slots, which is the same invariant the request schema checks
+  and `uq_looks_trip_day_slot` holds the rows to; the form's job is that a
+  correct client cannot express the refusal.
 - **The notes field is unbounded.** `TripPackRequest.notes` is stripped and not
   length-checked, so a counter or a cap here would be a refusal the API does not
   make.

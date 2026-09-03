@@ -10,14 +10,14 @@ import { TripDraft, TripForm, newTripDraft, tripProblem } from './trip-form';
 // `notes` is omitted rather than sent as an empty string: absent is what the
 // server defaults it to, and the schema forbids extra keys rather than dropping
 // them. The occasions are numbered here rather than in the form, because the
-// wire wants `{ day, slot, occasion }` and the draft holds one flat list — day N
+// wire wants `{ day, slot, occasion }` and the draft is indexed by day — day N
 // is index N - 1.
 //
-// `slot` is the literal 'day' until task 4.17, and true while it stands: the
-// draft holds one occasion per day and the form offers no way to ask for an
-// evening. The server takes no default for it — an evening entry that lost its
-// slot would parse as a second day and fail rule 10 after the model call — so
-// the literal is here rather than absent.
+// The flattening is where a day becomes one wire entry or two, day before
+// evening. That order is not a convention this line chose: TripPackRequest
+// refuses a list whose slots arrive the other way round, and building it from a
+// draft that holds the evening *on* its day is what makes the order impossible
+// to get wrong here.
 //
 // The destination is the geocoder's own `name` and nothing else. Its country is
 // display text for the chip, and its coordinates are dropped because the
@@ -28,11 +28,12 @@ function toRequest(draft: TripDraft, destination: string): PackRequest {
     destination,
     start_date: draft.start_date,
     end_date: draft.end_date,
-    occasions: draft.occasions.map((occasion, index) => ({
-      day: index + 1,
-      slot: 'day' as const,
-      occasion,
-    })),
+    occasions: draft.occasions.flatMap((entry, index) => [
+      { day: index + 1, slot: 'day' as const, occasion: entry.day },
+      ...(entry.evening === null
+        ? []
+        : [{ day: index + 1, slot: 'evening' as const, occasion: entry.evening }]),
+    ]),
     ...(notes !== '' && { notes }),
   };
 }

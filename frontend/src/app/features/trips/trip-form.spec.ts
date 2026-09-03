@@ -6,10 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import en from '../../../../public/i18n/en.json';
 import { environment } from '../../../environments/environment';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { Occasion } from '../../shared/models/enums';
 import { LocationResult } from '../../shared/models/location.model';
 import {
   MAX_TRIP_DAYS,
   SEARCH_DEBOUNCE_MS,
+  TripDayDraft,
   TripDraft,
   TripForm,
   daysInRange,
@@ -27,12 +29,19 @@ function berlin(overrides: Partial<LocationResult> = {}): LocationResult {
   return { name: 'Berlin', country: 'Germany', lat: 52.52437, lon: 13.41053, ...overrides };
 }
 
+// One day of the draft. The second argument is the evening, and leaving it out
+// is a day with none — which is the state the form has to be able to build and
+// the request schema has to be able to refuse a lone one of.
+function day(occasion: Occasion = 'casual', evening: Occasion | null = null): TripDayDraft {
+  return { day: occasion, evening };
+}
+
 function draft(overrides: Partial<TripDraft> = {}): TripDraft {
   return {
     destination: berlin(),
     start_date: '2026-03-14',
     end_date: '2026-03-17',
-    occasions: ['casual', 'casual', 'casual', 'casual'],
+    occasions: [day(), day(), day(), day()],
     notes: '',
     ...overrides,
   };
@@ -64,10 +73,31 @@ function legends(): string[] {
   return [...element().querySelectorAll('legend')].map((one) => one.textContent?.trim() ?? '');
 }
 
+// One row per **slot**, in document order, so a four-day trip with an evening
+// on day 2 has five. The chips live in a role=group of their own precisely so
+// that the add and remove controls are not in this list.
 function chipRows(): HTMLButtonElement[][] {
-  return [...element().querySelectorAll('fieldset')].map((row) => [
+  return [...element().querySelectorAll('[role=group]')].map((row) => [
     ...row.querySelectorAll('button'),
   ]);
+}
+
+function slotLabels(): string[] {
+  return [...element().querySelectorAll('[id^=trip-slot-]')].map(
+    (one) => one.textContent?.trim() ?? '',
+  );
+}
+
+function addEveningButtons(): HTMLButtonElement[] {
+  return [...element().querySelectorAll('fieldset button')].filter((one) =>
+    (one.textContent ?? '').includes('Add an evening'),
+  ) as HTMLButtonElement[];
+}
+
+function removeEveningButton(dayNumber: number): HTMLButtonElement {
+  return element().querySelector<HTMLButtonElement>(
+    `button[aria-label="Remove the evening on day ${dayNumber}"]`,
+  )!;
 }
 
 function pressed(row: number): string[] {
@@ -176,7 +206,7 @@ describe('newTripDraft', () => {
       destination: null,
       start_date: '2026-03-14',
       end_date: '2026-03-14',
-      occasions: ['casual'],
+      occasions: [{ day: 'casual', evening: null }],
       notes: '',
     });
   });
@@ -225,7 +255,7 @@ describe('TripForm', () => {
   });
 
   it('shows each day its own occasion', async () => {
-    await render(draft({ occasions: ['work', 'casual', 'evening', 'casual'] }));
+    await render(draft({ occasions: [day('work'), day(), day('evening'), day()] }));
 
     expect(pressed(0)).toEqual(['Work']);
     expect(pressed(2)).toEqual(['Evening']);
@@ -239,39 +269,94 @@ describe('TripForm', () => {
     chipRows()[2][1].click();
     TestBed.tick();
 
-    expect(last().occasions).toEqual(['casual', 'casual', 'work', 'casual']);
+    expect(last().occasions).toEqual([day(), day(), day('work'), day()]);
   });
 
   // A day has no "no occasion" to fall back to, so the chip row cannot clear
   // the way the wardrobe's filter chips can — the request needs one entry per
   // day and an empty row would arm a button that 422s.
   it('leaves the chosen occasion chosen when it is tapped again', async () => {
-    await render(draft({ occasions: ['work', 'casual', 'casual', 'casual'] }));
+    await render(draft({ occasions: [day('work'), day(), day(), day()] }));
     chipRows()[0][1].click();
     TestBed.tick();
 
-    expect(last().occasions[0]).toBe('work');
+    expect(last().occasions[0].day).toBe('work');
+  });
+
+  it('draws one slot row per day until a day is given an evening', async () => {
+    await render(draft({ occasions: [day(), day('work', 'formal'), day(), day()] }));
+
+    expect(legends()).toEqual(['Day 1', 'Day 2', 'Day 3', 'Day 4']);
+    expect(slotLabels()).toEqual(['Day', 'Day', 'Evening', 'Day', 'Day']);
+    expect(chipRows()).toHaveLength(5);
+    expect(pressed(1)).toEqual(['Work']);
+    expect(pressed(2)).toEqual(['Formal']);
+  });
+
+  it('adds an evening to one day and leaves the others alone', async () => {
+    await render();
+    // Four days, four buttons, and the second one is day 2's.
+    addEveningButtons()[1].click();
+    TestBed.tick();
+
+    expect(last().occasions).toEqual([day(), day('casual', 'evening'), day(), day()]);
+  });
+
+  // Not `casual`: pressing "Add an evening" has already said what the slot is
+  // for, and the alternative makes every user who adds one re-pick.
+  it('opens a new evening on the evening occasion', async () => {
+    await render();
+    addEveningButtons()[0].click();
+    TestBed.tick();
+
+    expect(last().occasions[0].evening).toBe('evening');
+  });
+
+  it('takes an evening away again', async () => {
+    await render(draft({ occasions: [day(), day('work', 'formal'), day(), day()] }));
+    removeEveningButton(2).click();
+    TestBed.tick();
+
+    expect(last().occasions).toEqual([day(), day('work'), day(), day()]);
+  });
+
+  it('changes the evening without touching its own day', async () => {
+    await render(draft({ occasions: [day(), day('work', 'formal'), day(), day()] }));
+    // Row 2 is day 2's evening; chip 1 is `work`.
+    chipRows()[2][1].click();
+    TestBed.tick();
+
+    expect(last().occasions[1]).toEqual(day('work', 'work'));
+  });
+
+  // The criterion that decided the draft's shape: an entry carries its own
+  // evening, so padding the tail cannot separate the two.
+  it('keeps an evening set on an earlier day when the trip is extended', async () => {
+    await render(draft({ occasions: [day(), day('work', 'formal'), day(), day()] }));
+    changeDate('trip_end', '2026-03-19');
+
+    expect(last().occasions).toEqual([day(), day('work', 'formal'), day(), day(), day(), day()]);
   });
 
   it('grows the occasion rows when the range is extended', async () => {
     await render();
     changeDate('trip_end', '2026-03-19');
 
-    expect(last().occasions).toEqual(['casual', 'casual', 'casual', 'casual', 'casual', 'casual']);
+    expect(last().occasions).toEqual([day(), day(), day(), day(), day(), day()]);
   });
 
   it('keeps the occasions already chosen when the range grows', async () => {
-    await render(draft({ occasions: ['work', 'evening', 'casual', 'casual'] }));
+    await render(draft({ occasions: [day('work'), day('evening'), day(), day()] }));
     changeDate('trip_end', '2026-03-18');
 
-    expect(last().occasions).toEqual(['work', 'evening', 'casual', 'casual', 'casual']);
+    expect(last().occasions).toEqual([day('work'), day('evening'), day(), day(), day()]);
   });
 
   it('drops the trailing occasions when the range shrinks', async () => {
-    await render(draft({ occasions: ['work', 'evening', 'sport', 'formal'] }));
+    await render(draft({ occasions: [day('work'), day('evening'), day('sport'), day('formal')] }));
     changeDate('trip_end', '2026-03-15');
 
-    expect(last().occasions).toEqual(['work', 'evening']);
+    expect(last().occasions).toEqual([day('work'), day('evening')]);
   });
 
   it('resizes from the start date too', async () => {
@@ -434,7 +519,7 @@ describe('TripForm', () => {
       draft({
         start_date: '2026-03-01',
         end_date: '2026-03-15',
-        occasions: Array.from({ length: MAX_TRIP_DAYS + 1 }, () => 'casual' as const),
+        occasions: Array.from({ length: MAX_TRIP_DAYS + 1 }, () => day()),
       }),
     );
 

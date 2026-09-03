@@ -211,6 +211,29 @@ describe('TripsPage', () => {
     ]);
   });
 
+  // The third of 4.17's criteria, and the only one that is about the wire: the
+  // draft holds the evening *on* its day, so day-before-evening falls out of the
+  // flattening rather than being sorted into place. TripPackRequest refuses the
+  // other order, so getting it wrong here would be a 422 no user could act on.
+  it("sends a day's evening as a second entry, after its own day", async () => {
+    await render();
+    fillIn({ start: 1, end: 2 });
+    const rows = [...element().querySelectorAll('fieldset')];
+    rows[1].querySelectorAll('button')[0].click();
+    TestBed.tick();
+    [...rows[1].querySelectorAll('button')]
+      .find((one) => (one.textContent ?? '').includes('Add an evening'))!
+      .click();
+    TestBed.tick();
+    submit();
+
+    expect((packRequest().request.body as { occasions: unknown }).occasions).toEqual([
+      { day: 1, slot: 'day', occasion: 'casual' },
+      { day: 2, slot: 'day', occasion: 'casual' },
+      { day: 2, slot: 'evening', occasion: 'evening' },
+    ]);
+  });
+
   // Absent is what the server defaults it to, and the schema forbids extra keys
   // rather than dropping them, so a blank note must not be sent as one.
   it('omits blank notes rather than sending an empty string', async () => {
