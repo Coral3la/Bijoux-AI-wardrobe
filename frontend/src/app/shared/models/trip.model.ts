@@ -41,22 +41,36 @@ export interface PackRequest {
   readonly notes?: string;
 }
 
-// One entry of 4.6's day strip: the forecast, the occasion and the look.
+// One slot of one day: what it is for, and what was built for it. The half of a
+// day that belongs to the slot rather than to the date, which is why the four
+// numbers and the rule stay on `TripDay` — there is one forecast row per date
+// and both slots are dressed against it.
 //
-// `occasion` and `condition` carry their unions where `Look.occasion` is a
-// plain string, and the difference is real rather than an inconsistency.
-// `looks.occasion` is TEXT and the database refuses no value (DECISIONS.md
-// 168), whereas this object is built by `TripResponse`, which types both as
-// enums — so a value outside the vocabulary is a 500 on the way out and cannot
-// reach this type.
+// `occasion` carries its union where `Look.occasion` is a plain string, and the
+// difference is real rather than an inconsistency. `looks.occasion` is TEXT and
+// the database refuses no value (DECISIONS.md 168), whereas this object is built
+// by `TripResponse`, which types it as an enum — so a value outside the
+// vocabulary is a 500 on the way out and cannot reach this type.
 //
 // `look_id` is nullable and that is not padding: a repack detaches a look that
 // was saved, rated or worn instead of deleting it (AUDITS.md O-32), and between
-// the detach and the new looks landing a day has none.
+// the detach and the new looks landing a slot has none. The gap is per slot, so
+// a detached evening leaves its own day look exactly where it was.
+export interface TripDaySlot {
+  readonly slot: Slot;
+  readonly occasion: Occasion;
+  readonly look_id: string | null;
+}
+
+// One entry of the day strip: the forecast, and what is worn against it.
+//
+// `occasion` and `look_id` left this object for `slots[]` at task 4.15 and this
+// type followed them at 4.18. Everything still here is a property of the
+// **date**: one forecast row covers both slots, so printing it per slot would be
+// one measurement rendered as two facts.
 export interface TripDay {
   readonly day: number;
   readonly date: string;
-  readonly occasion: Occasion;
   readonly temp_min_c: number;
   readonly temp_max_c: number;
   readonly precip_mm: number;
@@ -67,7 +81,7 @@ export interface TripDay {
   // the process, and deliberately not rendered — `Weather.rule` carries the
   // same note for the same reason: it is written for a model, not for a person.
   readonly rule: string;
-  readonly look_id: string | null;
+  readonly slots: readonly TripDaySlot[];
 }
 
 // `null` when nothing is worn on more than one day, which is an ordinary

@@ -273,7 +273,14 @@ describe('TripLook', () => {
   // every other word came from en.json. DECISIONS.md 206's refusal, one
   // sentence along.
   it('joins the still-worn days with the separator and never with an "and"', () => {
-    const worn: StillWorn = { name: 'blue jeans', days: [2, 3, 5] };
+    const worn: StillWorn = {
+      name: 'blue jeans',
+      days: [
+        { day: 2, slot: 'day' },
+        { day: 3, slot: 'day' },
+        { day: 5, slot: 'day' },
+      ],
+    };
     render(look(), { stillWorn: worn });
 
     expect(text()).toContain("You'll still wear the blue jeans on Day 2, Day 3, Day 5.");
@@ -292,9 +299,46 @@ describe('TripLook', () => {
       .flush({ ...en, 'trip.swap.daysSeparator': ' / ' });
     await loading;
 
-    render(look(), { stillWorn: { name: 'blue jeans', days: [2, 5] } });
+    render(look(), {
+      stillWorn: {
+        name: 'blue jeans',
+        days: [
+          { day: 2, slot: 'day' },
+          { day: 5, slot: 'day' },
+        ],
+      },
+    });
 
     expect(text()).toContain('Day 2 / Day 5');
+  });
+
+  // The evening is named and the day is not: `day` is the slot every date has
+  // and `evening` is the marked one, so "Day 2 day" would be a stutter of the
+  // kind the slot head's own dedupe exists to avoid. An unqualified day reads as
+  // a person would say it.
+  it('names an evening it is still worn in and leaves a day unqualified', () => {
+    render(look(), {
+      stillWorn: {
+        name: 'blue jeans',
+        days: [
+          { day: 2, slot: 'day' },
+          { day: 2, slot: 'evening' },
+        ],
+      },
+    });
+
+    expect(text()).toContain("You'll still wear the blue jeans on Day 2, Day 2 evening.");
+  });
+
+  // The case the whole rule is for: a garment in both looks of one date, taken
+  // out of the day look. Naming only the day would print the date the reader is
+  // looking at and read as a contradiction.
+  it('names the evening of the same day it was taken off', () => {
+    render(look(), {
+      stillWorn: { name: 'blue jeans', days: [{ day: 2, slot: 'evening' }] },
+    });
+
+    expect(text()).toContain("You'll still wear the blue jeans on Day 2 evening.");
   });
 
   it('says nothing about other days when the garment is worn on none', () => {

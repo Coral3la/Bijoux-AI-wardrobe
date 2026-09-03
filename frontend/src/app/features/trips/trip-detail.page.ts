@@ -4,14 +4,14 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import { TripsApi } from '../../core/api/trips.api';
 import { I18nService, Params } from '../../core/i18n/i18n.service';
-import { Condition, roleOf } from '../../shared/models/enums';
+import { Condition, Slot, roleOf } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
 import { Look } from '../../shared/models/look.model';
-import { TripDay, TripDetail } from '../../shared/models/trip.model';
+import { TripDay, TripDaySlot, TripDetail } from '../../shared/models/trip.model';
 import { AuthoredLine } from '../../shared/ui/authored-line';
 import { packErrorKey, packStatus } from './pack-wait';
 import { PackingList } from './packing-list';
-import { StillWorn, TripLook } from './trip-look';
+import { StillWorn, TripLook, WornSlot } from './trip-look';
 
 // Local to this screen rather than in `enums.ts`, which mirrors `app/enums.py`
 // value for value: a glyph has no counterpart on the server and never will.
@@ -95,54 +95,86 @@ export function swapErrorKey(error: unknown): string {
   return 'trip.error.swapGeneral';
 }
 
-// The three things the itinerary holds *per day* rather than per trip, and they
+// The three things the itinerary holds *per slot* rather than per trip, and they
 // are three separate types because they answer at three different moments: the
 // swap in flight, the sentence a finished swap left behind, and the message a
-// failed one did. Every one of them carries the day it belongs to, because every
-// day is on screen at once and a value held without its day would print under
-// all of them. DECISIONS.md 222.
-interface DaySwap {
+// failed one did. Every one of them carries the `(day, slot)` it belongs to,
+// because every slot of every day is on screen at once and a value held without
+// its pair would print under all of them. DECISIONS.md 222.
+//
+// **The pair rather than the day from 4.18**, which is the same argument one
+// level down and now a case the reader meets on purpose: the trousers reused
+// between Monday's office and Monday's dinner are one garment id on one date, so
+// a day-keyed spinner would spin both of them from one press.
+interface SlotSwap {
   readonly day: number;
+  readonly slot: Slot;
   readonly itemId: string;
 }
 
-interface DayStillWorn extends StillWorn {
+interface SlotStillWorn extends StillWorn {
   readonly day: number;
+  readonly slot: Slot;
 }
 
-interface DaySwapError {
+interface SlotSwapError {
   readonly day: number;
+  readonly slot: Slot;
   readonly key: string;
 }
 
-// One day of the itinerary, already joined to its look and already matched to
-// whichever of the three per-day signals is about it. Computed rather than
+// One slot of one day, already joined to its look and already matched to
+// whichever of the three per-slot signals is about it. Computed rather than
 // resolved by four method calls in the template: the matching is one rule and it
 // is written once here, where the alternative is the same comparison spelled out
-// beside four bindings inside a loop.
-interface ItineraryDay {
-  readonly day: TripDay;
+// beside four bindings inside two nested loops.
+interface ItinerarySlot {
+  readonly entry: TripDaySlot;
   readonly look: Look | null;
   readonly swappingItemId: string | null;
   readonly stillWorn: StillWorn | null;
   readonly errorKey: string | null;
 }
 
-// Which days still wear the garment that just left one, read off the response
+// One day of the itinerary: the forecast head, and the one or two slots under
+// it. The nesting is the wire's own, which is the wire's own reason — the four
+// numbers belong to the date and the occasion belongs to the slot.
+interface ItineraryDay {
+  readonly day: TripDay;
+  readonly slots: readonly ItinerarySlot[];
+}
+
+// One exclusion list per slot, and a Map cannot key on a pair by value. The
+// separator is a character no slot value contains, so two pairs cannot collide.
+function excludedKey(day: number, slot: Slot): string {
+  return `${day}:${slot}`;
+}
+
+// Which slots still wear the garment that just left one, read off the response
 // rather than off what was on screen a moment ago: the swap answers the whole
 // trip, so this is the same list the packing list below is built from and the
-// two cannot disagree. The swapped day cannot appear — rule 8 refuses a look
+// two cannot disagree. The swapped slot cannot appear — rule 8 refuses a look
 // containing an excluded id, and the server excludes the replaced garment
 // itself — so it is not special-cased here.
-function stillWornDays(detail: TripDetail, itemId: string): number[] {
+//
+// **Pairs rather than day numbers from 4.18.** The commonest reuse this feature
+// produces is one garment in both looks of one date, so a swap out of Monday's
+// day look that answered only "Day 1" would name the day the reader is looking
+// at and read as a contradiction.
+function stillWornSlots(detail: TripDetail, itemId: string): WornSlot[] {
   const looks = new Map(detail.looks.map((look) => [look.id, look]));
-  const days: number[] = [];
+  const worn: WornSlot[] = [];
   for (const day of detail.trip.days) {
-    if (day.look_id !== null && looks.get(day.look_id)?.items.some((item) => item.id === itemId)) {
-      days.push(day.day);
+    for (const entry of day.slots) {
+      if (
+        entry.look_id !== null &&
+        looks.get(entry.look_id)?.items.some((item) => item.id === itemId)
+      ) {
+        worn.push({ day: day.day, slot: entry.slot });
+      }
     }
   }
-  return days;
+  return worn;
 }
 
 @Component({
@@ -221,22 +253,15 @@ function stillWornDays(detail: TripDetail, itemId: string): number[] {
                 <span class="font-mono text-[11px] tracking-[0.18em] text-ink-soft uppercase">
                   {{ i18n.t('trip.view.day.kicker', { day: entry.day.day, date: entry.day.date }) }}
                 </span>
-                @if (entry.look; as look) {
-                  <!-- The look's own title, written by the model, so the content
-                       face at the direction's size. It is the page's to draw
-                       rather than the look component's because it shares a
-                       baseline with the day number and the weather, and that row
-                       has to exist for a day whose look was detached.
-                       DECISIONS.md 071, 222. -->
-                  <h2 class="font-sans text-[26px] leading-tight">{{ look.title }}</h2>
-                }
               </div>
-              <!-- The glyph is decoration and says so; the condition and the
-                   occasion are both closed vocabulary this project wrote, so
-                   they are one authored key with the dot inside it rather than
-                   two spans and a separator this template invented. The reading
-                   leaves the italic for the mono face, which is the rule every
-                   converted screen applies to a number. DECISIONS.md 218, 222. -->
+              <!-- The glyph is decoration and says so; the condition is closed
+                   vocabulary this project wrote, so it is an authored key rather
+                   than a word this template assembles. The occasion left this
+                   line for the slot head at 4.18 — there is one forecast per
+                   date and one occasion per slot — and the key kept its own
+                   name. The reading leaves the italic for the mono face, which
+                   is the rule every converted screen applies to a number.
+                   DECISIONS.md 218, 222, 225. -->
               <p
                 class="flex flex-wrap items-baseline gap-x-2 font-prose text-[15px] text-ink-muted italic"
               >
@@ -248,29 +273,60 @@ function stillWornDays(detail: TripDetail, itemId: string): number[] {
               </p>
             </div>
 
-            @if (entry.look; as look) {
-              <!-- What is passed down is facts and what comes back is one
-                   garment: the page owns the trip, so it owns the arithmetic
-                   over every day of it — including which day each of the three
-                   per-day signals is about. -->
-              <app-trip-look
-                [look]="look"
-                [swappingItemId]="entry.swappingItemId"
-                [busy]="isSwapping()"
-                [stillWorn]="entry.stillWorn"
-                [errorKey]="entry.errorKey"
-                (swap)="swapItem(entry.day.day, $event)"
-              />
-            } @else {
-              <!-- A day with no look, which is a real state rather than an error:
-                   a repack detaches a look that was saved, rated or worn instead
-                   of deleting it, and the day it belonged to keeps its forecast
-                   and loses its outfit. Flat prose on the canvas rather than a
-                   raised card — a gap in an itinerary is a quiet day, not an
-                   object. AUDITS.md O-32, DECISIONS.md 200, 222. -->
-              <p class="font-prose text-base text-ink-muted italic">
-                {{ i18n.t('trip.view.day.noLook') }}
-              </p>
+            <!-- One card per slot the day carries, stacked under the one
+                 forecast. There is one forecast row per date, so both halves of
+                 the 11th are dressed against the same numbers and the same rule
+                 sentence — printing it twice would be one measurement rendered
+                 as two facts. DECISIONS.md 225. -->
+            @for (slot of entry.slots; track slot.entry.slot) {
+              <div class="flex flex-col gap-4">
+                <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                  <!-- The slot and its occasion, one authored key with the dot
+                       inside it, and one word where the two labels are the same
+                       word. The head is drawn for a slot whose look was
+                       detached too: the occasion is something the user asked
+                       for, and it is still true when the outfit is gone. -->
+                  <span class="font-mono text-[11px] tracking-[0.18em] text-ink-soft uppercase">
+                    {{ slotHead(slot.entry) }}
+                  </span>
+                  @if (slot.look; as look) {
+                    <!-- The look's own title, written by the model, so the
+                         content face at the direction's size. It is the page's
+                         to draw rather than the look component's because it
+                         shares a baseline with the slot head, and that row has
+                         to exist for a slot whose look was detached.
+                         DECISIONS.md 071, 222. -->
+                    <h2 class="font-sans text-[26px] leading-tight">{{ look.title }}</h2>
+                  }
+                </div>
+
+                @if (slot.look; as look) {
+                  <!-- What is passed down is facts and what comes back is one
+                       garment: the page owns the trip, so it owns the arithmetic
+                       over every slot of it — including which pair each of the
+                       three per-slot signals is about. -->
+                  <app-trip-look
+                    [look]="look"
+                    [swappingItemId]="slot.swappingItemId"
+                    [busy]="isSwapping()"
+                    [stillWorn]="slot.stillWorn"
+                    [errorKey]="slot.errorKey"
+                    (swap)="swapItem(entry.day.day, slot.entry.slot, $event)"
+                  />
+                } @else {
+                  <!-- A slot with no look, which is a real state rather than an
+                       error: a repack detaches a look that was saved, rated or
+                       worn instead of deleting it, and the slot it belonged to
+                       keeps its occasion and loses its outfit. The gap is per
+                       slot, so a detached evening leaves its own day look
+                       exactly where it was. Flat prose on the canvas rather than
+                       a raised card — a gap in an itinerary is a quiet evening,
+                       not an object. AUDITS.md O-32, DECISIONS.md 200, 222. -->
+                  <p class="font-prose text-base text-ink-muted italic">
+                    {{ i18n.t('trip.view.day.noLook') }}
+                  </p>
+                }
+              </div>
             }
           </article>
         }
@@ -390,24 +446,31 @@ export class TripDetailPage {
   // above a trip whose repack or delete failed, and this one is a line inside
   // the day whose swap failed. Rendering a failed swap under the actions row
   // would say the trip's action failed when one day's did.
-  protected readonly swapError = signal<DaySwapError | null>(null);
+  protected readonly swapError = signal<SlotSwapError | null>(null);
 
-  // The day and the garment, not a boolean — the wait is drawn on one tile of
-  // one section. It was the id alone until the Itinerary put every day on
-  // screen, at which point a garment worn on three days would have spun on all
-  // three from one press.
-  protected readonly swapping = signal<DaySwap | null>(null);
+  // The slot and the garment, not a boolean — the wait is drawn on one tile of
+  // one card. It was the id alone until the Itinerary put every day on screen,
+  // at which point a garment worn on three days would have spun on all three
+  // from one press; it took the slot at 4.18, when a garment worn in both halves
+  // of one date became a case the reader meets on purpose.
+  protected readonly swapping = signal<SlotSwap | null>(null);
   protected readonly isSwapping = computed(() => this.swapping() !== null);
 
-  protected readonly stillWorn = signal<DayStillWorn | null>(null);
+  protected readonly stillWorn = signal<SlotStillWorn | null>(null);
 
-  // Per day, because a rejection is about a day's weather and its occasion: the
-  // shoe that is wrong for Tuesday's rain is the right answer for Thursday. Held
-  // here and sent nowhere else — the server cannot rebuild this list, because
-  // the looks that carried those rejections were replaced by the swaps that
-  // rejected them. Fresh on every mount: the id comes from a route snapshot, so
-  // a back button is a new component and a new Map without anything being said.
-  private readonly excluded = signal<ReadonlyMap<number, ReadonlySet<string>>>(new Map());
+  // Per `(day, slot)`, because a rejection is about a slot's weather and its
+  // occasion: the shoe that is wrong for Tuesday's rain is the right answer for
+  // Thursday, and the shoe rejected for Monday's meetings is a candidate again
+  // for Monday's dinner. Held here and sent nowhere else — the server cannot
+  // rebuild this list, because the looks that carried those rejections were
+  // replaced by the swaps that rejected them. Fresh on every mount: the id comes
+  // from a route snapshot, so a back button is a new component and a new Map
+  // without anything being said.
+  //
+  // Keyed by a composite string rather than by a nested map: a Map cannot key on
+  // a pair by value, and one flat lookup beats a read-modify-write of two levels
+  // on every tap.
+  private readonly excluded = signal<ReadonlyMap<string, ReadonlySet<string>>>(new Map());
 
   protected readonly statusKey = packStatus(this.repacking);
 
@@ -435,24 +498,33 @@ export class TripDetailPage {
     return items;
   });
 
-  // The whole trip, in the order the server sent the days, with each day joined
-  // to its look and to whichever of the three per-day signals names it.
+  // The whole trip, in the order the server sent the days and their slots, with
+  // each slot joined to its look and to whichever of the three per-slot signals
+  // names it. The server orders the slots `day` then `evening`, and this walks
+  // them as they arrive rather than sorting: `TripPackRequest` refuses any other
+  // order on the way in and `_looks` reads them back by the vocabulary's rank,
+  // so a sort here would be a third opinion about a settled thing.
   protected readonly itinerary = computed<readonly ItineraryDay[]>(() => {
     const looks = this.looksById();
     const swapping = this.swapping();
     const worn = this.stillWorn();
     const failure = this.swapError();
+    const matches = (signal: { day: number; slot: Slot } | null, day: number, slot: Slot) =>
+      signal !== null && signal.day === day && signal.slot === slot;
 
     return (this.detail()?.trip.days ?? []).map((day) => ({
       day,
-      // Two ways to have no look and one rendering: the day carries null, or it
-      // carries an id the response did not hydrate. The second cannot happen
-      // from this endpoint and the type permits it, so it is folded into the
-      // first rather than given a branch that could never be reached.
-      look: day.look_id === null ? null : (looks.get(day.look_id) ?? null),
-      swappingItemId: swapping !== null && swapping.day === day.day ? swapping.itemId : null,
-      stillWorn: worn !== null && worn.day === day.day ? worn : null,
-      errorKey: failure !== null && failure.day === day.day ? failure.key : null,
+      slots: day.slots.map((entry) => ({
+        entry,
+        // Two ways to have no look and one rendering: the slot carries null, or
+        // it carries an id the response did not hydrate. The second cannot
+        // happen from this endpoint and the type permits it, so it is folded
+        // into the first rather than given a branch that could never be reached.
+        look: entry.look_id === null ? null : (looks.get(entry.look_id) ?? null),
+        swappingItemId: matches(swapping, day.day, entry.slot) ? swapping!.itemId : null,
+        stillWorn: matches(worn, day.day, entry.slot) ? worn : null,
+        errorKey: matches(failure, day.day, entry.slot) ? failure!.key : null,
+      })),
     }));
   });
 
@@ -617,7 +689,7 @@ export class TripDetailPage {
   // what makes the exclusions a conversation rather than a form. The cost is
   // that there is no undo, which is recorded rather than mitigated
   // (DECISIONS.md 210).
-  protected swapItem(day: number, item: Item): void {
+  protected swapItem(day: number, slot: Slot, item: Item): void {
     // The visible guard is the badges' own `disabled`; this is the real one, for
     // repack()'s reason — a signal write schedules change detection rather than
     // doing it, so two presses in one frame both see an enabled button.
@@ -637,13 +709,14 @@ export class TripDetailPage {
     // thinking about. A badge on any day of the trip disarms it.
     this.disarm();
 
-    // The tapped garment joins the day's exclusions before the request goes out,
-    // and stays there if it fails. The server appends it for this call anyway;
-    // what this list is for is the *next* tap on this day.
-    const excluded = new Set(this.excluded().get(day) ?? []).add(item.id);
-    this.excluded.update((current) => new Map(current).set(day, excluded));
+    // The tapped garment joins the slot's exclusions before the request goes
+    // out, and stays there if it fails. The server appends it for this call
+    // anyway; what this list is for is the *next* tap on this slot.
+    const key = excludedKey(day, slot);
+    const excluded = new Set(this.excluded().get(key) ?? []).add(item.id);
+    this.excluded.update((current) => new Map(current).set(key, excluded));
 
-    this.swapping.set({ day, itemId: item.id });
+    this.swapping.set({ day, slot, itemId: item.id });
     // Both belong to the swap that has just been replaced by this one. They are
     // cleared rather than kept per day: only one swap runs at a time, so there
     // is only ever one of each, and a sentence about Monday left standing under
@@ -654,11 +727,10 @@ export class TripDetailPage {
     this.api
       .swap(this.id, {
         day,
-        // The literal 'day' until task 4.18, and true while it stands: the badge
-        // is drawn on one look per day and has no second slot to name yet. The
-        // server takes no default — a missing slot there would rebuild the wrong
-        // look of a two-slot day and answer 200 — so it is sent from here.
-        slot: 'day',
+        // The slot the badge was pressed in, which is the last of the literals
+        // this chain left behind: 4.12's, 4.14's and 4.15's died where the value
+        // arrived, and this one dies where the reader points at it.
+        slot,
         item_id: item.id,
         replace_role: role,
         exclude_item_ids: [...excluded],
@@ -673,21 +745,23 @@ export class TripDetailPage {
           // not touched, and this one answers a press on a specific tile — the
           // antecedent is the press, and dropping the line would lose the days,
           // which are what STAGE-4 4.6a asks for.
-          const days = stillWornDays(detail, item.id);
-          this.stillWorn.set(days.length === 0 ? null : { day, name: this.name(item), days });
+          const days = stillWornSlots(detail, item.id);
+          this.stillWorn.set(days.length === 0 ? null : { day, slot, name: this.name(item), days });
           this.swapping.set(null);
         },
         // The day's look is left standing. A failed swap changed nothing on the
         // server, so blanking the look would be the screen disagreeing with the
         // sentence underneath it.
         error: (failure: unknown) => {
-          this.swapError.set({ day, key: swapErrorKey(failure) });
+          this.swapError.set({ day, slot, key: swapErrorKey(failure) });
           this.swapping.set(null);
         },
       });
   }
 
   private clearSwapState(): void {
+    // A repack rebuilds every slot against a forecast the rejections were never
+    // judged against, so they go with the looks that carried them.
     this.excluded.set(new Map());
     this.swapError.set(null);
     this.stillWorn.set(null);
@@ -718,7 +792,20 @@ export class TripDetailPage {
   protected weatherLine(day: TripDay): string {
     return this.i18n.t('trip.view.day.weather', {
       condition: this.i18n.t(`vocabulary.condition.${day.condition}`),
-      occasion: this.i18n.t(`vocabulary.occasion.${day.occasion}`),
     });
+  }
+
+  // `DAY · CASUAL`, or `EVENING` where the two words are the same one.
+  //
+  // It compares the **rendered labels** and not the two enum values, because
+  // what a reader sees doubled is the word: `Occasion` and `Slot` overlap on
+  // `evening` (AUDITS.md O-35), so the commonest evening there is would print
+  // EVENING · EVENING and read as a stutter rather than as two facts. A second
+  // language may collide on a different pair, or on none, and this rule holds
+  // either way.
+  protected slotHead(entry: TripDaySlot): string {
+    const slot = this.i18n.t(`trip.slot.${entry.slot}`);
+    const occasion = this.i18n.t(`vocabulary.occasion.${entry.occasion}`);
+    return slot === occasion ? slot : this.i18n.t('trip.view.slot.head', { slot, occasion });
   }
 }

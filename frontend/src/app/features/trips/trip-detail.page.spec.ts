@@ -9,7 +9,13 @@ import { environment } from '../../../environments/environment';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { Item } from '../../shared/models/item.model';
 import { Look } from '../../shared/models/look.model';
-import { PackResponse, Trip, TripDay, TripDetail } from '../../shared/models/trip.model';
+import {
+  PackResponse,
+  Trip,
+  TripDay,
+  TripDaySlot,
+  TripDetail,
+} from '../../shared/models/trip.model';
 import { STATUS_INTERVAL_MS } from './pack-wait';
 import { TripDetailPage } from './trip-detail.page';
 
@@ -71,20 +77,32 @@ function look(overrides: Partial<Look> = {}): Look {
   };
 }
 
+// One slot of a day. Defaults to the `day` slot on `work` with `look-1`, which
+// is what every single-slot fixture in this file used to spell out on the day
+// itself.
+function slot(overrides: Partial<TripDaySlot> = {}): TripDaySlot {
+  return { slot: 'day', occasion: 'work', look_id: 'look-1', ...overrides };
+}
+
 // Day 1 is rain at 12°C and day 2 is clear at 17°C, so no assertion about one
 // of them can pass by reading the other.
+//
+// **`occasion` and `look_id` moved into `slots[]` on the wire at 4.15 and in
+// this fixture at 4.18.** Every assertion in this file spent three tasks reading
+// a payload the server had stopped sending — the specs mock their own responses,
+// so nothing failed and nothing could have. That is the window `PROGRESS.md`
+// records, and this is where it closes.
 function day(overrides: Partial<TripDay> = {}): TripDay {
   return {
     day: 1,
     date: '2026-03-14',
-    occasion: 'work',
     temp_min_c: 8,
     temp_max_c: 12.4,
     precip_mm: 4.2,
     wind_kph: 11,
     condition: 'rain',
     rule: 'Outerwear is REQUIRED, warmth 3-4.',
-    look_id: 'look-1',
+    slots: [slot()],
     ...overrides,
   };
 }
@@ -100,7 +118,13 @@ function trip(overrides: Partial<Trip> = {}): Trip {
     notes: null,
     days: [
       day(),
-      day({ day: 2, date: '2026-03-15', condition: 'clear', temp_max_c: 17.4, look_id: 'look-2' }),
+      day({
+        day: 2,
+        date: '2026-03-15',
+        condition: 'clear',
+        temp_max_c: 17.4,
+        slots: [slot({ look_id: 'look-2' })],
+      }),
     ],
     packing_list: {
       item_ids: ['item-1'],
@@ -166,6 +190,17 @@ function dayHead(index: number): string {
   return daySections()[index]?.firstElementChild?.textContent ?? '';
 }
 
+// Every slot card of one day, in the order the wire sent them.
+function slotCards(day: number): HTMLElement[] {
+  return [...(daySections()[day]?.querySelectorAll(':scope > div') ?? [])].slice(
+    1,
+  ) as HTMLElement[];
+}
+
+function slotHead(day: number, slot = 0): string {
+  return slotCards(day)[slot]?.firstElementChild?.textContent ?? '';
+}
+
 function tripRequest() {
   return mock.expectOne(`${environment.apiUrl}/trips/${currentId}`);
 }
@@ -198,6 +233,18 @@ function lookItems(index: number): string[] {
 // is an item id, and the shirt is worn on both. DECISIONS.md 222.
 function spinners(index: number): number {
   return daySections()[index].querySelectorAll('app-trip-look [role="status"]').length;
+}
+
+// The wait, per slot. The trousers reused between Monday's office and Monday's
+// dinner are one garment id on one date, so a day-scoped spinner spins both of
+// them from one press — which is the day-scoped failure above, one level down
+// and now a case the reader meets on purpose. STAGE-4 4.18.
+function slotSpinners(day: number, slot: number): number {
+  return slotCards(day)[slot].querySelectorAll('app-trip-look [role="status"]').length;
+}
+
+function slotBadges(day: number, slot: number): HTMLButtonElement[] {
+  return [...slotCards(day)[slot].querySelectorAll<HTMLButtonElement>('app-trip-look li button')];
 }
 
 // The badges, and only the badges: the packing list's rows are labels around
@@ -415,33 +462,113 @@ describe('TripDetailPage', () => {
     expect(dayHead(1)).toContain(en['vocabulary.condition.clear']);
   });
 
-  // The occasion is what the day was dressed for and the tab strip had no room
-  // for it. It is closed vocabulary, so it is read through the table rather
-  // than printed raw.
-  it('names the occasion each day was dressed for', async () => {
+  // 4.18's first criterion. One forecast row covers both halves of a date, so
+  // the head is drawn once and the cards under it twice — printing the weather
+  // per slot would be one measurement rendered as two facts.
+  it('draws two cards under one forecast for a two-slot day', async () => {
     await loaded({
       trip: trip({
-        days: [day(), day({ day: 2, date: '2026-03-15', occasion: 'evening', look_id: 'look-2' })],
+        days: [
+          day({
+            slots: [slot(), slot({ slot: 'evening', occasion: 'formal', look_id: 'look-2' })],
+          }),
+        ],
+      }),
+      looks: [look({ id: 'look-1' }), look({ id: 'look-2', title: 'Dinner out' })],
+    });
+
+    expect(daySections()).toHaveLength(1);
+    expect(slotCards(0)).toHaveLength(2);
+    expect(slotHead(0, 0)).toContain(en['trip.slot.day']);
+    expect(slotHead(0, 1)).toContain(en['trip.slot.evening']);
+    expect(text()).toContain('Dinner out');
+    // The temperature and the condition are printed once, on the head.
+    expect(dayHead(0)).toContain(en['vocabulary.condition.rain']);
+    expect(slotHead(0, 0)).not.toContain(en['vocabulary.condition.rain']);
+    expect(slotHead(0, 1)).not.toContain(en['vocabulary.condition.rain']);
+  });
+
+  // A repack detaches a look that was saved, rated or worn, and the gap is per
+  // slot from 4.18: the evening goes and the day look stays exactly where it is.
+  it('leaves a day look standing when its own evening was detached', async () => {
+    await loaded({
+      trip: trip({
+        days: [
+          day({
+            slots: [slot(), slot({ slot: 'evening', occasion: 'formal', look_id: null })],
+          }),
+        ],
+      }),
+      looks: [look({ id: 'look-1' })],
+    });
+
+    expect(slotCards(0)).toHaveLength(2);
+    expect(lookItems(0)).toHaveLength(1);
+    expect(slotHead(0, 1)).toContain(en['vocabulary.occasion.formal']);
+    expect(text()).toContain(en['trip.view.day.noLook']);
+  });
+
+  // The occasion left the day head for the slot head at 4.18: the forecast
+  // belongs to the date and the occasion belongs to the slot, so a day head that
+  // still named one would be printing a property of half of itself.
+  it('names the occasion on the slot rather than on the day', async () => {
+    await loaded({
+      trip: trip({
+        days: [
+          day(),
+          day({
+            day: 2,
+            date: '2026-03-15',
+            slots: [slot({ occasion: 'formal', look_id: 'look-2' })],
+          }),
+        ],
       }),
     });
 
-    expect(dayHead(0)).toContain(en['vocabulary.occasion.work']);
-    expect(dayHead(1)).toContain(en['vocabulary.occasion.evening']);
+    expect(dayHead(0)).not.toContain(en['vocabulary.occasion.work']);
+    expect(slotHead(0)).toContain(en['vocabulary.occasion.work']);
+    expect(slotHead(0)).toContain(en['trip.slot.day']);
+    expect(slotHead(1)).toContain(en['vocabulary.occasion.formal']);
   });
 
-  // The dot between the condition and the occasion is punctuation a developer
-  // could have typed into the join, and en.json's own value renders identically
-  // either way. A second table with a different separator is the only assertion
-  // that can tell a lookup from a literal.
-  it('takes the weather line from the string table rather than from the code', async () => {
+  // Where the two labels render as the same word, only one is printed: `Slot`
+  // and `Occasion` overlap on `evening` (AUDITS.md O-35), so the commonest
+  // evening there is would read EVENING · EVENING. It compares the rendered
+  // strings and not the enum values, because what a reader sees doubled is the
+  // word — and a second language may collide on a different pair or on none.
+  it('prints one word where the slot and the occasion are the same word', async () => {
+    await loaded({
+      trip: trip({
+        days: [day({ slots: [slot({ slot: 'evening', occasion: 'evening' })] })],
+      }),
+    });
+
+    expect(slotHead(0)).toContain('Evening');
+    expect(slotHead(0)).not.toContain('Evening · Evening');
+  });
+
+  // The dot between the slot and the occasion is punctuation a developer could
+  // have typed into the join, and en.json's own value renders identically either
+  // way. A second table with a different separator is the only assertion that
+  // can tell a lookup from a literal.
+  it('takes the slot head from the string table rather than from the code', async () => {
     const loading = TestBed.inject(I18nService).load();
     mock
       .expectOne('/i18n/en.json')
-      .flush({ ...en, 'trip.view.day.weather': '{{condition}} / {{occasion}}' });
+      .flush({ ...en, 'trip.view.slot.head': '{{slot}} / {{occasion}}' });
     await loading;
     await loaded();
 
-    expect(dayHead(0)).toContain('Rain / Work');
+    expect(slotHead(0)).toContain('Day / Work');
+  });
+
+  it('takes the weather line from the string table rather than from the code', async () => {
+    const loading = TestBed.inject(I18nService).load();
+    mock.expectOne('/i18n/en.json').flush({ ...en, 'trip.view.day.weather': '>> {{condition}}' });
+    await loading;
+    await loaded();
+
+    expect(dayHead(0)).toContain('>> Rain');
   });
 
   // The day's high, rounded, which is what weather-strip.ts prints and what
@@ -486,7 +613,12 @@ describe('TripDetailPage', () => {
   // belonged to keeps its forecast and loses its outfit. DECISIONS.md 200.
   it('renders a day with no look as a gap rather than crashing', async () => {
     await loaded({
-      trip: trip({ days: [day({ look_id: null }), day({ day: 2, look_id: null })] }),
+      trip: trip({
+        days: [
+          day({ slots: [slot({ look_id: null })] }),
+          day({ day: 2, slots: [slot({ look_id: null })] }),
+        ],
+      }),
     });
 
     expect(text()).toContain(en['trip.view.day.noLook']);
@@ -496,7 +628,7 @@ describe('TripDetailPage', () => {
   // The type permits an id the response did not hydrate even though this
   // endpoint cannot produce one, and the two states have to render alike.
   it('renders a day whose look_id matches nothing as the same gap', async () => {
-    await loaded({ trip: trip({ days: [day({ look_id: 'look-gone' })] }) });
+    await loaded({ trip: trip({ days: [day({ slots: [slot({ look_id: 'look-gone' })] })] }) });
 
     expect(text()).toContain(en['trip.view.day.noLook']);
   });
@@ -504,7 +636,9 @@ describe('TripDetailPage', () => {
   // A gap keeps its head, and that is what the head being the page's buys: the
   // day still has a forecast and an occasion, and only the outfit is missing.
   it('keeps the head of a day whose look was detached', async () => {
-    await loaded({ trip: trip({ days: [day({ look_id: null }), day({ day: 2 })] }) });
+    await loaded({
+      trip: trip({ days: [day({ slots: [slot({ look_id: null })] }), day({ day: 2 })] }),
+    });
 
     expect(dayHead(0)).toContain('Day 1 · 2026-03-14');
     expect(dayHead(0)).toContain('12°C');
@@ -923,6 +1057,47 @@ describe('TripDetailPage', () => {
       };
     }
 
+    // One date, two slots, and the shirt worn in both of them — the shape no
+    // single-slot trip can produce and the one every criterion below needs.
+    function packedTwoSlot(): TripDetail {
+      return {
+        trip: trip({
+          days: [
+            day({
+              slots: [slot(), slot({ slot: 'evening', occasion: 'formal', look_id: 'look-2' })],
+            }),
+          ],
+          packing_list: {
+            item_ids: ['item-1', 'item-2', 'item-3'],
+            reuse_summary: { item_count: 3, look_count: 2, most_reused: null },
+          },
+        }),
+        looks: [
+          look({ id: 'look-1', items: [item(SHIRT), item(BOOTS)] }),
+          look({ id: 'look-2', title: 'Dinner out', items: [item(SHIRT), item(HEELS)] }),
+        ],
+      };
+    }
+
+    // The shirt gone from the day look and still worn that evening, on the one
+    // date the trip has.
+    function shirtSwappedTwoSlot(): TripDetail {
+      const base = packedTwoSlot();
+      return {
+        trip: base.trip,
+        looks: [
+          look({
+            id: 'look-1',
+            items: [
+              item({ id: 'item-5', category: 'top', display_name: 'grey knit' }),
+              item(BOOTS),
+            ],
+          }),
+          look({ id: 'look-2', title: 'Dinner out', items: [item(SHIRT), item(HEELS)] }),
+        ],
+      };
+    }
+
     function fail(code: string | null, status: number): void {
       swapRequest().flush(code === null ? { detail: RAW_DETAIL } : { detail: RAW_DETAIL, code }, {
         status,
@@ -1110,6 +1285,73 @@ describe('TripDetailPage', () => {
       expect(spinners(0)).toBe(1);
       expect(spinners(1)).toBe(0);
       swapRequest().flush(shirtSwapped());
+    });
+
+    // 4.18's second criterion, and the day-scoped spinner above one level down.
+    it('draws the wait on the pressed slot alone when the garment is worn in both', async () => {
+      await loaded(packedTwoSlot());
+
+      slotBadges(0, 0)[0].click();
+      fixture.detectChanges();
+
+      expect(slotSpinners(0, 0)).toBe(1);
+      expect(slotSpinners(0, 1)).toBe(0);
+      const request = swapRequest();
+      expect(request.request.body).toMatchObject({ day: 1, slot: 'day' });
+      request.flush(shirtSwappedTwoSlot());
+    });
+
+    it('sends the slot the badge was pressed in', async () => {
+      await loaded(packedTwoSlot());
+
+      slotBadges(0, 1)[0].click();
+      fixture.detectChanges();
+
+      const request = swapRequest();
+      expect(request.request.body).toMatchObject({ day: 1, slot: 'evening' });
+      request.flush(shirtSwappedTwoSlot());
+    });
+
+    // 4.18's third criterion. Naming only the day would print the date the
+    // reader is looking at and read as a contradiction — the garment was just
+    // taken off *this* day.
+    it('names the evening when the garment it lost is still worn there', async () => {
+      await loaded(packedTwoSlot());
+      slotBadges(0, 0)[0].click();
+      fixture.detectChanges();
+      swapRequest().flush(shirtSwappedTwoSlot());
+      fixture.detectChanges();
+
+      expect(text()).toContain("You'll still wear the white shirt on Day 1 evening.");
+    });
+
+    // 4.18's fourth criterion. A shoe rejected for Monday's meetings is a
+    // candidate again for Monday's dinner, which is the same sentence the
+    // per-day exclusions already made about two dates.
+    //
+    // The two presses are on **different** garments on purpose: rejecting the
+    // shirt on the day slot and then the heels on the evening is the only shape
+    // that can tell a slot-keyed list from a day-keyed one. Pressing the same
+    // garment twice sends the same single id either way, and a day-keyed map
+    // survives that assertion untouched — measured, not assumed.
+    it("keeps one slot's exclusions out of the other slot's request", async () => {
+      await loaded(packedTwoSlot());
+      slotBadges(0, 0)[0].click();
+      fixture.detectChanges();
+      swapRequest().flush(shirtSwappedTwoSlot());
+      fixture.detectChanges();
+
+      // The evening's heels, not its shirt.
+      slotBadges(0, 1)[1].click();
+      fixture.detectChanges();
+
+      expect(swapRequest().request.body).toEqual({
+        day: 1,
+        slot: 'evening',
+        item_id: 'item-3',
+        replace_role: 'shoes',
+        exclude_item_ids: ['item-3'],
+      });
     });
 
     // 126's "any other interaction", the badge being one of them.

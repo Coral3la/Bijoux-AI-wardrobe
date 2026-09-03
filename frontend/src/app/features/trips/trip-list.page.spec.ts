@@ -21,14 +21,13 @@ function day(overrides: Partial<TripDay> = {}): TripDay {
   return {
     day: 1,
     date: '2026-03-14',
-    occasion: 'work',
     temp_min_c: 8,
     temp_max_c: 12.4,
     precip_mm: 4.2,
     wind_kph: 11,
     condition: 'rain',
     rule: 'Outerwear is REQUIRED, warmth 3-4.',
-    look_id: 'look-1',
+    slots: [{ slot: 'day', occasion: 'work', look_id: 'look-1' }],
     ...overrides,
   };
 }

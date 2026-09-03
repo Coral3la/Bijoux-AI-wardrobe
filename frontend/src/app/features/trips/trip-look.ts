@@ -1,10 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 
 import { I18nService } from '../../core/i18n/i18n.service';
-import { roleOf } from '../../shared/models/enums';
+import { Slot, roleOf } from '../../shared/models/enums';
 import { Item } from '../../shared/models/item.model';
 import { Look } from '../../shared/models/look.model';
 import { ItemCard } from '../wardrobe/item-card';
+
+// One place a garment is still worn: which day, and which half of it.
+export interface WornSlot {
+  readonly day: number;
+  readonly slot: Slot;
+}
 
 // The facts, not the sentence — the shape the server uses one boundary up, for
 // the same reason (`ReuseSummary` answers two counts and no English). The page
@@ -12,7 +18,7 @@ import { ItemCard } from '../wardrobe/item-card';
 // the words because it is the thing that renders them.
 export interface StillWorn {
   readonly name: string;
-  readonly days: readonly number[];
+  readonly days: readonly WornSlot[];
 }
 
 // Not `LookCard`, for the third time and on the same three grounds: that card
@@ -180,7 +186,17 @@ export class TripLook {
       return null;
     }
     const days = worn.days
-      .map((day) => this.i18n.t('trip.day.legend', { day }))
+      .map((entry) =>
+        // The evening is named and the day is not, because `day` is the slot
+        // every date has and `evening` is the marked one: "Day 2 day" is a
+        // stutter of the kind the slot head's own dedupe exists to avoid, and an
+        // unqualified day reads as a person would say it. Two whole keys rather
+        // than one with a slot word appended, because assembling the sentence
+        // here would put untranslatable word order in the markup.
+        entry.slot === 'evening'
+          ? this.i18n.t('trip.swap.stillWornEvening', { day: entry.day })
+          : this.i18n.t('trip.day.legend', { day: entry.day }),
+      )
       .join(this.i18n.t('trip.swap.daysSeparator'));
     return this.i18n.t('trip.swap.stillWorn', { name: worn.name, days });
   });

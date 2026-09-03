@@ -806,7 +806,15 @@ orientation and one the Itinerary added:
   feature produces is one garment in both looks of one day, so a swap out of
   Monday's day look that said only *"on Day 1"* would name the day the reader is
   looking at and read as a contradiction. Where a garment survives in several
-  places the days are listed as before, each with its slot. This is `STAGE-4`
+  places the days are listed as before, and **only an evening is named**: `day` is
+  the slot every date has and `evening` is the marked one, so *Day 2, Day 4
+  evening* reads as a person would say it where *Day 2 day* is a stutter of the
+  kind the slot head's own dedupe two sections up exists to avoid. An unqualified
+  day means the daytime look. Two whole keys carry it — `trip.day.legend` and
+  `trip.swap.stillWornEvening` — rather than one with a slot word appended, for
+  the reason every other line on this screen is one key: word order is a
+  translator's, not a template's. *This read "each with its slot" until 4.18
+  measured how it renders.* This is `STAGE-4`
   4.6a's third property and the reason the feature is not a wiring job — without
   it, taking the jeans off Tuesday reads as taking them out of the suitcase while
   Thursday still wears them. The days are joined with `trip.swap.daysSeparator` and there is **no

@@ -562,13 +562,42 @@ is not, that is its own task rather than a patch inside this one.
 Day / Evening cards stacked under one day head, the occasion moved into the slot
 head, the still-worn line naming slots, and the swap scoped by `(day, slot)`.
 
+**`shared/models/trip.model.ts` moves too, and this line did not name it.**
+`TripDay` carried `occasion` and `look_id` at the day level — the shape the
+server stopped sending at **4.15** — so the model, `trip-detail.page.spec.ts`,
+`trip-list.page.spec.ts` and every fixture in them had been describing a payload
+that no longer existed for three tasks. Nothing failed and nothing could have:
+the specs mock their own responses. That is the window `PROGRESS.md` records as
+invisible to tests, and this is the commit that closes it.
+
+**The still-worn line names the evening and not the day.** `day` is the slot
+every date has and `evening` is the marked one, so *Day 2, Day 4 evening* reads
+as a person would say it where *Day 2 day* is a stutter — the same judgement the
+slot head's own dedupe makes about `EVENING · EVENING`. Two whole keys carry it
+rather than one with a slot word appended, because word order is a translator's.
+`05-FRONTEND-SPEC.md` said *"each with its slot"* and is amended, on 4.17's
+precedent: the document describes what shipped.
+
+**The exclusions test had to press two different garments to mean anything.**
+Rejecting the shirt on the day slot and then the shirt again on the evening sends
+the same single id whether the list is keyed by day or by pair — the first
+version of that test passed against a deliberately day-keyed map. It presses the
+shirt and then the **heels**, which is the only shape that can tell the two
+apart. Measured, not assumed.
+
 **Acceptance criteria — 4.18's own:**
 
-- [ ] A two-slot day draws two cards under one forecast
-- [ ] A swap spins one tile, on the slot it was asked for
-- [ ] A garment removed from a day look and still worn that evening says so,
-      naming the evening
-- [ ] Exclusions accumulated on one slot do not narrow the other
+- [x] A two-slot day draws two cards under one forecast — and the forecast is
+      asserted absent from both slot heads, so the head cannot have been drawn
+      twice
+- [x] A swap spins one tile, on the slot it was asked for — the shirt is worn in
+      both halves of one date, and matching the signals by day alone fails it
+- [x] A garment removed from a day look and still worn that evening says so,
+      naming the evening — *"You'll still wear the white shirt on Day 1
+      evening."*, which naming only the day would render as the date the reader
+      is looking at
+- [x] Exclusions accumulated on one slot do not narrow the other — two presses on
+      two garments, and a day-keyed map fails it
 
 ---
 
