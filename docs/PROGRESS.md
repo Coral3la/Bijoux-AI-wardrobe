@@ -90,7 +90,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Trip form
 - [x] Packing view
 - [x] The swap endpoint *(4.6a-1, added 2026-08-31)*
-- [ ] Swap one item on a trip look *(4.6a, added 2026-08-31)*
+- [x] Swap one item on a trip look *(4.6a, added 2026-08-31)*
 - [x] Repack and delete a trip *(4.6b, added 2026-08-31)*
 - [ ] Export
 - [x] Global navigation *(4.9, added 2026-08-31)*
