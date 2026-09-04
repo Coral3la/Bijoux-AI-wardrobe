@@ -489,6 +489,62 @@ the endpoint's.
 `404` with `code: "not_found"` for a look belonging to another account, the same
 code and status as one that never existed.
 
+### `DELETE /looks/{id}/wear` *(Stage 3, task 3.4a)*
+```
+← 200 { look }
+```
+Clears `looks.worn_at` and, in the same transaction, decrements `wear_count` by
+one on every item in the look, floored at zero. **Written at task 3.4a**, as the
+escape hatch for the one control 3.4 built deliberately non-optimistic: wearing
+is not a toggle, so tapping the button again does not undo it, and an accidental
+tap otherwise distorts `wear_count` on every garment and moves `last_worn_at`
+forward with nothing to reverse either.
+
+**It takes no request body.** There is no date to name — the row holds one date
+and this clears it — and a conditional undo keyed on a date the client believes
+is current would answer a press the user just made by doing nothing. One
+asymmetry follows and is stated rather than left to be found: with no body
+parameter declared, a body sent anyway is **ignored** rather than refused, where
+the same unknown key on `POST` is a `422` under `extra="forbid"`.
+
+**`200` with the look, not `204`.** `wear_count` and `last_worn_at` changed on
+every garment, `ItemResponse` carries both, and `DECISIONS.md` 184's argument for
+making the wear non-optimistic was precisely that the client cannot derive those
+numbers. A `204` would leave the saved-looks screen holding counts it has no way
+to correct. `DELETE /trips/{id}` answers `204` and `DELETE /items/{id}` answers a
+body; the difference is whether the caller needs the row back, and here it does.
+
+**This is not the inverse of the wearing, and the count is the only half that
+comes back exactly.** `items.last_worn_at` is set to `NULL` when the decrement
+reaches zero and is **left standing otherwise** — so a shirt at three wearings
+dated Monday, worn Tuesday and then undone, reads three wearings dated
+**Tuesday**. Monday was never recorded anywhere. The column is an upper bound
+after an undo rather than a truth, and the cost is bounded: task 3.5 reads it
+over a three-day window, so a garment can be over-reported as recently worn for
+at most three days and the stylist's error is to avoid it rather than to repeat
+it. Recomputing the date from the other looks that share the garment was the
+alternative and is a worse guess more confidently made — `DELETE /trips/{id}`
+cascades its looks away and `POST /trips/{id}/swap` deletes the one it replaces,
+so that maximum would step backwards past a real wearing whose look is gone,
+which is the move `GREATEST` exists to prevent on the way in. `DECISIONS.md` 226.
+
+**`looks.worn_at` undoes to `NULL`, not to the previous date.** A look worn
+Monday and then Tuesday holds one column, so the undo clears it rather than
+restoring Monday — the same one-date-deep reach the wearing half already has,
+and the same schema limitation. `tests/integration/test_looks_wear.py` asserts
+both non-identities so neither is a surprise.
+
+**Idempotent, and that is what makes the undo button safe to double-tap.** The
+guard is the `UPDATE`'s own `WHERE worn_at IS NOT NULL` — the same predicate
+`POST` spells `IS DISTINCT FROM :date`, with `NULL` for the date — so a second
+request matches no row, decrements nothing and still answers `200`. A look never
+worn answers `200` and writes nothing.
+
+`is_saved` is not consulted, for `POST`'s reason. `404` with
+`code: "not_found"` for another account's look, the same code and status as one
+that never existed. No new error code: `not_found` is this endpoint's only
+documented failure.
+
 ---
 
 ## Trips *(Stage 4)*

@@ -1,4 +1,5 @@
-"""The four `/looks` routes: make one, list them, change one, wear one.
+"""The five `/looks` routes: make one, list them, change one, wear one,
+take the wearing back.
 
 `POST /suggest` is the route that puts Stage 2 together — wardrobe → forecast →
 rule → serialise → stylist → validate → persist → hydrate, in `STAGE-2` 2.7's
@@ -9,7 +10,9 @@ suggestion made since 2.7 becomes visible here.
 `POST /{look_id}/wear` is 3.4's and is the only route here that writes a row
 it did not read into Python first: the guard against double-counting is a
 conditional `UPDATE`, so two rapid taps race in the database rather than in
-this module.
+this module. `DELETE /{look_id}/wear` is 3.4a's and is its mirror, down to the
+guard being the same predicate — `IS DISTINCT FROM :date` with `NULL` for the
+date is `IS NOT NULL`, so an undo races the same way a wear does.
 
 The three reads share `_hydrate`, which is the whole of what makes a persisted
 look into a wire one. `Look` carries no `relationship()` — following `Item`,
@@ -31,7 +34,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 from openai import OpenAIError
-from sqlalchemy import ColumnElement, func, select, update
+from sqlalchemy import ColumnElement, case, func, select, update
 from sqlalchemy.orm import Session
 
 from app.api.v1.routes._stylist_shared import (
@@ -552,6 +555,88 @@ def wear_look(
     db.commit()
     # Refreshed rather than returned from the object in hand: the UPDATE went
     # round the identity map, so `look.worn_at` is still whatever was loaded.
+    db.refresh(look)
+
+    return _hydrate(db, [look])[0]
+
+
+@router.delete("/{look_id}/wear")
+def unwear_look(
+    look_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> LookResponse:
+    """Take a wearing back, and give every garment in the look its count back.
+
+    **The escape hatch for the one control that is not optimistic.** `wear_look`
+    cannot be undone by tapping it again — wearing is not a toggle — so without
+    this an accidental tap distorts `wear_count` on every garment and moves
+    `last_worn_at` forward, both of which feed 3.5's recently-worn line and
+    3.6's insights, with no way back. `DECISIONS.md` 226.
+
+    **This is not the inverse of `wear_look`, and the docstring says so because
+    a reader will otherwise assume it is.** The count comes back exactly; the
+    date does not. A shirt at three wearings dated Monday, worn Tuesday and then
+    undone, comes back to three wearings dated **Tuesday** — Monday was never
+    recorded anywhere, because `items.last_worn_at` is one column and no history
+    table exists. The column is an upper bound after an undo rather than a
+    truth, and the cost is bounded: 3.5 reads it over a three-day window, so an
+    item can be over-reported as recently worn for at most those three days, and
+    the stylist's error is to avoid a garment rather than to repeat one. The
+    alternative was to recompute the date from the other looks that share the
+    garment, and it is a worse guess wearing better clothes: `DELETE /trips/{id}`
+    cascades its looks away and `POST /trips/{id}/swap` deletes the one it
+    replaces, so that maximum would step *backwards past a real wearing whose
+    look is gone* — the exact move `GREATEST` exists to prevent in `wear_look`.
+
+    `looks.worn_at` has the same one-date-deep reach it has going in: a look worn
+    Monday and then Tuesday undoes to `NULL`, not to Monday. `DECISIONS.md` 184.
+
+    A second request finds nothing to clear, decrements nothing and still answers
+    `200` — which is what makes the double-tap on the undo button safe.
+
+    `is_saved` is not consulted, for `wear_look`'s reason: the button lives on
+    the saved-looks screen and that is the screen's policy, not the endpoint's.
+    """
+    look = _owned(db, look_id, current_user.id)
+
+    # `is_not(None)` rather than `is_distinct_from(None)`, which compiles to the
+    # same predicate: the operator should say what it means, and the symmetry
+    # with `wear_look` is a fact about the reasoning rather than about the SQL.
+    # `RETURNING` for that handler's reason — `rowcount` belongs to
+    # `CursorResult` while `Session.execute` is typed `Result[Any]`.
+    changed = (
+        db.execute(
+            update(Look)
+            .where(Look.id == look.id, Look.worn_at.is_not(None))
+            .values(worn_at=None)
+            .returning(Look.id)
+        ).scalar_one_or_none()
+        is not None
+    )
+
+    if changed:
+        db.execute(
+            update(Item)
+            .where(Item.id.in_(select(LookItem.item_id).where(LookItem.look_id == look.id)))
+            .values(
+                # GREATEST rather than a `WHERE wear_count > 0`: filtering would
+                # skip exactly the row whose `last_worn_at` most needs clearing,
+                # and there is no CHECK on the column to floor it instead.
+                wear_count=func.greatest(Item.wear_count - 1, 0),
+                # Both clauses read the row as it stands *before* this statement
+                # — that is SQL's rule for SET, and it is what makes the decrement
+                # and the date one statement rather than two. So the test is the
+                # count on the way in: 1 is the row about to reach zero, and a
+                # garment still worn in another look reads 2 or more and keeps
+                # its date. `<=` rather than `==` picks up a row already at zero
+                # that still carries a date, which a cascaded trip delete can
+                # leave behind (`04-API-SPEC.md`, `DELETE /trips/{id}`).
+                last_worn_at=case((Item.wear_count <= 1, None), else_=Item.last_worn_at),
+            )
+        )
+
+    db.commit()
     db.refresh(look)
 
     return _hydrate(db, [look])[0]
