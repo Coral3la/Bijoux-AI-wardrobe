@@ -713,6 +713,32 @@ describe('WardrobeStore', () => {
     expect(Object.keys(store.filters())).toEqual(['color_primary']);
   });
 
+  // The absent key is the off state, which is what makes `isFiltered` a key
+  // count on the page and what keeps `?never_worn=false` out of the URL the
+  // page writes by looping this object's own entries.
+  it('carries the never-worn filter only while it is on', () => {
+    store.setFilters({ never_worn: true });
+
+    expect(store.filters()).toEqual({ never_worn: true });
+
+    store.setFilters({ never_worn: undefined });
+
+    expect(store.filters()).toEqual({});
+  });
+
+  // 229 rests on this: the page writes the URL from these filters and reads it
+  // straight back, so a normalise that moved a value on the second pass would
+  // be the loop 110 refused a subscription to avoid. Asserted on the shape most
+  // likely to move — a range, which rounds and orders.
+  it('is unchanged by being normalised a second time', () => {
+    store.setFilters({ formality_min: 4.6, formality_max: 2, never_worn: true });
+    const once = store.filters();
+
+    store.setFilters(once);
+
+    expect(store.filters()).toEqual(once);
+  });
+
   it('narrows the visible collection without touching the loaded one', () => {
     loaded([
       item({ id: 'a', category: 'top' }),
@@ -966,10 +992,12 @@ describe('applyFilters', () => {
     expect(applyFilters([cleared], { color_primary: 'black' })).toHaveLength(1);
   });
 
-  // Read the name literally: nothing here asserts on `status`, because the
-  // predicate does not read it. A processing row survives every filter because
-  // its tags are null, and a stopped-waiting row survives for the same reason
-  // and by the same line of code. DECISIONS.md 109.
+  // Read the name literally: nothing here asserts on `status`, because none of
+  // the four tag filters reads it. A processing row survives all of them
+  // because its tags are null, and a stopped-waiting row survives for the same
+  // reason and by the same lines of code. `never_worn` is deliberately absent
+  // from `everything` below — it is the one filter that does read `status`, and
+  // it is measured on its own further down. DECISIONS.md 109, 228.
   it('never hides a row whose tags have not arrived, whatever its status', () => {
     const untagged = {
       category: null,
@@ -1003,6 +1031,53 @@ describe('applyFilters', () => {
     const failed = item({ id: 'failed', status: 'failed', category: 'top' });
 
     expect(applyFilters([failed], { category: 'bottom' })).toHaveLength(0);
+  });
+
+  // 3.6a. Every row in `all` is a default item(): ready, and wear_count 0.
+  it('narrows to the rows that have never been worn', () => {
+    const worn = item({ id: 'worn', wear_count: 3 });
+
+    expect(ids({ never_worn: true })).toEqual(['top', 'bottom', 'shoes']);
+    expect(applyFilters([...all, worn], { never_worn: true }).map((match) => match.id)).toEqual([
+      'top',
+      'bottom',
+      'shoes',
+    ]);
+  });
+
+  // The load-bearing one, and the whole of why this filter reads `status`. Both
+  // rows below carry wear_count 0 — the column is NOT NULL DEFAULT 0 — and
+  // neither is in the 34 the insights panel counts, because that count is
+  // scoped to `ready`. A predicate on wear_count alone would answer "which ones
+  // are they?" with a longer list than the number that asked the question.
+  // DECISIONS.md 228.
+  it('leaves out a row that is unworn only because it is not tagged yet', () => {
+    const processing = item({ id: 'processing', status: 'processing' });
+    const failed = item({ id: 'failed', status: 'failed' });
+
+    expect(applyFilters([processing, failed], { never_worn: true })).toHaveLength(0);
+    // And the same two rows under no filter, so this is the filter's doing
+    // rather than the fixture's.
+    expect(applyFilters([processing, failed], {})).toHaveLength(2);
+  });
+
+  // The exception is scoped to this one clause: a processing row still survives
+  // every tag filter, which is the rule 109 wrote and 228 leaves standing.
+  it('still hides nothing by status under the tag filters', () => {
+    const processing = item({ id: 'processing', status: 'processing', category: null });
+
+    expect(applyFilters([processing], { category: 'top' })).toHaveLength(1);
+    expect(applyFilters([processing], { never_worn: true })).toHaveLength(0);
+  });
+
+  it('combines the never-worn filter with a tag dimension as AND', () => {
+    const wornTop = item({ id: 'worn-top', category: 'top', wear_count: 2 });
+
+    expect(
+      applyFilters([...all, wornTop], { category: 'top', never_worn: true }).map(
+        (match) => match.id,
+      ),
+    ).toEqual(['top']);
   });
 
   it('uses the same scale the vocabulary does', () => {

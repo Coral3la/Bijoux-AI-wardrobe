@@ -43,6 +43,21 @@ function panel(): HTMLElement | null {
   return element().querySelector('section');
 }
 
+// The panel carries two links since 3.6a and they are told apart by what they
+// point at, not by their order in the DOM — which is what the most-worn test
+// below used to do, and what broke the moment a second anchor went in above it.
+function links(): HTMLAnchorElement[] {
+  return [...element().querySelectorAll('a')];
+}
+
+function hrefs(): (string | null)[] {
+  return links().map((link) => link.getAttribute('href'));
+}
+
+function linkTo(href: string): HTMLAnchorElement | undefined {
+  return links().find((link) => link.getAttribute('href') === href);
+}
+
 // The copy is never spelled out in an assertion: the key and its parameters
 // are what this file defends, so the expected string is built from the same
 // key the component reads. A reworded string keeps these tests green, a
@@ -62,7 +77,10 @@ describe('WardrobeInsights', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([{ path: 'wardrobe/:id', children: [] }]),
+        provideRouter([
+          { path: 'wardrobe', children: [] },
+          { path: 'wardrobe/:id', children: [] },
+        ]),
       ],
     });
     mock = TestBed.inject(HttpTestingController);
@@ -97,6 +115,39 @@ describe('WardrobeInsights', () => {
     expect(text()).not.toContain('138');
   });
 
+  // 3.6a. The sentence is the anchor rather than the numerals inside it,
+  // because linking the number alone means splitting the key into fragments —
+  // which is the thing the panel's own comment refuses, and which would take
+  // the sentence's reorderability with it.
+  it('makes the count line a link to the never-worn filter', async () => {
+    await render();
+
+    statsRequest().flush(stats());
+    await fixture.whenStable();
+
+    const link = linkTo('/wardrobe?never_worn=true');
+    expect(link).toBeDefined();
+    // The accessible name is the visible text and not an aria-label naming the
+    // destination, which would not contain it (WCAG 2.5.3).
+    expect(link!.textContent?.trim()).toBe(
+      t('wardrobe.insights.neverWorn.other', { count: 34, ready: 136 }),
+    );
+    expect(link!.getAttribute('aria-label')).toBeNull();
+  });
+
+  // The URL is the contract with WardrobePage, which reads exactly the literal
+  // string `true` and drops anything else — so this asserts the spelling rather
+  // than that some link exists. A `?never_worn=1` here would filter nothing and
+  // say nothing, which is 110's accepted trade-off arriving from our own panel.
+  it('spells the filter the way the wardrobe page reads it', async () => {
+    await render();
+
+    statsRequest().flush(stats());
+    await fixture.whenStable();
+
+    expect(hrefs()).toContain('/wardrobe?never_worn=true');
+  });
+
   it('names the most-worn garment and links to it', async () => {
     await render();
 
@@ -106,7 +157,7 @@ describe('WardrobeInsights', () => {
     expect(text()).toContain(
       t('wardrobe.insights.mostWorn.other', { name: 'light blue mom jeans', count: 12 }),
     );
-    expect(element().querySelector('a')?.getAttribute('href')).toBe('/wardrobe/item-1');
+    expect(linkTo('/wardrobe/item-1')).toBeDefined();
   });
 
   it('does not say "1 items" or "1 wears"', async () => {
@@ -151,6 +202,9 @@ describe('WardrobeInsights', () => {
     expect(text()).toContain(t('wardrobe.insights.allWorn'));
     expect(text()).not.toContain('0');
     expect(text()).not.toContain(t('wardrobe.insights.neverWorn.other', { count: 0, ready: 136 }));
+    // And it is not a link, because there is no list behind it: a filter that
+    // matches nothing would answer this sentence with the no-match empty state.
+    expect(hrefs()).not.toContain('/wardrobe?never_worn=true');
   });
 
   // Third state: the panel disappears and takes its failure with it. The

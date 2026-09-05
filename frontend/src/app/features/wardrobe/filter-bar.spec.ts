@@ -218,6 +218,57 @@ describe('FilterBar', () => {
     expect(emitted).toEqual([{ formality_min: 3.4, formality_max: 5 }]);
   });
 
+  // 3.6a. It is in the open row rather than inside the disclosure, and this is
+  // the assertion that holds it there: the insights panel links here with the
+  // filter already on, and a control shut inside a collapsed panel would leave
+  // a narrowed grid with nothing on screen saying why.
+  it('offers the never-worn chip without opening the disclosure', async () => {
+    await render();
+
+    expect(buttonWith('Never worn')).toBeTruthy();
+    expect((fixture.nativeElement as HTMLElement).querySelector('fieldset')).toBeNull();
+  });
+
+  // No count, where every category chip carries one. The number lives on the
+  // insights panel, counted over the whole wardrobe by the server; this row can
+  // only see the loaded page, and two disagreeing copies of one number on one
+  // screen is the failure. DECISIONS.md 228.
+  it('carries no count beside the never-worn chip', async () => {
+    await render();
+
+    expect(buttonWith('Never worn').querySelector('span')).toBeNull();
+    expect(buttonWith('Never worn').textContent?.trim()).toBe('Never worn');
+  });
+
+  it('emits the never-worn filter and leaves the other dimensions alone', async () => {
+    await render({ category: 'top' });
+
+    buttonWith('Never worn').click();
+
+    expect(emitted).toEqual([{ category: 'top', never_worn: true }]);
+  });
+
+  // Self-clearing, like the category chips and the swatches. `undefined` and
+  // not `false`: the absent key is the off state the whole filter object is
+  // built on, and it is what keeps `?never_worn=false` out of the address bar.
+  it('turns the never-worn filter off when the pressed chip is tapped again', async () => {
+    await render({ never_worn: true });
+
+    buttonWith('Never worn').click();
+
+    expect(emitted).toEqual([{ never_worn: undefined }]);
+  });
+
+  it('marks the never-worn chip pressed only while it is on', async () => {
+    await render();
+
+    expect(buttonWith('Never worn').getAttribute('aria-pressed')).toBe('false');
+
+    await render({ never_worn: true });
+
+    expect(buttonWith('Never worn').getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('offers Clear filters only while something is filtered', async () => {
     await render();
 
@@ -229,10 +280,19 @@ describe('FilterBar', () => {
   });
 
   it('clears every dimension at once', async () => {
-    await render({ category: 'top', color_primary: 'black', warmth_min: 2 });
+    await render({ category: 'top', color_primary: 'black', warmth_min: 2, never_worn: true });
 
     buttonWith('Clear filters').click();
 
     expect(emitted).toEqual([{}]);
+  });
+
+  // The never-worn chip is a dimension like the others, so it alone is enough
+  // to make the bar filtered — and the way out of a never-worn grid with
+  // nothing in it is Clear filters, the same as every other dead end here.
+  it('counts the never-worn filter as something to clear', async () => {
+    await render({ never_worn: true });
+
+    expect(maybeButtonWith('Clear filters')).toBeTruthy();
   });
 });

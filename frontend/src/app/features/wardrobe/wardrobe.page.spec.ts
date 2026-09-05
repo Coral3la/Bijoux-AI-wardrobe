@@ -243,8 +243,10 @@ describe('WardrobePage', () => {
         provideHttpClientTesting(),
         provideRouter([
           { path: 'login', children: [] },
-          // The filter tests below navigate here before rendering: the page reads
-          // its filters from the URL once, on construction.
+          // The filter tests below navigate here before rendering: the page
+          // reads its filters from the query string, and the subscription
+          // delivers the current value on subscribe. Since 229 it also reads
+          // every later emission, so some of them navigate *after* rendering.
           { path: 'wardrobe', children: [] },
           { path: 'profile', children: [] },
           { path: 'saved', children: [] },
@@ -718,6 +720,69 @@ describe('WardrobePage', () => {
     expect(alts()).toEqual(['white oversized shirt']);
   });
 
+  // 3.6a, and the population the insights panel's count is scoped to: the worn
+  // top and the processing row both go, the second one because its zero means
+  // nothing has happened yet rather than that nobody wore it.
+  it('restores the never-worn filter from the URL on arrival', async () => {
+    await TestBed.inject(Router).navigateByUrl('/wardrobe?never_worn=true');
+
+    await render([
+      item({ id: 'a', display_name: 'unworn shirt', wear_count: 0 }),
+      item({ id: 'b', display_name: 'worn jeans', wear_count: 4 }),
+      item({ id: 'c', display_name: null, status: 'processing', wear_count: 0 }),
+    ]);
+
+    expect(alts()).toEqual(['unworn shirt']);
+  });
+
+  // The whole of what 229 buys, and the reason the snapshot read had to go: the
+  // insights panel's link navigates from /wardrobe to /wardrobe, so the route
+  // config does not change, the component is reused and this constructor never
+  // runs a second time. Under the old single read the URL would say never_worn
+  // and the grid would show everything — 110's accepted trade-off arriving from
+  // our own panel rather than from a hand-edited link.
+  it('applies a filter that arrives after the page is already on screen', async () => {
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/wardrobe');
+    await render([
+      item({ id: 'a', display_name: 'unworn shirt', wear_count: 0 }),
+      item({ id: 'b', display_name: 'worn jeans', wear_count: 4 }),
+    ]);
+
+    expect(tiles()).toHaveLength(2);
+
+    await router.navigateByUrl('/wardrobe?never_worn=true');
+    await fixture.whenStable();
+
+    expect(alts()).toEqual(['unworn shirt']);
+  });
+
+  // Read once and read again are the same answer, which is the idempotence 229
+  // rests on: the page writes the URL from the normalised filters, the
+  // subscription reads that write straight back, and the second pass moves
+  // nothing. A navigation counted here would be the loop.
+  it('does not navigate again when its own URL write comes back', async () => {
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/wardrobe');
+    await render([item({ id: 'a', category: 'top' })]);
+    const navigate = vi.spyOn(router, 'navigate');
+
+    await press('Tops');
+
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(router.url).toBe('/wardrobe?category=top');
+  });
+
+  it('writes the never-worn filter into the URL', async () => {
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/wardrobe');
+    await render([item({ id: 'a', wear_count: 0 })]);
+
+    await press('Never worn');
+
+    expect(router.url).toBe('/wardrobe?never_worn=true');
+  });
+
   // A URL is user input, and the closed vocabulary is not open to it.
   it('ignores a filter value that is not in the vocabulary', async () => {
     await TestBed.inject(Router).navigateByUrl('/wardrobe?category=banana&colour_primary=black');
@@ -726,6 +791,21 @@ describe('WardrobePage', () => {
 
     expect(tiles()).toHaveLength(2);
     expect(text()).toContain('2 pieces');
+  });
+
+  // A vocabulary of one, and the same rule applied to it: only the literal
+  // string this page writes reads back as on. Worth its own test because the
+  // truthy spelling is the tempting one, and `?never_worn=false` under it would
+  // filter the wardrobe down while the URL said the opposite.
+  it('reads only the literal true as the never-worn filter', async () => {
+    await TestBed.inject(Router).navigateByUrl('/wardrobe?never_worn=false');
+
+    await render([
+      item({ id: 'a', display_name: 'unworn shirt', wear_count: 0 }),
+      item({ id: 'b', display_name: 'worn jeans', wear_count: 4 }),
+    ]);
+
+    expect(tiles()).toHaveLength(2);
   });
 
   it('writes the filter into the URL', async () => {
@@ -753,8 +833,10 @@ describe('WardrobePage', () => {
     expect(navigate.mock.calls[0][1]).toMatchObject({ replaceUrl: true });
   });
 
-  // Reading the URL once, on construction, is the whole of the read side: a
-  // page that wrote it back on arrival would be the loop 110 exists to avoid.
+  // The page reads the URL and does not write it back: a page that wrote on
+  // arrival would be the loop 110 exists to avoid, and 229 kept that property
+  // when it replaced the single snapshot read with a subscription. This is the
+  // assertion that says the subscription did not become a second writer.
   it('does not write the URL on arrival', async () => {
     const router = TestBed.inject(Router);
     await router.navigateByUrl('/wardrobe?category=top');

@@ -126,6 +126,25 @@ const CHIP_STATES = {
           {{ i18n.t('wardrobe.filter.title') }}
         </button>
 
+        <!-- A chip in the open row rather than a fourth fieldset inside the
+             disclosure, which is shut by default: the insights panel links here
+             with this filter already on, and a pressed control nobody can see
+             is a narrowed grid with no explanation on screen. It sits after the
+             disclosure rather than among the categories because it is a second
+             named dimension, not a tenth category.
+             No count beside it, unlike the category chips: the panel states
+             that number two rows above, counted over the whole wardrobe where
+             this row can only count the loaded page, and two disagreeing copies
+             of one number on one screen is worse than one. DECISIONS.md 228. -->
+        <button
+          type="button"
+          [attr.aria-pressed]="filters().never_worn === true"
+          [class]="chipClass(filters().never_worn === true)"
+          (click)="toggleNeverWorn()"
+        >
+          {{ i18n.t('wardrobe.filter.neverWorn') }}
+        </button>
+
         @if (isFiltered()) {
           <button
             type="button"
@@ -296,6 +315,17 @@ export class FilterBar {
   // costs an OR nested inside the AND plus comma parsing in the URL. 109.
   protected chooseCategory(category: Category | undefined): void {
     this.filtersChanged.emit({ ...this.filters(), category });
+  }
+
+  // Self-clearing like the category chips and the swatches: pressing the one
+  // already pressed turns it off. `undefined` rather than `false` when off,
+  // because the absent key is the off state the whole filter object is built
+  // on — normalise would drop a `false` anyway, and the type refuses it.
+  protected toggleNeverWorn(): void {
+    this.filtersChanged.emit({
+      ...this.filters(),
+      never_worn: this.filters().never_worn === true ? undefined : true,
+    });
   }
 
   protected chooseColor(color: Color): void {

@@ -11,6 +11,10 @@ import { ItemStatsResponse, MostWornItem } from '../../shared/models/item.model'
 // can render a heading over nothing.
 interface Insights {
   readonly line: string;
+  // Whether that line leads anywhere. The all-worn sentence does not — there is
+  // no list of never-worn garments behind it — so the branch is carried here
+  // rather than re-derived in the template from a number it no longer holds.
+  readonly neverWorn: boolean;
   readonly mostWorn: { readonly id: string; readonly line: string } | null;
 }
 
@@ -33,8 +37,28 @@ interface Insights {
              i18n key into fragments, and a sentence assembled from pieces
              cannot be reordered for a language that words it differently. The
              line carries no user data, so Fraunces is legal across all of it —
-             which the link below is not: it interpolates a garment name. -->
-        <p class="font-display text-lg">{{ panel.line }}</p>
+             which the link below is not: it interpolates a garment name.
+
+             That same rule is why the *sentence* is the anchor and not the
+             number 3.6a asked for: the number cannot be linked without the
+             fragmentation the paragraph above refuses, and the sentence is the
+             smallest unit that can. It also leaves the accessible name equal to
+             the visible text, where an aria-label naming the destination would
+             not contain it. No queryParamsHandling, so a category already on is
+             dropped rather than intersected — the count this line states is
+             over the whole wardrobe, and landing filtered would show a subset
+             of it under the number that promised the whole. DECISIONS.md 228. -->
+        @if (panel.neverWorn) {
+          <a
+            routerLink="/wardrobe"
+            [queryParams]="{ never_worn: 'true' }"
+            class="font-display text-lg underline decoration-1 underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            {{ panel.line }}
+          </a>
+        } @else {
+          <p class="font-display text-lg">{{ panel.line }}</p>
+        }
         <!-- The link the most_worn field was narrowed to three fields to
              carry: an id, because the one garment named on this panel is the
              one the user is most likely to want to look at. -->
@@ -67,8 +91,14 @@ export class WardrobeInsights {
     if (stats === null || stats.worn === 0) {
       return null;
     }
+    // One test, where reading it in both places would be two: what the line
+    // says and whether it leads anywhere are the same question about the same
+    // number. Never printed as "0 pieces you have never worn", which reads as a
+    // boast about a number rather than a fact about a wardrobe.
+    const neverWorn = stats.never_worn > 0;
     return {
-      line: this.countLine(stats),
+      line: neverWorn ? this.neverWornLine(stats) : this.i18n.t('wardrobe.insights.allWorn'),
+      neverWorn,
       mostWorn:
         stats.most_worn === null
           ? null
@@ -101,12 +131,7 @@ export class WardrobeInsights {
   // I18nService has no plural rule (DECISIONS.md 058), so the caller picks the
   // key. `ready` needs no singular of its own: this line renders only when both
   // counts are at least 1, so it is at least 2 by construction.
-  private countLine(stats: ItemStatsResponse): string {
-    // Never printed as "0 items you have never worn", which reads as a boast
-    // about a number rather than a fact about a wardrobe.
-    if (stats.never_worn === 0) {
-      return this.i18n.t('wardrobe.insights.allWorn');
-    }
+  private neverWornLine(stats: ItemStatsResponse): string {
     const ready = stats.worn + stats.never_worn;
     return stats.never_worn === 1
       ? this.i18n.t('wardrobe.insights.neverWorn.one', { ready })

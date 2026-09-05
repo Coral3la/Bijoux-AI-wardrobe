@@ -102,6 +102,7 @@
   "wardrobe.filter.noMatch.title": "Nothing matches those filters",
   "wardrobe.filter.noMatch.body": "Your wardrobe has items in it, but none of them match what you picked. Clear the filters to see everything again.",
   "wardrobe.filter.category.all": "All",
+  "wardrobe.filter.neverWorn": "Never worn",
   "vocabulary.category.top": "Tops",
   "vocabulary.category.bottom": "Bottoms",
   "vocabulary.category.dress": "Dresses",

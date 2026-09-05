@@ -173,9 +173,31 @@ amendment. `DECISIONS.md` 227.
 ### 3.6a Browse the never-worn *(added 2026-09-02)*
 A view-only extension of 3.6's insights panel. The panel already prints *"N of your M tagged items have never been worn"* — this task makes that number a link that opens the list behind it, so the user can act on it herself.
 
-**Two shapes considered, the task picks one.** (a) A modal or expanded row on `/wardrobe` filtered to `wear_count = 0`, rendered with the same `item-card` the grid uses. (b) A URL such as `/wardrobe?never_worn=true` that reuses the grid with a filter chip, so the state is bookmarkable and the back button behaves. Either way, no new endpoint: `GET /items` already accepts filters, and `wear_count` becomes one of them.
+**Two shapes considered, the task picks one.** (a) A modal or expanded row on `/wardrobe` filtered to `wear_count = 0`, rendered with the same `item-card` the grid uses. (b) A URL such as `/wardrobe?never_worn=true` that reuses the grid with a filter chip, so the state is bookmarkable and the back button behaves. Either way, **no backend change at all** — which is stronger than the *no new endpoint* this line first claimed, and the rest of that claim was false. `GET /items` does **not** accept a `wear_count` filter and is not given one: **the filter is client-side**, like every other filter on `/wardrobe`, which `05-FRONTEND-SPEC.md` has specified as running "over the loaded collection" since it was written. **`ItemFilters` in `wardrobe.store.ts` gains a `never_worn` key** and `applyFilters` gains the clause. **No new server parameter**: a twelfth would be the eighth `GET /items` parameter with no caller, widening `AUDITS.md` **O-16** to buy nothing, since the store sends only `limit` and `status` and always will.
+
+**The sentence about `GET /items` was wrong when this task was written**, not made wrong by later work: the endpoint has never had a `wear_count` filter. Corrected in place rather than amended below, because a false statement about the API is the thing an amendment paragraph is worst at — the wrong sentence is what a reader greps and finds.
 
 **Not** a stylist change. The list neither hides nor promotes items to the suggester — it exists purely to answer the question *"which ones are they?"* that the count invites.
+
+**Built as (b), and it closes a line `05-FRONTEND-SPEC.md` had left unowned.**
+That document has specified a *"never worn" toggle* in the filter sheet since it
+was written, deferred at 1.8 and recorded at 3.6 as *"deferred and unowned — a
+candidate for Stage 5 polish"*; shape (b) **is** that toggle, with a link that
+arrives with it already pressed, where (a) would have built a second surface for
+one question and left the toggle deferred. **The filter reads `status` as well
+as `wear_count`**, which no line above anticipated: `worn` and `never_worn` are
+`ready`-scoped on the server, so a predicate on the count alone answers *which
+ones are they?* with `processing` and `failed` tiles that are unworn only
+because nothing has happened to them yet. That is a deliberate, single exception
+to the rule in `wardrobe.store.ts` that filters do not read `status`, and
+`DECISIONS.md` **228** carries why the rule still holds for the other four.
+**The panel's link forced a second decision the task did not contain**: it
+navigates from `/wardrobe` to `/wardrobe`, so the page component is reused and
+the single URL read `DECISIONS.md` 110 specified never runs again — the page now
+subscribes to `queryParamMap`, which is **229**, and the panel keeps its
+independence rather than gaining an output. **The sentence is the link, not the
+number**, because linking the numerals alone means splitting an i18n key into
+fragments that cannot be reordered.
 
 ---
 
@@ -190,7 +212,7 @@ A view-only extension of 3.6's insights panel. The panel already prints *"N of y
 - [x] The insights panel shows a correct never-worn count
 - [ ] `DELETE /looks/{id}/wear` reverses a wearing and the toast on `/saved` calls it — 3.4a
 - [x] A singleton-category item is not named in the *recently worn* line, and the reworded line is asserted against the assembled prompt — 3.5a
-- [ ] The never-worn count on the insights panel opens a browsable list of those items — 3.6a
+- [x] The never-worn count on the insights panel opens a browsable list of those items — 3.6a
 
 ## Commit checkpoints
 

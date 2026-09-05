@@ -6,7 +6,8 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Params, Router } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, ParamMap, Params, Router } from '@angular/router';
 
 import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
@@ -379,10 +380,22 @@ export class WardrobePage {
   });
 
   constructor() {
-    // Read once, from the snapshot. A subscription to queryParamMap would
-    // re-apply the URL this component has just written, and the filters are
-    // the store's state rather than the route's. DECISIONS.md 110.
-    this.store.setFilters(this.filtersFromUrl());
+    // Every emission, where 110 read the snapshot once. That entry's ground was
+    // that this page is the only thing writing the query string, and it has
+    // gone: WardrobeInsights writes it through a routerLink from inside
+    // /wardrobe, and the default route-reuse strategy keeps this component when
+    // the route config has not changed — so the constructor does not run again
+    // and a snapshot read would never see that write. The loop 110 priced needs
+    // no guard, because normalise is idempotent: the URL this page writes reads
+    // back as the value the store already holds, and nothing on this path
+    // navigates. The emitted map is read rather than route.snapshot, so there
+    // is no question of which of the two moves first. DECISIONS.md 110, 229.
+    this.route.queryParamMap
+      .pipe(takeUntilDestroyed())
+      .subscribe((params) => this.store.setFilters(this.filtersFromUrl(params)));
+    // Once, and deliberately not inside the subscription above: filtering runs
+    // client-side over the loaded collection, so a filter arriving by URL needs
+    // no request and a reload per chip press would be the cost of one.
     this.store.load();
     // WardrobeStore is providedIn: 'root' and outlives this component, so the
     // loop has no owner unless one is given here. Without it a poll started on
@@ -414,8 +427,7 @@ export class WardrobePage {
     this.sheetOpen.set(false);
   }
 
-  private filtersFromUrl(): ItemFilters {
-    const params = this.route.snapshot.queryParamMap;
+  private filtersFromUrl(params: ParamMap): ItemFilters {
     return {
       category: member(params.get('category'), CATEGORIES),
       color_primary: member(params.get('color_primary'), COLORS),
@@ -423,6 +435,10 @@ export class WardrobePage {
       formality_max: scale(params.get('formality_max')),
       warmth_min: scale(params.get('warmth_min')),
       warmth_max: scale(params.get('warmth_max')),
+      // The literal string and nothing else, which is `member` above applied to
+      // a vocabulary of one: `?never_worn=1` and `?never_worn=yes` are values
+      // outside it and are dropped rather than read as true. DECISIONS.md 110.
+      never_worn: params.get('never_worn') === 'true' ? true : undefined,
     };
   }
 

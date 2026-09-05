@@ -100,7 +100,7 @@ same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
 task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, **which task 3.1 closed**, printing both indexes in `02` before migration `0004` built them and finding, on the way, that deleting them failed no test. **O-29 and O-30 were opened at task 3.2**, and they are the two kinds this file has collected most: a cost that only becomes visible on its third instance — three screens with no way into them — and a documented endpoint with nothing under its heading, which is **O-1's shape** found the same way, by the task implementing the section next to it. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had. **O-31 was opened at task 4.1**, and it is the first item here that is a defect in a *shipped* artefact rather than in a document or an unread surface: three constraint names that the live schema has held wrongly since Stage 0, found by the task that was about to add a fourth the same way, and invisible to the one test written to catch exactly it. **Task 4.3 closed O-7**, the oldest item still open — audit 1 predicted the unsatisfiable trip constraints that `DECISIONS.md` 190 later had to settle, and its recommendation is taken in shape though not in number, for measurements taken after it was written. **Task 4.3 also closed O-27**, three lines in the fake, after a fourteen-day trip
 turned "a `502` for four months of the year" into "a `502` for nearly any trip".
-**O-32 was opened by the same task**, and it is the first that is a collision between two stages rather than a defect in either: Stage 4's repack and delete were specified before Stage 3 gave a look three columns worth keeping, and neither document is wrong on its own terms. **Task 4.4 closed it**, taking the recommendation in full and adding the thing three written options had all left out — *when* the destruction happens relative to the model call, which is the difference between a failed repack that costs nothing and one that empties a trip. Task 4.3 also **closed O-26**, across two of its three commits — the contract struck the field, the code followed, and the field that had survived 157's test twice failed it on the third asking.
+**O-32 was opened by the same task**, and it is the first that is a collision between two stages rather than a defect in either: Stage 4's repack and delete were specified before Stage 3 gave a look three columns worth keeping, and neither document is wrong on its own terms. **Task 4.4 closed it**, taking the recommendation in full and adding the thing three written options had all left out — *when* the destruction happens relative to the model call, which is the difference between a failed repack that costs nothing and one that empties a trip. Task 4.3 also **closed O-26**, across two of its three commits — the contract struck the field, the code followed, and the field that had survived 157's test twice failed it on the third asking. **O-36 and O-37 were opened at task 3.6a**, and they are the two things a task finds when it is the first to *use* work that already shipped: an endpoint whose caller was never built, noticed only because both tasks sit on one checklist, and a number that has been approximate since 1.8 and became visible the moment something linked to the list behind it. Neither is a contradiction between documents — the first is a gap between two halves of one task, and the second is a documented trade-off meeting its first reader who can see it.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -1925,3 +1925,65 @@ acceptable and permanent, recorded in `DECISIONS.md`, in which case 4.18's dedup
 stops being a mitigation and becomes the answer. Both are cheap; leaving it
 undecided is what is not, because the next reader of either vocabulary will
 re-derive this paragraph.
+
+#### O-36 · `DELETE /looks/{id}/wear` has no caller, and 3.4a's acceptance criterion is unticked — opened at task 3.6a
+
+3.4a is built on the server and not on the client. `DELETE /looks/{id}/wear`
+landed at `167d3d4` with `DECISIONS.md` 226 behind it and integration tests over
+both halves — the count returns exactly, the date only when it reaches zero —
+and **nothing calls it**. The stage file's frontend paragraph specifies the
+caller: a toast on `/saved` for ~5 seconds after a successful wear, *"Marked as
+worn today · Undo"*, restoring the button through the same store path 3.4 wrote
+for the wear. None of that exists.
+
+**The criterion is left unticked deliberately.** `STAGE-3`'s list still reads
+*"`DELETE /looks/{id}/wear` reverses a wearing and the toast on `/saved` calls
+it — 3.4a"*, and half of that is true. Ticking it on the endpoint alone would
+make the checklist say the escape hatch is reachable when the one control it
+exists for still has no way back.
+
+**This is O-1's and O-30's shape, one level along**: a surface that is built,
+documented and unreachable. It is the third time this project has shipped an
+endpoint before its caller, and the first where the endpoint exists to undo a
+destructive action the user can already take — `POST /looks/{id}/wear` is live
+on `/saved`, so the tap that needs undoing is available today and the undo is
+not.
+
+**What closes it.** The frontend half of 3.4a, as its own task and its own
+commit. Recorded here rather than folded into 3.6a because 3.6a was scoped to
+the insights panel and the wardrobe filter, and an untracked second feature in
+one commit is what `CONVENTIONS.md`'s commit-per-task rule exists to prevent.
+Noticed by 3.6a only because both tasks are Stage 3 additions on one checklist.
+
+#### O-37 · The insights count and the grid behind it can disagree above 200 garments — opened at task 3.6a
+
+The panel prints *"34 of your 136 tagged pieces have never been worn"*, counted
+by `GET /items/stats` over **every** unarchived `ready` row. The link under that
+sentence filters the grid, and the grid holds `WARDROBE_PAGE_SIZE` rows — 200,
+one page, no `offset`, because filtering is client-side over the loaded
+collection. **Above 200 garments the list can be shorter than the number that
+led to it**, with nothing on screen accounting for the difference.
+
+**Not new, and not this task's doing.** The split is `DECISIONS.md` 094 and 100:
+`total` is the server's and knows about rows past the page, where anything
+counted off `items()` cannot. The category chips have lived with it since 1.8 —
+`categoryCounts` counts the loaded page on purpose, and `wardrobe.page.ts` says
+so. What 3.6a changes is **visibility**: a chip whose count is a little low is a
+number nobody checks, where a sentence that promises 34 and delivers a grid of
+28 is a promise the user can see broken.
+
+**Why it is not fixed here.** Every fix is larger than this task. Sending
+`never_worn` to `GET /items` and paging server-side reverses the client-side
+filtering `05-FRONTEND-SPEC.md` has specified since it was written and adds the
+query parameter `AUDITS.md` O-16 argues against. Counting the filtered grid off
+`items()` and printing *that* number on the panel throws away the only count
+that is right. Raising `WARDROBE_PAGE_SIZE` moves the boundary without removing
+it. **`01-ARCHITECTURE.md` sizes a realistic wardrobe at 80–150**, so the
+condition is currently unreachable for the users the project is built for, and
+the demo wardrobe is 40 rows.
+
+**What closes it.** A decision at Stage 5 about what this application does above
+200 garments, which is one question with three readers — this panel, the header
+count, and the category chips — and should be answered once for all three rather
+than three times. Recorded now because 3.6a is what made it visible, and the
+next person to see a short list will look for a bug in the filter.

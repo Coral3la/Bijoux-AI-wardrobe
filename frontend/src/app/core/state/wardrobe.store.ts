@@ -64,6 +64,12 @@ export interface ItemFilters {
   readonly formality_max?: number;
   readonly warmth_min?: number;
   readonly warmth_max?: number;
+  // `true` rather than `boolean`, so an off filter cannot be spelled as
+  // `never_worn: false` — the absent key is the only off state, which is what
+  // every other dimension here means by omission and what normalise below
+  // relies on. It is also what keeps `?never_worn=false` out of the address
+  // bar. DECISIONS.md 228.
+  readonly never_worn?: true;
 }
 
 // Transcribed by hand from 02-DATA-MODEL.md, where `formality` and `warmth` are
@@ -94,17 +100,28 @@ function admitsRange(
   return (min === undefined || value >= min) && (max === undefined || value <= max);
 }
 
-// `status` is deliberately absent from this function, and the stopped-waiting
-// tile staying visible under every filter *falls out of* that rather than being
-// provided by it: its tags really are null. Anyone simplifying this rule to
-// read `status` should know that is what they are removing. DECISIONS.md 109.
+// `status` is deliberately absent from every clause but the last, and the
+// stopped-waiting tile staying visible under the four tag filters *falls out
+// of* that rather than being provided by it: its tags really are null. Anyone
+// simplifying those four to read `status` should know that is what they are
+// removing.
+//
+// `never_worn` is the exception and it is not a tag filter. `wear_count` is
+// NOT NULL DEFAULT 0, so there is no unknown for 109's rule to protect, and a
+// processing row's zero means nothing has happened yet rather than that nobody
+// wore it — which is exactly the row the panel's `ready`-scoped count leaves
+// out. The gate is written here rather than factored into a helper: the next
+// status-aware filter has to make this argument again rather than inherit it.
+// DECISIONS.md 109, 228.
 export function applyFilters(items: readonly Item[], filters: ItemFilters): readonly Item[] {
   return items.filter(
     (candidate) =>
       admits(candidate.category, filters.category) &&
       admits(candidate.color_primary, filters.color_primary) &&
       admitsRange(candidate.formality, filters.formality_min, filters.formality_max) &&
-      admitsRange(candidate.warmth, filters.warmth_min, filters.warmth_max),
+      admitsRange(candidate.warmth, filters.warmth_min, filters.warmth_max) &&
+      (filters.never_worn === undefined ||
+        (candidate.status === 'ready' && candidate.wear_count === 0)),
   );
 }
 
@@ -144,6 +161,7 @@ function normalise(filters: ItemFilters): ItemFilters {
     ...(formalityMax !== undefined && { formality_max: formalityMax }),
     ...(warmthMin !== undefined && { warmth_min: warmthMin }),
     ...(warmthMax !== undefined && { warmth_max: warmthMax }),
+    ...(filters.never_worn !== undefined && { never_worn: filters.never_worn }),
   };
 }
 
