@@ -917,7 +917,7 @@ describe('WardrobePage', () => {
     });
 
     // An account with no display name keeps the line and loses the name.
-    // `userLabel()` would have put an email address here.
+    // A fallback to the email address would have put one here.
     it('keeps the greeting and drops the name when there is no display name', async () => {
       vi.setSystemTime(new Date(2026, 8, 1, 9));
       signIn(null);

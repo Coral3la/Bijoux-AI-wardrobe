@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { Chip, ChipVariant } from './chip';
+import { Chip } from './chip';
 
 // `class="shrink-0"` is the real one from the wardrobe's chip row, which scrolls
 // horizontally: if the host binding replaced it the row would wrap instead.
@@ -11,20 +11,18 @@ import { Chip, ChipVariant } from './chip';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Chip],
   template: `
-    <button appChip [active]="active()" [variant]="variant()" class="shrink-0">Tops</button>
+    <button appChip [active]="active()" class="shrink-0">Tops</button>
   `,
 })
 class ChipHost {
   readonly active = input(false);
-  readonly variant = input<ChipVariant>('default');
 }
 
 let fixture: ComponentFixture<ChipHost>;
 
-async function render(active = false, variant: ChipVariant = 'default'): Promise<HTMLElement> {
+async function render(active = false): Promise<HTMLElement> {
   fixture = TestBed.createComponent(ChipHost);
   fixture.componentRef.setInput('active', active);
-  fixture.componentRef.setInput('variant', variant);
   await fixture.whenStable();
 
   const chip = (fixture.nativeElement as HTMLElement).querySelector('button');
@@ -64,9 +62,9 @@ describe('Chip', () => {
   });
 
   it('keeps the classes the caller wrote beside its own', async () => {
-    const chip = await render(true, 'accent');
+    const chip = await render(true);
 
     expect(chip.classList.contains('shrink-0')).toBe(true);
-    expect(chip.classList.contains('bg-accent-wash')).toBe(true);
+    expect(chip.classList.contains('bg-ink')).toBe(true);
   });
 });

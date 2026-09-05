@@ -134,22 +134,22 @@ def test_rejects_an_empty_head() -> None:
         validate_image_type(b"")
 
 
-def test_has_one_member_per_documented_transform() -> None:
-    # `07-DEPLOYMENT.md` names four. A fifth member added without a
-    # `_TRANSFORMS` entry surfaces as a KeyError inside build_url at whatever
-    # call site reaches it first; this is the cheaper place to notice.
-    assert len(Transform) == 4
+def test_ships_exactly_the_transforms_deployment_assigns_to_the_api() -> None:
+    # Transcribed from `07-DEPLOYMENT.md`'s table rather than derived from the
+    # enum, so a member added or dropped on one side fails here instead of
+    # moving the expectation with it (101). A member added without a
+    # `_TRANSFORMS` entry would otherwise surface as a KeyError inside
+    # build_url at whatever call site reaches it first.
+    assert {member.value for member in Transform} == {"thumbnail", "vision"}
 
 
 @pytest.mark.parametrize(
     "transform,expected",
     [
         (Transform.THUMBNAIL, "w_300,h_300,c_pad,b_white,f_auto,q_auto"),
-        (Transform.DETAIL, "w_800,c_limit,f_auto,q_auto"),
         (Transform.VISION, "w_800,c_limit,f_jpg,q_auto"),
-        (Transform.LOOKCARD, "w_400,h_500,c_pad,b_transparent,f_auto,q_auto"),
     ],
-    ids=["thumbnail", "detail", "vision", "lookcard"],
+    ids=["thumbnail", "vision"],
 )
 def test_builds_each_transform_exactly_as_deployment_documents_it(
     cloud_name: str, transform: Transform, expected: str
@@ -175,18 +175,18 @@ def test_the_vision_transform_pins_the_format_rather_than_negotiating(cloud_name
 
 
 def test_keeps_the_folder_separators_in_a_public_id(cloud_name: str) -> None:
-    assert build_url("bijoux/a-user/asset", Transform.DETAIL).endswith("/bijoux/a-user/asset")
+    assert build_url("bijoux/a-user/asset", Transform.THUMBNAIL).endswith("/bijoux/a-user/asset")
 
 
 def test_escapes_a_public_id_that_would_otherwise_change_the_path(cloud_name: str) -> None:
-    assert build_url("a b?c#d", Transform.DETAIL).endswith("/a%20b%3Fc%23d")
+    assert build_url("a b?c#d", Transform.THUMBNAIL).endswith("/a%20b%3Fc%23d")
 
 
 def test_raises_when_no_cloud_name_is_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "CLOUDINARY_CLOUD_NAME", "")
 
     with pytest.raises(StorageError):
-        build_url("bijoux/a-user/asset", Transform.DETAIL)
+        build_url("bijoux/a-user/asset", Transform.THUMBNAIL)
 
 
 def test_uploads_into_a_folder_named_for_the_user(monkeypatch: pytest.MonkeyPatch) -> None:

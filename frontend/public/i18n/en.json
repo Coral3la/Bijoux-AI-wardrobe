@@ -246,7 +246,6 @@
   "item.error.load": "We couldn't open that item.",
   "item.error.save": "We couldn't save those tags. Check the fields and try again.",
   "item.error.delete": "We couldn't delete that item.",
-  "item.notFound": "That item is not in your wardrobe.",
   "item.edit.title": "Tags",
   "item.edit.section.garment": "Garment",
   "item.edit.section.colourAndPattern": "Colour & pattern",

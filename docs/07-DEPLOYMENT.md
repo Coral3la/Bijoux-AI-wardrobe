@@ -176,22 +176,23 @@ Verify the current allowance before relying on this. Treat it as polish, never a
 
 ## Cloudinary transform URLs
 
-Build these in `services/storage.py` and in the frontend `cloudinaryUrl` pipe. Never store a full URL in the database.
+Built in `services/storage.py` and in the frontend `cloudinaryUrl` pipe, each side for the URLs it alone hands out or fetches. Never store a full URL in the database.
 
 ```
-thumbnail  w_300,h_300,c_pad,b_white,f_auto,q_auto
-detail     w_800,c_limit,f_auto,q_auto
-vision     w_800,c_limit,f_jpg,q_auto         # what the AI sees
-lookcard   w_400,h_500,c_pad,b_transparent,f_auto,q_auto
+thumbnail  w_300,h_300,c_pad,b_white,f_auto,q_auto   backend — `ItemResponse.image_url`, on every item
+detail     w_800,c_limit,f_auto,q_auto               frontend — the item screen
+vision     w_800,c_limit,f_jpg,q_auto                backend — what the AI sees
 ```
+
+The two sides keep different pairs because each builds only what it delivers: the API puts the thumbnail on every item it answers and sends the vision URL to the model itself, and the browser builds the one URL the API never sends, the item screen's larger image. The frontend pipe also carries the `thumbnail` string without a caller, as a hand-written mirror of the server's (`DECISIONS.md` 118); nothing compares the two copies.
 
 `c_pad` with a white background keeps the grid visually even regardless of the original aspect ratio. This matters more than it sounds — a grid of mixed aspect ratios looks broken.
 
-Three things to know about this table, all established at task 0.6:
+Three things to know about this table, the first two established at task 0.6:
 
 - **`detail` and `vision` held the same string until task 1.1, and now differ.** That is precisely what the split existed to allow: `vision` moved to `f_jpg` without changing what a person sees on the item screen. `DECISIONS.md` 046 and 083.
-- **`lookcard`'s `b_transparent` does nothing useful yet.** Padding to transparent around a photograph that still has its own background produces a transparent border and an unchanged photo. It becomes correct only if background removal is ever switched on.
 - **`f_auto` on a HEIC original was settled at task 1.1 and the fix was applied.** One real iPhone HEIC, fetched three ways: no `Accept` header and `Accept: */*` both returned `image/jpeg`, a browser-like `Accept` returned `image/webp`. Nothing broken — but `f_auto`'s answer depends on a header OpenAI's fetcher sends and we cannot observe, so `vision` is pinned to `f_jpg`. `DECISIONS.md` 083 records what was and was not caught.
+- **`lookcard` (`w_400,h_500,c_pad,b_transparent,f_auto,q_auto`) was retired at the 2026-09-05 review.** Nothing on either side ever built it — the look card renders the server's thumbnail — and its `b_transparent` did nothing useful without background removal switched on. `CODE-REVIEW-2026-09-05.md` C11 and C12.
 
 The backend builds these URLs with an f-string rather than with `cloudinary.utils.cloudinary_url`, which returns a tuple and emits `http://` unless `secure=True` is configured. The frontend pipe hand-formats the identical string. Both must agree byte for byte, which is the reason neither uses a library.
 

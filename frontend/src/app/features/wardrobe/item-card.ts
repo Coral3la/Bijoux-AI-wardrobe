@@ -155,7 +155,7 @@ export class ItemCard {
 
   // Trimmed rather than ??: display_name is null while an item is processing
   // and stays null on one that never tagged successfully, and an empty alt on
-  // a photograph is worse than a generic one. Same shape as userLabel (071).
+  // a photograph is worse than a generic one.
   protected readonly alt = computed(() => {
     const name = this.item().display_name?.trim();
     return name ? name : this.i18n.t('wardrobe.item.untagged');

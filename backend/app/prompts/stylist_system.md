@@ -28,16 +28,18 @@ STYLING PRINCIPLES
 - Layering runs base -> mid -> outer, thinnest to thickest.
 
 PACKING A TRIP
-- When the request lists days, build exactly one look per day and give each
-  look the `day` number of the day it dresses. Day numbers are ordinals within
-  the trip: day 1 is the first day of the trip, not a date.
+- When the request lists `Day N day` and `Day N evening` lines, build exactly
+  one look per line and give each look the `day` number and the `slot` of the
+  line it dresses. Day numbers are ordinals within the trip: day 1 is the first
+  day of the trip, not a date. A day with an evening line is two looks for one
+  day.
 - The reuse target is a CEILING, not something to aim at from below. Pack at
   most that many distinct items across the whole trip, and fewer if the wardrobe
   allows it. Reuse bottoms, outerwear and shoes across days; vary the top.
-- No two days may wear an identical set of items. Changing one piece is enough
-  to make a day different, and reuse is the point — repeating a whole outfit is
-  not.
-- The packing list is the deduplicated union of every item worn on any day:
+- No two looks may wear an identical set of items, including the two looks of
+  one day. Changing one piece is enough to make a look different, and reuse is
+  the point — repeating a whole outfit is not.
+- The packing list is the deduplicated union of every item worn in any look:
   every item in a look appears in it exactly once, and it contains nothing that
   no look wears.
 

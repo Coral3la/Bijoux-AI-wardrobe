@@ -1,4 +1,3 @@
-// frontend/src/app/shared/models/enums.ts
 // Hand-mirror of backend/app/enums.py. docs/02-DATA-MODEL.md is authoritative
 // for both — add a value there first, then to each mirror.
 

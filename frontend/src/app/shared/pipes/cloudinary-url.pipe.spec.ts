@@ -20,14 +20,12 @@ describe('cloudinaryUrl', () => {
     );
   });
 
-  // The four strings pinned individually, against the document rather than
-  // against themselves. Mutating any one of them fails exactly one row.
-  it('carries 07s four transforms verbatim', () => {
+  // The two strings pinned individually, against the document rather than
+  // against themselves. Mutating either of them fails exactly one row.
+  it('carries 07s two transforms verbatim', () => {
     expect(TRANSFORMS).toEqual({
       thumbnail: 'w_300,h_300,c_pad,b_white,f_auto,q_auto',
       detail: 'w_800,c_limit,f_auto,q_auto',
-      vision: 'w_800,c_limit,f_jpg,q_auto',
-      lookcard: 'w_400,h_500,c_pad,b_transparent,f_auto,q_auto',
     });
   });
 

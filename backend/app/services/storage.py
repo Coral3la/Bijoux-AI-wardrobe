@@ -42,21 +42,17 @@ class StorageError(Exception):
 
 class Transform(StrEnum):
     THUMBNAIL = "thumbnail"
-    DETAIL = "detail"
     VISION = "vision"
-    LOOKCARD = "lookcard"
 
 
-# The table in `07-DEPLOYMENT.md`. `detail` and `vision` were the same string
-# until task 1.1, and this is exactly the move the split existed to allow:
-# `vision` is fetched by OpenAI rather than by a browser, so f_auto would pick
-# a format from an Accept header we cannot observe. Pinned to JPEG instead.
-# `DECISIONS.md` 083.
+# The two rows of `07-DEPLOYMENT.md`'s table this process builds a URL for:
+# the thumbnail every `ItemResponse` carries, and the image the vision model
+# is sent. `vision` is pinned to `f_jpg` where a browser-facing transform uses
+# `f_auto`: it is fetched by OpenAI rather than by a browser, so `f_auto` would
+# pick a format from an Accept header we cannot observe. `DECISIONS.md` 083.
 _TRANSFORMS: dict[Transform, str] = {
     Transform.THUMBNAIL: "w_300,h_300,c_pad,b_white,f_auto,q_auto",
-    Transform.DETAIL: "w_800,c_limit,f_auto,q_auto",
     Transform.VISION: "w_800,c_limit,f_jpg,q_auto",
-    Transform.LOOKCARD: "w_400,h_500,c_pad,b_transparent,f_auto,q_auto",
 }
 
 # ISO base media brands that mean "this is a HEIF still image". An iPhone set

@@ -80,7 +80,7 @@ SEED_VERSION = 1
 
 # 31**6 is 8.9e8 and this table is tens of rows, so a collision is not expected;
 # catching it is what makes that a claim rather than a hope. Same insert-and-
-# catch shape as `items.py`, for the reason `DECISIONS.md` 432 gives.
+# catch shape as `items.py`, for the reason `DECISIONS.md` 052 gives.
 SHORT_ID_ATTEMPTS = 3
 
 

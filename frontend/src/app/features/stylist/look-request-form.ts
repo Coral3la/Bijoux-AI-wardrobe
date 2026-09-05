@@ -11,13 +11,9 @@ import { OCCASIONS, Occasion } from '../../shared/models/enums';
 // floor here would be this screen deciding something no document has.
 const FORECAST_HORIZON_DAYS = 15;
 
-// The second copy of this pair, and the one that turns the duplication into a
-// standing cost rather than a one-off. `filter-bar.ts` carries the same two
-// constants for the same reason: the shared `appChip` directive sets its font
-// size in the base string every variant shares, so 11px cannot be reached from
-// a call site. Two converted screens now draw an identical chip from two
-// declarations; the third screen to need it should convert the directive
-// instead of copying this again. DECISIONS.md 219, 220.
+// A copy of the strings `appChip` has painted since its own Atelier
+// conversion, written out before the directive was converted; chip.ts records
+// the order. CODE-REVIEW-2026-09-05.md C7 is the conversion.
 const CHIP =
   'inline-flex min-h-11 shrink-0 items-center rounded-full border px-4 text-[11px] font-medium tracking-[0.18em] uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const CHIP_STATES = {

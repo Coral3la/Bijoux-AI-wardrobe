@@ -49,14 +49,10 @@ const SWATCHES = {
   silver: '#c3c8d0',
 } as const satisfies Record<Color, string>;
 
-// Written here rather than taken from the shared `appChip` directive, and that
-// is a decision rather than an oversight. The directive paints the pre-Atelier
-// chip — 14px, a strong line, a white fill — and it sets its font size in the
-// base string every variant shares, so a caller cannot make an 11px chip out of
-// it: two utilities setting one property are settled by the order of the
-// compiled stylesheet, which is the trap chip.ts itself documents. Five screens
-// still want the chip the directive draws. When they are converted the
-// directive becomes this and these constants go. DECISIONS.md 219.
+// A copy of the strings `appChip` has painted since its own Atelier
+// conversion; chip.ts records why the copy came first. Not converted here yet:
+// the Filters disclosure below carries aria-expanded, and the directive would
+// add aria-pressed beside it. CODE-REVIEW-2026-09-05.md C7 is the conversion.
 const CHIP =
   'inline-flex min-h-11 shrink-0 items-center gap-x-1.5 rounded-full border px-4 text-[11px] font-medium tracking-[0.18em] uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const CHIP_STATES = {

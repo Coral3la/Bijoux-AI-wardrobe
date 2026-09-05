@@ -83,8 +83,8 @@ if _STATIC_DIR.is_dir():
         if spa_path.startswith("api/") or spa_path == "health":
             raise HTTPException(status_code=404, detail="Not Found")
 
-        candidate = _STATIC_DIR / spa_path
-        if candidate.is_file():
+        candidate = (_STATIC_DIR / spa_path).resolve()
+        if candidate.is_file() and candidate.is_relative_to(_STATIC_DIR):
             return FileResponse(candidate)
         # SPA fallback: hand index.html to the Angular router for any
         # deep link the user refreshes on (/wardrobe, /trip/42, …).

@@ -1,7 +1,5 @@
 import { Directive, computed, input } from '@angular/core';
 
-export type ChipVariant = 'default' | 'accent';
-
 // Atelier's chip, and the conversion 220 asked for rather than a third copy of
 // it. `filter-bar.ts` and `look-request-form.ts` wrote the same treatment out
 // locally because this directive set its font size in the base string every
@@ -12,20 +10,10 @@ export type ChipVariant = 'default' | 'accent';
 const BASE =
   'inline-flex min-h-11 items-center rounded-full border px-4 text-[11px] font-medium tracking-[0.18em] uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
-// `accent` has no caller and is left standing rather than deleted: it lost its
-// last one when the wardrobe's filter bar was converted, which is a tidy that
-// belongs to whoever is looking at that screen. It is re-struck off the same
-// shape so the two variants cannot drift into different chips.
-const STATES: Record<ChipVariant, { readonly inactive: string; readonly active: string }> = {
-  default: {
-    inactive: 'border-line text-ink-muted',
-    active: 'border-ink bg-ink text-canvas',
-  },
-  accent: {
-    inactive: 'border-line bg-surface text-ink-muted',
-    active: 'border-accent-soft bg-accent-wash text-accent',
-  },
-};
+const STATES = {
+  inactive: 'border-line text-ink-muted',
+  active: 'border-ink bg-ink text-canvas',
+} as const;
 
 @Directive({
   selector: '[appChip]',
@@ -40,10 +28,8 @@ const STATES: Record<ChipVariant, { readonly inactive: string; readonly active: 
 })
 export class Chip {
   readonly active = input(false);
-  readonly variant = input<ChipVariant>('default');
 
-  protected readonly classes = computed(() => {
-    const state = STATES[this.variant()];
-    return `${BASE} ${this.active() ? state.active : state.inactive}`;
-  });
+  protected readonly classes = computed(
+    () => `${BASE} ${this.active() ? STATES.active : STATES.inactive}`,
+  );
 }

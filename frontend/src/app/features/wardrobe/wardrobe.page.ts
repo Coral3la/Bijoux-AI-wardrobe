@@ -298,9 +298,9 @@ export class WardrobePage {
   // the part of the day a screen was opened in does not change under the reader.
   private readonly slot = greetingSlot(new Date());
 
-  // Deliberately not `userLabel()`. That function falls back to the email
-  // address, which is the right answer for a "signed in as" label and the wrong
-  // one for a greeting — nobody is called coral@example.com. A blank name takes
+  // No fallback to the email address, which is the right answer for a "signed
+  // in as" label and the wrong one for a greeting — nobody is called
+  // coral@example.com. A blank name takes
   // the nameless key instead, so the line keeps its shape and loses only the
   // name; an absent parameter would not do, because `t` leaves an unsupplied
   // placeholder visible on purpose. DECISIONS.md 215.

@@ -432,8 +432,8 @@ def list_looks(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> LookListResponse:
     # `04-API-SPEC.md` names a fourth filter, `trip_id`, and it is not here:
-    # the column arrives with migration `0005`, and a parameter that filters on
-    # a column the database lacks is a 500 rather than an empty list.
+    # the column has existed since migration `0005`, but no planned screen sends
+    # it — a trip's looks are read through `GET /trips/{id}`.
     filters: list[ColumnElement[bool]] = [Look.user_id == current_user.id]
     if is_saved is not None:
         filters.append(Look.is_saved.is_(is_saved))

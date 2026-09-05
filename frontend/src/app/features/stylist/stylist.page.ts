@@ -196,8 +196,8 @@ export class StylistPage {
 
   // The garment "Style around this" arrived with, or null. Held here rather
   // than in the draft for the same reason the draft is held here rather than in
-  // the form: it outlives the control that renders it, and the skeleton
-  // unmounts that control on every submit.
+  // the form: the page composes the request, so the page owns its inputs
+  // (look-request-form.ts records the change at DR.20).
   protected readonly anchor = signal<Item | null>(null);
 
   // What the look on screen is the answer to, snapshotted when the request went

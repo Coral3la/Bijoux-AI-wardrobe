@@ -30,8 +30,8 @@ export class LooksApi {
   //
   // `is_saved` is the only filter any caller sends. The endpoint also takes
   // `from_date` and `to_date`, and `04-API-SPEC.md` names a `trip_id` the
-  // server does not implement until migration 0005 — none of the three has a
-  // screen, so none of them is a parameter here.
+  // server still does not declare — none of the three has a screen, so none of
+  // them is a parameter here.
   listSaved(): Observable<LookListResponse> {
     return this.http.get<LookListResponse>(`${environment.apiUrl}/looks`, {
       params: { is_saved: true },
