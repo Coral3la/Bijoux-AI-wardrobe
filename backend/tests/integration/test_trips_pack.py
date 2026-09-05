@@ -550,6 +550,38 @@ def test_the_learned_preferences_reach_the_trip_context(
     assert "USER PREFERENCES" in fake.contexts[0].preferences
 
 
+def test_the_trip_recency_line_is_softened_and_skips_a_garment_with_no_sibling(
+    client: TestClient,
+    db: Session,
+    user: User,
+    authorization: Callable[[User], dict[str, str]],
+    wardrobe: dict[str, Item],
+    wired: Callable[..., FakeStylist],
+) -> None:
+    """3.5a reaches the trip through `learned_preferences`, not through a second
+    derivation — the bag is the only bag and `top_a` is one of three."""
+    for name in ("top_a", "bag"):
+        wardrobe[name].last_worn_at = date.today()
+    for feedback in (FEEDBACK_UP, FEEDBACK_UP, FEEDBACK_DOWN):
+        look = Look(user_id=user.id, feedback=feedback)
+        db.add(look)
+        db.flush()
+        db.add_all(
+            [LookItem(look_id=look.id, item_id=wardrobe[name].id) for name in ("top_a", "bottom_a")]
+        )
+    db.commit()
+    fake = wired(days=3)
+
+    post(client, user, authorization)
+
+    preferences = fake.contexts[0].preferences or ""
+    assert (
+        "- Recently worn (prefer an equally good alternative; not a restriction): "
+        f"{wardrobe['top_a'].short_id}"
+    ) in preferences
+    assert wardrobe["bag"].short_id not in preferences
+
+
 def test_the_trip_context_carries_the_reuse_target(
     client: TestClient,
     user: User,

@@ -77,7 +77,7 @@ Claude Code updates this file at the end of every stage: tick the criteria, set 
 - [x] Preferences fed into the prompt
 - [x] Wardrobe insights
 - [ ] Undo a wearing *(3.4a, added 2026-09-02)*
-- [ ] Soften the *recently worn* hint *(3.5a, added 2026-09-02)*
+- [x] Soften the *recently worn* hint *(3.5a, added 2026-09-02)*
 - [ ] Browse the never-worn *(3.6a, added 2026-09-02)*
 
 ## Stage 4 — Trip Packing  *(signature feature — do not cut)*

@@ -23,6 +23,7 @@ the modules in this package by name and mounts a `router` from each; this one ha
 none, and the underscore is what stops a reader expecting one.
 """
 
+from collections import Counter
 from collections.abc import Sequence
 from datetime import date as date_type
 from datetime import timedelta
@@ -42,6 +43,15 @@ from app.schemas.item import ItemResponse
 MIN_RATED_LOOKS = 3
 PREFERENCE_LIMIT = 3
 RECENT_WEAR_DAYS = 3
+
+# How many garments a category may hold before the recently-worn line stops
+# naming it. At 1 it is true singletons only: the user owns one dress, so the
+# only way to honour "you wore this" is to leave the slot empty, and a hint the
+# model cannot act on spends its attention on a choice it does not have. The
+# wider reading — counting the *alternatives*, which would also drop a category
+# of two, where the hint dictates rather than suggests — is deliberately not
+# taken on a first cut. `DECISIONS.md` 227.
+SINGLETON_THRESHOLD = 1
 
 # Every member of `Category`, which is nine since 2.6a appended the last two.
 # The block prints these to the model rather than the raw enum values, so a
@@ -175,17 +185,35 @@ def learned_preferences(
     # without an upper bound a garment worn next week would be reported as
     # recently worn for a look built today. `DECISIONS.md` 185.
     wardrobe_ids = {item.id for item in wardrobe}
+    # Counted over the styleable wardrobe rather than the whole closet, because
+    # an archived or still-processing sibling is not something the model may
+    # wear instead. `category` is `Category | None` on the schema and never
+    # `None` here — `styleable_wardrobe` dropped those rows — but a `None`
+    # reaching the exclusion list would make `NOT IN` NULL for every row and
+    # silence the entire line instead of one garment.
+    category_sizes = Counter(item.category for item in wardrobe if item.category)
+    singleton_categories = [
+        category for category, size in category_sizes.items() if size <= SINGLETON_THRESHOLD
+    ]
     recent_since = for_date - timedelta(days=RECENT_WEAR_DAYS - 1)
     recently_worn = db.scalars(
         select(Item.short_id)
         .where(
             Item.id.in_(wardrobe_ids),
+            Item.category.not_in(singleton_categories),
             Item.last_worn_at >= recent_since,
             Item.last_worn_at <= for_date,
         )
         .order_by(Item.last_worn_at.desc(), Item.short_id)
     ).all()
     if recently_worn:
-        lines.append(f"- Recently worn (avoid repeating): {', '.join(recently_worn)}")
+        # Not "avoid repeating", which reads as a filter and was treated as one.
+        # The system prompt tells the model that stated preferences override the
+        # styling principles, and this block wears the word PREFERENCES in its
+        # header — so the sentence has to demote itself in place. `DECISIONS.md` 227.
+        lines.append(
+            "- Recently worn (prefer an equally good alternative; not a restriction): "
+            f"{', '.join(recently_worn)}"
+        )
 
     return "\n".join(lines)

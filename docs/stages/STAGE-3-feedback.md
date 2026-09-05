@@ -157,6 +157,19 @@ Two changes to `learned_preferences` in `_stylist_shared.py`, one file, one para
 
 **Reword the line.** The current sentence is *"Recently worn (avoid repeating): ..."*, and 3.5's own paragraph notes that models over-index on it. Replace with something that ranks below style match — a first-cut candidate is *"Recently worn — prefer other items when the style match is comparable: ..."*. The exact phrasing is the task's to settle and to pin in a test against the assembled message string.
 
+**Both landed, and the two choices left open above are settled.**
+`SINGLETON_THRESHOLD` is **1**, counted over the **whole category including the
+worn garment** — true singletons only. The arithmetic this line proposed, which
+counts the *alternatives* alone, is one step more aggressive: it would also drop
+a category of two, where the hint dictates rather than suggests. That widening
+waits for run behaviour to justify it rather than being taken on a first cut.
+The sentence is **"Recently worn (prefer an equally good alternative; not a
+restriction): ..."**, and *Recently worn* stays the lead deliberately — two
+tests measure the recency window's two edges by that phrase's *absence*, so a
+new prefix would have rewritten them into tests of something else. The
+paragraph above is the specification and is left as written; this is the
+amendment. `DECISIONS.md` 227.
+
 ### 3.6a Browse the never-worn *(added 2026-09-02)*
 A view-only extension of 3.6's insights panel. The panel already prints *"N of your M tagged items have never been worn"* — this task makes that number a link that opens the list behind it, so the user can act on it herself.
 
@@ -173,9 +186,10 @@ A view-only extension of 3.6's insights panel. The panel already prints *"N of y
 - [ ] "I wore this" increments `wear_count` on every item in the look, exactly once per date
 - [ ] After 3 rated looks, the preferences block appears in the prompt — assert it in an integration test against the assembled message string
 - [ ] Recently worn items are named in the prompt as items to avoid
+  - Superseded by 3.5a's criterion below — the sentence this line names, *"Recently worn (avoid repeating)"*, has been replaced, and a garment in a singleton category is no longer named at all.
 - [x] The insights panel shows a correct never-worn count
 - [ ] `DELETE /looks/{id}/wear` reverses a wearing and the toast on `/saved` calls it — 3.4a
-- [ ] A singleton-category item is not named in the *recently worn* line, and the reworded line is asserted against the assembled prompt — 3.5a
+- [x] A singleton-category item is not named in the *recently worn* line, and the reworded line is asserted against the assembled prompt — 3.5a
 - [ ] The never-worn count on the insights panel opens a browsable list of those items — 3.6a
 
 ## Commit checkpoints

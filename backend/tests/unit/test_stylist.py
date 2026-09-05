@@ -318,7 +318,7 @@ def test_the_preferences_block_is_inserted_before_the_request() -> None:
                 "USER PREFERENCES (learned from rated looks):\n"
                 "- Liked: relaxed tops\n"
                 "- Disliked: bodycon dresses\n"
-                "- Recently worn (avoid repeating): 7BX1QM"
+                "- Recently worn (prefer an equally good alternative; not a restriction): 7BX1QM"
             )
         ),
     )
@@ -327,7 +327,7 @@ def test_the_preferences_block_is_inserted_before_the_request() -> None:
         "USER PREFERENCES (learned from rated looks):\n"
         "- Liked: relaxed tops\n"
         "- Disliked: bodycon dresses\n"
-        "- Recently worn (avoid repeating): 7BX1QM\n\n"
+        "- Recently worn (prefer an equally good alternative; not a restriction): 7BX1QM\n\n"
         "REQUEST:"
     ) in message
 

@@ -191,6 +191,7 @@ def test_rated_history_reaches_the_assembled_preferences_message(
     db: Session,
     user: User,
     wardrobe: list[Item],
+    make_item: Callable[..., Item],
     forecasts: list[Any],
     stylist: Callable[..., FakeStylist],
     authorization: Callable[[User], dict[str, str]],
@@ -199,6 +200,13 @@ def test_rated_history_reaches_the_assembled_preferences_message(
     shoes, top, bottom, dress = wardrobe[:4]
     top.fit = "relaxed"
     dress.fit = "bodycon"
+    # A second bottom, planted here rather than in the fixture so the six rows
+    # every other test in this file counts on stay six. Without it `bottom` is
+    # the only bottom the user owns, and 3.5a drops a singleton category from
+    # the recency line — this test would then measure the skip by accident.
+    sibling = make_item(
+        user_id=user.id, status=ItemStatus.READY, category=Category.BOTTOM, layer=Layer.BASE
+    )
     # Relative to `WHEN`, the day the look is *for*, which is what the recency
     # window is measured back from. This read `date.today()` while the request
     # asked for 2026-03-14, so it passed only because the window was anchored
@@ -217,14 +225,60 @@ def test_rated_history_reaches_the_assembled_preferences_message(
 
     assert response.status_code == 200
     message = stylist_service._user_message(
-        [ItemResponse.model_validate(item) for item in wardrobe], fake.contexts[0]
+        [ItemResponse.model_validate(item) for item in (*wardrobe, sibling)], fake.contexts[0]
     )
     assert (
         "USER PREFERENCES (learned from rated looks):\n"
         "- Liked: relaxed tops\n"
         "- Disliked: bodycon dresses\n"
-        f"- Recently worn (avoid repeating): {bottom.short_id}"
+        "- Recently worn (prefer an equally good alternative; not a restriction): "
+        f"{bottom.short_id}"
     ) in message
+
+
+def test_a_garment_the_user_owns_one_of_is_not_named_as_recently_worn(
+    client: TestClient,
+    db: Session,
+    user: User,
+    wardrobe: list[Item],
+    make_item: Callable[..., Item],
+    forecasts: list[Any],
+    stylist: Callable[..., FakeStylist],
+    authorization: Callable[[User], dict[str, str]],
+    cloudinary_configured: None,
+) -> None:
+    # Both garments were worn yesterday and only one is named. The dress is the
+    # only dress in the wardrobe, so the sole way to act on the hint is to leave
+    # the slot empty; the top has a sibling and the hint stays honourable. One
+    # call, so the skip and the survival are measured against one message.
+    shoes, top, bottom, dress = wardrobe[:4]
+    make_item(user_id=user.id, status=ItemStatus.READY, category=Category.TOP, layer=Layer.BASE)
+    # Archived, so it does not rescue the dress: the count runs over the
+    # styleable wardrobe, and a garment the model will never be shown is not an
+    # alternative to anything.
+    make_item(
+        user_id=user.id,
+        status=ItemStatus.READY,
+        category=Category.DRESS,
+        layer=Layer.STANDALONE,
+        is_archived=True,
+    )
+    top.last_worn_at = WHEN - timedelta(days=1)
+    dress.last_worn_at = WHEN - timedelta(days=1)
+    db.commit()
+
+    _rated_look(db, user, [shoes, top, bottom], FEEDBACK_UP)
+    _rated_look(db, user, [shoes, top, bottom], FEEDBACK_UP)
+    _rated_look(db, user, [shoes, dress], FEEDBACK_DOWN)
+
+    fake = stylist(answer(shoes.short_id, top.short_id, bottom.short_id))
+
+    assert suggest(client, user, authorization).status_code == 200
+    preferences = fake.contexts[0].preferences or ""
+    assert (
+        f"- Recently worn (prefer an equally good alternative; not a restriction): {top.short_id}"
+    ) in preferences
+    assert dress.short_id not in preferences
 
 
 def test_recency_is_measured_from_the_requested_day_not_the_server_s(

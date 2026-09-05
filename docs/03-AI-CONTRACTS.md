@@ -325,7 +325,7 @@ Height: 165 cm. Preferences: prefer high-rise, avoid crop tops.
 USER PREFERENCES (learned from rated looks):
 - Liked: relaxed tops
 - Disliked: bodycon dresses
-- Recently worn (avoid repeating): A3F9K2, 7BX1QM
+- Recently worn (prefer an equally good alternative; not a restriction): A3F9K2, 7BX1QM
 
 REQUEST:
 {one of the two blocks below}
@@ -345,6 +345,17 @@ before it, closed at both ends, over the styleable wardrobe. A request made on
 Wednesday for Saturday asks what will be stale *on Saturday*; and `worn_at`
 accepts a future date (`DECISIONS.md` 184), so an open-ended window would report
 a garment worn next week as already repeated. `DECISIONS.md` 185.
+
+**A garment the user owns only one of is not named, and the sentence ranks
+itself below style match.** Both changes arrive at task 3.5a. The count is over
+the whole category in the *styleable* wardrobe — `SINGLETON_THRESHOLD = 1` — so
+an archived or still-processing sibling does not rescue a garment: with one
+dress in the closet the only way to act on the hint is to leave the slot empty,
+and a hint the model cannot act on spends attention on a choice it does not
+have. The wording is no longer *avoid repeating*, which reads as a filter and
+was treated as one; the demotion is inside the line because the system prompt
+tells the model that stated preferences override the styling principles, and
+this block wears the word PREFERENCES in its header. `DECISIONS.md` 227.
 
 The block is derived in the suggest route and passed as text to the pure
 stylist service.
