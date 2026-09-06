@@ -39,6 +39,10 @@ from app.services.weather import (
 # api.open-meteo.com/v1/forecast?latitude=32.08&longitude=34.78&daily=... .
 # The snapped coordinates are the provider's own grid, not a transcription
 # error: 32.08 was sent and 32.0625 came back. See DECISIONS.md 145.
+# `stub_ok` re-dates `daily.time` to the day each request asks for and serves
+# the rest as captured: since B2 of the 2026-09-05 review, `get_forecast`
+# refuses an answer for a day it did not ask for, and two tests below ask for
+# days other than this one.
 LIVE_BODY: dict[str, Any] = {
     "latitude": 32.0625,
     "longitude": 34.8125,
@@ -119,12 +123,22 @@ def stub_range(monkeypatch: pytest.MonkeyPatch) -> list[httpx.Request]:
     """`stub_ok` for the four-day body. Its own fixture rather than a
     parameter on that one, because every range test asserts against
     `RANGE_BODY`'s numbers and a shared fixture would have to be told which
-    body it was serving in each of them."""
+    body it was serving in each of them.
+
+    Answers only the days the request asked for, as the provider does: a
+    one-day `get_forecast` warming the cache is refused a four-day answer
+    since B2, and the four-day tests ask for the whole window anyway."""
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
-        return httpx.Response(200, json=RANGE_BODY)
+        days = RANGE_BODY["daily"]["time"]
+        for day in (request.url.params["start_date"], request.url.params["end_date"]):
+            assert day in days, f"{day} is outside RANGE_BODY, {days[0]} to {days[-1]}"
+        first = days.index(request.url.params["start_date"])
+        last = days.index(request.url.params["end_date"]) + 1
+        daily = {field: values[first:last] for field, values in RANGE_BODY["daily"].items()}
+        return httpx.Response(200, json={**RANGE_BODY, "daily": daily})
 
     monkeypatch.setattr(weather, "_transport", lambda: _transport(handler))
     return seen
@@ -133,12 +147,18 @@ def stub_range(monkeypatch: pytest.MonkeyPatch) -> list[httpx.Request]:
 @pytest.fixture
 def stub_ok(monkeypatch: pytest.MonkeyPatch) -> list[httpx.Request]:
     """Records every request that reached the transport, so a test can assert
-    the cache prevented a second one."""
+    the cache prevented a second one.
+
+    Answers `LIVE_BODY` dated as the request asked. `get_forecast` refuses a
+    day it did not ask for since B2, and two tests here ask for a day other
+    than the captured one; every other request asks for 2026-08-26 and gets
+    the capture untouched."""
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
-        return httpx.Response(200, json=LIVE_BODY)
+        daily = {**LIVE_BODY["daily"], "time": [request.url.params["start_date"]]}
+        return httpx.Response(200, json={**LIVE_BODY, "daily": daily})
 
     monkeypatch.setattr(weather, "_transport", lambda: _transport(handler))
     return seen

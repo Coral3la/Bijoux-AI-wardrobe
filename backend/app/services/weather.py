@@ -256,7 +256,7 @@ def _forecasts(body: Any) -> list[Forecast]:
     stays because the two catch different things — a body ragged *past* the
     requested range trips this and not that — and because a parser that guesses
     at misaligned arrays is worse than one that refuses. `ValueError` is what
-    `zip` raises, and both callers already map it to `ForecastProviderError`.
+    `zip` raises, and its one caller already maps it to `ForecastProviderError`.
     """
     daily = body["daily"]
     return [
@@ -287,59 +287,9 @@ async def get_forecast(lat: float, lon: float, date: datetime.date) -> Forecast:
     for — checked locally first, so the common case costs no request — and
     `ForecastProviderError` for anything else.
     """
-    if date > datetime.date.today() + datetime.timedelta(days=FORECAST_HORIZON_DAYS):
-        raise ForecastOutOfRangeError(
-            f"Open-Meteo forecasts {FORECAST_HORIZON_DAYS} days ahead; {date} is beyond that."
-        )
-
-    lat = round(lat, COORD_PRECISION)
-    lon = round(lon, COORD_PRECISION)
-    key = (lat, lon, date)
-
-    now = time.monotonic()
-    cached = _cache.get(key)
-    if cached is not None and cached[0] > now:
-        return cached[1]
-
-    # Annotated because the mixed value types otherwise infer as `object`, which
-    # httpx's `params` will not accept.
-    params: dict[str, str | float] = {
-        "latitude": lat,
-        "longitude": lon,
-        "daily": ",".join(DAILY_FIELDS),
-        # Without this the provider answers in UTC and `date` means a different
-        # 24 hours than the user's calendar day.
-        "timezone": "auto",
-        "start_date": date.isoformat(),
-        "end_date": date.isoformat(),
-    }
-
-    # A client per call rather than one held at module level: httpx binds a
-    # connection pool to the event loop that created it, and a 30-minute cache
-    # already removes the repeat calls pooling would pay for.
-    try:
-        async with httpx.AsyncClient(transport=_transport(), timeout=_TIMEOUT_SECONDS) as client:
-            response = await client.get(FORECAST_URL, params=params)
-        # A 400 here is the provider refusing the request, not being down — a
-        # date older than its archive window arrives this way, past the guard
-        # above. Answering 502 for it would blame the wrong side.
-        if response.status_code == httpx.codes.BAD_REQUEST:
-            raise ForecastOutOfRangeError(_reason(response))
-        response.raise_for_status()
-        # `[0]` inside the `try`, because an empty `daily.time` is an
-        # `IndexError` and the clause below is what turns it into the
-        # provider error — the same reach `_read` had when it indexed here.
-        forecast = _forecasts(response.json())[0]
-    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as exc:
-        logger.warning(
-            "Forecast request failed",
-            extra={"latitude": lat, "longitude": lon, "date": date.isoformat()},
-        )
-        raise ForecastProviderError("The forecast provider did not answer.") from exc
-
-    _cache[key] = (now + CACHE_TTL_SECONDS, forecast)
-    _evict(now)
-    return forecast
+    # `[0]` needs no `try`: `get_daily_forecast` has already refused any answer
+    # whose dates are not exactly `[date]`, so the list has one element.
+    return (await get_daily_forecast(lat, lon, date, date))[0]
 
 
 async def get_daily_forecast(
@@ -393,6 +343,8 @@ async def get_daily_forecast(
     if len(held) == len(wanted):
         return held
 
+    # Annotated because the mixed value types otherwise infer as `object`, which
+    # httpx's `params` will not accept.
     params: dict[str, str | float] = {
         "latitude": lat,
         "longitude": lon,
@@ -402,6 +354,9 @@ async def get_daily_forecast(
         "end_date": end.isoformat(),
     }
 
+    # A client per call rather than one held at module level: httpx binds a
+    # connection pool to the event loop that created it, and a 30-minute cache
+    # already removes the repeat calls pooling would pay for.
     try:
         async with httpx.AsyncClient(transport=_transport(), timeout=_TIMEOUT_SECONDS) as client:
             response = await client.get(FORECAST_URL, params=params)
