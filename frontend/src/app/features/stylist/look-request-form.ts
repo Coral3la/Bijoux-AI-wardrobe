@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, input, output } from '@angu
 
 import { I18nService } from '../../core/i18n/i18n.service';
 import { OCCASIONS, Occasion } from '../../shared/models/enums';
+import { Chip } from '../../shared/ui/chip';
 
 // Transcribed from 04-API-SPEC.md, which measured it against the provider on
 // 2026-08-26: `today + 15`, sixteen days counting today. It bounds the date
@@ -10,16 +11,6 @@ import { OCCASIONS, Occasion } from '../../shared/models/enums';
 // no lower bound: nothing in the docs refuses a past date, and inventing a
 // floor here would be this screen deciding something no document has.
 const FORECAST_HORIZON_DAYS = 15;
-
-// A copy of the strings `appChip` has painted since its own Atelier
-// conversion, written out before the directive was converted; chip.ts records
-// the order. CODE-REVIEW-2026-09-05.md C7 is the conversion.
-const CHIP =
-  'inline-flex min-h-11 shrink-0 items-center rounded-full border px-4 text-[11px] font-medium tracking-[0.18em] uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
-const CHIP_STATES = {
-  inactive: 'border-line text-ink-muted',
-  active: 'border-ink bg-ink text-canvas',
-} as const;
 
 // What the four controls hold, named for the wire wherever the wire has a name
 // (DECISIONS.md 059's rule applied to a shape that never goes on it). The
@@ -53,6 +44,7 @@ export function forecastHorizon(now = new Date()): string {
 @Component({
   selector: 'app-look-request-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Chip],
   template: `
     <!-- A real form, so the return key submits from the date and notes fields
          the way it does on login. The occasion and coat controls are buttons
@@ -74,17 +66,14 @@ export function forecastHorizon(now = new Date()): string {
           </legend>
           <!-- Wrapping, where 1.8's row scrolled: nothing ever scrolled it for
                the user, and the Atelier chip is small enough that six of them
-               wrap to two lines on a phone.
-
-               aria-pressed is bound here rather than left to appChip, which
-               this row no longer uses. One expression paints and announces, so
-               there is nothing for the two to drift apart over. -->
+               wrap to two lines on a phone. -->
           <div class="flex flex-wrap items-center gap-1.5">
             @for (occasion of occasions; track occasion) {
               <button
+                appChip
                 type="button"
-                [attr.aria-pressed]="draft().occasion === occasion"
-                [class]="chipClass(draft().occasion === occasion)"
+                class="shrink-0"
+                [active]="draft().occasion === occasion"
                 (click)="chooseOccasion(occasion)"
               >
                 {{ i18n.t('vocabulary.occasion.' + occasion) }}
@@ -100,9 +89,10 @@ export function forecastHorizon(now = new Date()): string {
           <div class="flex flex-wrap items-center gap-1.5">
             @for (choice of coatChoices; track choice.key) {
               <button
+                appChip
                 type="button"
-                [attr.aria-pressed]="draft().include_outerwear === choice.value"
-                [class]="chipClass(draft().include_outerwear === choice.value)"
+                class="shrink-0"
+                [active]="draft().include_outerwear === choice.value"
                 (click)="chooseCoat(choice.value)"
               >
                 {{ i18n.t(choice.key) }}
@@ -195,10 +185,6 @@ export class LookRequestForm {
     { key: 'stylist.coat.yes', value: true },
     { key: 'stylist.coat.no', value: false },
   ] as const;
-
-  protected chipClass(active: boolean): string {
-    return `${CHIP} ${active ? CHIP_STATES.active : CHIP_STATES.inactive}`;
-  }
 
   // Not single-valued the way the category chips are: tapping the selected
   // occasion again leaves it selected, because the request has no "no

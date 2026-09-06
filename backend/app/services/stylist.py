@@ -1062,7 +1062,7 @@ def _duplicate_look(looks: tuple[Look, ...]) -> str | None:
     twelve items across seven days is to wear Tuesday twice.
     """
     seen: dict[frozenset[str], Look] = {}
-    for _, look in _in_day_order(looks):
+    for look in _in_day_order(looks):
         worn = frozenset(look.item_ids)
         first = seen.get(worn)
         if first is not None:
@@ -1089,7 +1089,7 @@ def _packing_mismatch(response: StylistResponse) -> str | None:
     packed = set(response.packing_list)
     # Named by pair rather than by position: rule 5 runs after rule 10 on this
     # path, so the pair is checked, and it is what the reader sees on screen.
-    for _, look in _in_day_order(response.looks):
+    for look in _in_day_order(response.looks):
         for item_id in look.item_ids:
             if item_id not in packed:
                 return _at_slot(
@@ -1146,7 +1146,7 @@ def _missing_outerwear_by_day(
     the first one found answers for either slot.
     """
     rules = {day.day: day for day in context.days}
-    for _, look in _in_day_order(looks):
+    for look in _in_day_order(looks):
         day = rules.get(look.day) if look.day is not None else None
         if day is None or not requires_outerwear(day.weather_rule):
             continue
@@ -1166,21 +1166,20 @@ def _order(pair: tuple[int, str]) -> tuple[int, int]:
     return day, _SLOT_ORDER.get(slot, len(_SLOT_ORDER))
 
 
-def _in_day_order(looks: tuple[Look, ...]) -> list[tuple[int, Look]]:
-    """The looks by their `(day, slot)`, each with the position it is reported as.
+def _in_day_order(looks: tuple[Look, ...]) -> list[Look]:
+    """The looks by their `(day, slot)`.
 
     Rule 10 checks the pairs against the request, which a **shuffled** array
     satisfies — day 3 may legitimately arrive first. Every rule that runs after
-    it therefore reads the pair to find the day it belongs to, and reports the
-    position it was returned in, so one number identifies a look in the message
-    and another finds its weather. `DECISIONS.md` 194.
+    it therefore reads the pair to find the day a look belongs to, and names it
+    by that pair. `DECISIONS.md` 194.
 
     **The slot is in the key from 4.13**, and without it the sort is not total:
     two looks for one date would come back in whichever order the model answered,
     so rule 11 could name either of them as the duplicate of the other and one
     plan would report two ways.
     """
-    return sorted(enumerate(looks), key=lambda pair: _order((pair[1].day or 0, pair[1].slot or "")))
+    return sorted(looks, key=lambda look: _order((look.day or 0, look.slot or "")))
 
 
 def _missing_anchor(looks: tuple[Look, ...], context: StylistContext) -> str | None:
@@ -1281,7 +1280,7 @@ def _slot_conflict(
     and a card on screen is easier to find than an array index. The single-day
     string is unprefixed and untouched from 2.5.
     """
-    for _, look in _in_day_order(looks) if trip else list(enumerate(looks)):
+    for look in _in_day_order(looks) if trip else looks:
         for slot in SLOT_RULES:
             worn = [item_id for item_id in look.item_ids if slot.holds(known[item_id])]
             if len(worn) > slot.limit:

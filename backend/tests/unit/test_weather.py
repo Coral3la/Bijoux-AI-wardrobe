@@ -650,7 +650,9 @@ async def test_an_inverted_range_never_reaches_the_provider(
     with pytest.raises(ValueError) as exc_info:
         await get_daily_forecast(*BERLIN, TRIP_END, TRIP_START)
 
-    assert not isinstance(exc_info.value, weather.WeatherError)
+    assert not isinstance(
+        exc_info.value, (weather.ForecastOutOfRangeError, weather.ForecastProviderError)
+    )
 
 
 # --- get_daily_forecast: the cache, shared with get_forecast --------------

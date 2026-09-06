@@ -66,6 +66,7 @@ def health(db: Session = Depends(get_db)) -> HealthResponse:
 
     return HealthResponse(status="ok", db="ok", version=APP_VERSION)
 
+
 # ── Serve the built Angular SPA when it is packaged with the backend ─────
 # The Docker image copies the production bundle to /app/static; when this
 # process is a local `uvicorn --reload` from backend/ without any build
@@ -99,4 +100,3 @@ def register_spa(app: FastAPI, static_dir: Path) -> None:
 
 if _STATIC_DIR.is_dir():
     register_spa(app, _STATIC_DIR)
-

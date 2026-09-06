@@ -131,15 +131,11 @@ _RAIN = "Rain expected. Strongly prefer water_resistant outerwear and closed wat
 _WIND = "Windy. Avoid flowy or a_line items."
 
 
-class WeatherError(Exception):
-    """A forecast was asked for and not produced."""
-
-
-class ForecastOutOfRangeError(WeatherError):
+class ForecastOutOfRangeError(Exception):
     """The date is outside what the provider will answer for."""
 
 
-class ForecastProviderError(WeatherError):
+class ForecastProviderError(Exception):
     """Open-Meteo did not answer, or answered something unreadable."""
 
 

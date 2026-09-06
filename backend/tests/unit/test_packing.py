@@ -540,9 +540,9 @@ async def test_a_plan_that_fails_validation_twice_raises(wired: Any) -> None:
 
 @pytest.mark.asyncio
 async def test_occasions_that_do_not_match_the_dates_are_a_callers_bug(wired: Any) -> None:
-    # A `ValueError` rather than a `PackingError`: the route validates this
-    # before building the request, so reaching it means the caller is wrong
-    # rather than that the trip cannot be packed.
+    # A `ValueError` rather than a `StylistRejectedError`: the route validates
+    # this before building the request, so reaching it means the caller is
+    # wrong rather than that the trip cannot be packed.
     #
     # The count is no longer the check — a two-day trip legitimately sends three
     # occasions — so what is refused is a day of the range nobody dressed.

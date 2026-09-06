@@ -40,15 +40,11 @@ from app.services.weather import Forecast, build_rule, get_daily_forecast, summa
 logger = logging.getLogger(__name__)
 
 
-class PackingError(Exception):
-    """A trip was asked for and no plan could be made."""
-
-
-class DestinationNotFoundError(PackingError):
+class DestinationNotFoundError(Exception):
     """The geocoder answered, and nothing matched what the user typed."""
 
 
-class StylistRejectedError(PackingError):
+class StylistRejectedError(Exception):
     """The model answered twice and neither answer passed validation."""
 
 
