@@ -362,6 +362,8 @@ CREATE TABLE items (
   last_worn_at    DATE,
   is_archived     BOOLEAN NOT NULL DEFAULT FALSE,
 
+  set_id          UUID REFERENCES item_sets(id) ON DELETE SET NULL,
+
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -392,6 +394,76 @@ Notes worth understanding:
   **Both are written and both are on the wire from task 3.4**, which is what this entry said it was waiting for. `POST /looks/{id}/wear` increments `wear_count` and moves `last_worn_at` for every item in the look, in the transaction that sets `looks.worn_at`. **It stopped being the only writer at task 3.4a**, which added `DELETE /looks/{id}/wear`: it decrements the count with `GREATEST(wear_count - 1, 0)` and sets `last_worn_at` to `NULL` on the garments whose count reaches zero, leaving the date standing on the rest. So the pair is asymmetric by design — the count round-trips exactly and the date does not, because one column cannot remember a day it has overwritten and no history table exists. After an undo `last_worn_at` is an **upper bound** rather than a truth, which over-reports a garment to 3.5's three-day window for at most those three days. `04-API-SPEC.md` under `DELETE /looks/{id}/wear`, `DECISIONS.md` 226. `ItemResponse` carries both, so they appear on every item payload in the application — `GET /items`, the upload response, and the hydrated items inside every look. **`GET /items/stats` reads `wear_count` from task 3.6, which closes this deferral entirely.** `worn` and `never_worn` partition the `ready`, unarchived rows on `wear_count > 0`, and `most_worn` is the highest of them or `null`. `last_worn_at` has no reader in that endpoint — 3.5's preferences block is its only one.
 
   **`last_worn_at` moves forward only** — the update is `GREATEST(last_worn_at, :date)`. A wearing recorded for a past date must not drag a garment worn more recently backwards, because 3.5 reads exactly this column to avoid recommending something worn in the last three days. The consequence is that a look's `worn_at` and its items' `last_worn_at` can disagree, and both are correct: **the look records the day the look was worn, the item records the last day it was worn in anything.** Two looks sharing one shirt, worn Monday and Tuesday, leave the Monday look reading Monday and the shirt reading Tuesday.
+
+- **`set_id` is nullable and the ordinary value is `NULL`.** It arrives with
+  migration `0007` at task 4A.1 and points at the `item_sets` row below. Almost
+  every garment belongs to no set; a set is the exception a user declares, not a
+  property every item has.
+
+---
+
+### `item_sets`
+
+```sql
+CREATE TABLE item_sets (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name        TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_items_set_id ON items (set_id) WHERE set_id IS NOT NULL;
+```
+
+A **set** is two or more garments that were bought together or are worn together
+— a suit, a co-ord, a matching top and bottom. The garments stay separate `items`
+rows and the set is a **relation over them**, carried by `items.set_id` above.
+
+**A composite item was rejected.** The alternative was one row filling both the
+top and the bottom slot the way a `dress` does. It destroys the requirement:
+wearing the set's top with other trousers stops being expressible, and that
+combination is the reason a person owns separates rather than a dress.
+
+**One-to-many, not many-to-many.** An item belongs to at most one set, which is
+one nullable column rather than a join table. A garment that is genuinely in two
+sets — a blazer sold with trousers and again with a skirt — cannot be expressed,
+and that is YAGNI accepted rather than overlooked: no screen in the product asks
+the question, and widening a nullable FK into a join table later is a migration
+this schema does not obstruct.
+
+**`ON DELETE SET NULL`, never `CASCADE`.** Deleting a set is deleting a
+statement about garments, not the garments. Every member survives with
+`set_id` `NULL`, which is what makes the delete safe enough to offer next to a
+photograph of a coat.
+
+**`name` is nullable and there is no rename.** A set with no name is described by
+its members, which is how the item detail screen renders one. `STAGE-4A` puts
+renaming out of scope, so `name` is written once at `POST /sets`.
+
+**A set is user-declared and never AI-derived.** Nothing in the tagging path
+writes `set_id` and nothing ever should. The vision contract sees **one image at
+a time** — `03-AI-CONTRACTS.md`'s Contract 1 is a single-image call — so it
+cannot know that two photographs were sold together, and a model asked to guess
+would be inventing a fact about a purchase it has no evidence of. The stylist
+reads the relation and does not write it either. `DECISIONS.md` 230.
+
+**Fewer than two members is not a set.** The table cannot express the rule — a
+`CHECK` cannot count rows in another table — so it is enforced at the API layer:
+the removal that would leave one member behind deletes the `item_sets` row, and
+the last member's `set_id` is cleared by the foreign key above. See
+`04-API-SPEC.md` under `DELETE /sets/{set_id}/items/{item_id}`.
+
+**Archiving a member does not change membership.** `DELETE /items/{id}` sets
+`is_archived` and touches no `set_id`, so an archived garment stays in its set
+and the set keeps its count. That is asymmetric with `POST /sets/{set_id}/items`,
+which refuses to *add* an archived item — a set records a fact about garments the
+user owns, and archiving one does not unmake the fact, while adding one the
+stylist will never be shown records a preference nothing can act on.
+
+**The index is partial** because the column is `NULL` on almost every row, and
+its reader is the one query the item detail screen makes: the other members of
+this item's set. It is the referencing side of the foreign key, which PostgreSQL
+does not index on its own — the same reason `idx_looks_trip_id` exists.
 
 ---
 
@@ -725,6 +797,7 @@ One Alembic migration per stage, never a single mega-migration.
 | `0004_feedback` | 3 | `looks.feedback`, `looks.worn_at`, `items.wear_count`, `items.last_worn_at`, and O-25's two indexes |
 | `0005_trips` | 4 | `trips`, `looks.trip_id`, `idx_trips_user_id`, `idx_looks_trip_id` |
 | `0006_look_slot` | 4 | `looks.slot`, its `CHECK`, `uq_looks_trip_day_slot`, and two backfills |
+| `0007_sets` | 4A | `item_sets`, `items.set_id`, `idx_items_set_id` |
 
 **`0003` renumbered the two that follow it**, which is what a migration inserted
 mid-project costs; it was scheduled after `0002_looks` precisely so that the
@@ -739,6 +812,13 @@ the transaction `alembic/env.py` opens was **measured on PostgreSQL 18.6 at
 2.6a**, not inferred from the version number.
 
 Stage 3's columns were shown inline in the table definitions above for readability before they existed, and **migration `0004` built them at task 3.1**, so the two now agree. The cut this paragraph anticipated did not happen. Had it, `0004` would indeed never have been written: the one task that survives the cut is 3.2, and both columns it needs — `is_saved` and `title` — are `0002`'s. **`looks.trip_id` was the case this paragraph described, one stage further out, and task 4.1 discharged it.** The `looks` DDL above shows it as a foreign key to a table that did not exist until Stage 4: migration `0002` created `looks` **without** it, and `0005` adds it alongside `trips` — one revision, because a `looks.trip_id` pointing at no table is not a schema. Added at the 2026-08-18 audit, when the migrations table already said so and this paragraph did not; closed at 4.1.
+
+**`0007` creates the table before the column that references it**, in one
+revision, for the reason `0005` did: an `items.set_id` pointing at no table is
+not a schema. It carries no data — every existing row's `set_id` is `NULL` and
+that is the correct value, so there is no backfill and nothing to get wrong.
+Its `downgrade()` is a real reversal, unlike `0003`'s: drop the column, then the
+index and the table.
 
 **`0006` is the first migration in this project that carries data as well as
 schema**, and both `UPDATE`s are the same statement said twice: every look with a

@@ -140,6 +140,8 @@ Query: `status`, `category`, `color_primary`, `formality_min`, `formality_max`, 
 
 **The full item** is every column of `items` **except `user_id`**, with `image_public_id` accompanied by `image_url`, a ready-built **thumbnail** URL (`w_300,h_300,c_pad,b_white,f_auto,q_auto`). Both corrections are the 2026-08-18 audit's, against `app/schemas/item.py` and `07-DEPLOYMENT.md`'s transform table: `ItemResponse` has never carried `user_id`, and a client that builds the thumbnail from the four-parameter string above gets a different URL from the one the server returns. The `public_id` is what `cloudinary-url.pipe.ts` builds every other transform from; the thumbnail is included because it is what the grid renders on arrival. See `DECISIONS.md` 050.
 
+**`set_id` joins that list at task 4A.1** — `null` on almost every garment, and the id of the `item_sets` row on a member of one. It is on every item payload in the application, because there is one item shape: `GET /items`, the upload response, and the hydrated items inside every look and every trip. It is a **bare id rather than a nested set object**, so a grid of 200 items does not carry the same two or three members repeated; the members are fetched from `GET /sets/{set_id}` by the one screen that renders them. `02-DATA-MODEL.md`, `item_sets`.
+
 All eleven parameters above are implemented as of task 0.7. **An unknown or misspelled query parameter is still silently ignored and still returns `200` with an unfiltered list** — `?colour_primary=navy` filters nothing and says nothing. Query strings have no `extra="forbid"` equivalent, so `DECISIONS.md` 039's guarantee genuinely stops at request bodies. Rejecting unknown query keys would be one piece of middleware; **task 5.4** owns deciding whether to add it or to publish it as a known issue, and it is named here rather than left implied (`DECISIONS.md` 051).
 
 Pagination defaults to 100, and `05-FRONTEND-SPEC.md` filters client-side "over the loaded collection". A wardrobe above 100 items therefore filters over the first page only unless the client passes `limit`. The wardrobe screen must pass it; `01-ARCHITECTURE.md` sizes a realistic wardrobe at 80–150.
@@ -249,6 +251,139 @@ placeholder computed from a price the application never collects would render a
 fabricated number as a fact. `DECISIONS.md` 186.
 
 Counts exclude archived rows, matching `GET /items`, so a dashboard cannot keep counting deleted garments. `total` is every non-archived row including `processing` and `failed`; `by_category` and `by_color` omit rows whose tag is still `null`, so their values do not sum to `total` and a category with no items is absent rather than zero.
+
+---
+
+## Sets *(Stage 4A)*
+
+A **set** is two or more garments the user declared as bought or worn together.
+The items are unchanged rows; the set is a relation over them, one-to-many
+through `items.set_id`. `02-DATA-MODEL.md` has the schema and the reasoning.
+
+There is no `GET /sets` and no `PATCH /sets/{set_id}`. Both are out of scope in
+`STAGE-4A` — a set is reached through a member, and a rename is a delete and a
+redeclaration. They are named here so their absence reads as a decision.
+
+### The set object
+
+```json
+{ "id": "uuid", "name": "the linen suit",
+  "items": [ { …full item… }, { …full item… } ],
+  "created_at": "2026-09-06T09:12:44Z" }
+```
+
+`name` is `null` where the user gave none. `items` is hydrated to the same full
+item shape `GET /items` returns — one shape for one resource (`DECISIONS.md` 034,
+050) — and every element carries the `set_id` this object's `id` matches. The
+members are ordered `created_at DESC, short_id`, which is `GET /items`' own
+order, so the set lists its garments the way the wardrobe does.
+
+`items` always holds **at least two** elements. A set that would hold fewer does
+not exist; see `DELETE /sets/{set_id}/items/{item_id}`.
+
+**Archived members are included.** Archiving a garment does not remove it from a
+set, so `items` can carry a row whose `is_archived` is `true` — and a client that
+renders the set has to say so, because the alternative is a member the user can
+see in the set and nowhere else.
+
+### `POST /sets`
+```json
+→ { "name": "the linen suit", "item_ids": ["uuid", "uuid"] }
+← 201 { …set object… }
+```
+
+`name` is optional and defaults to `null`. `item_ids` holds **at least two**
+distinct ids; the list is deduplicated before the count is checked, so
+`["a", "a"]` is a `422` `validation_error` naming `item_ids` and not a
+one-member set. Fewer than two is the same `422` — it is a request-shape rule,
+the way `POST /items/upload`'s file count is (`DECISIONS.md` 048), and it needs
+no code of its own because no correct client can build that body.
+
+`422` with `code: "set_item_unavailable"` when any id names nothing in this
+account's wardrobe that could be styled. `422` with `code: "set_member_taken"`
+when any id names an item that already belongs to another set. Both are checked
+over the whole list before anything is written, so a rejected request creates no
+set at all. `CONVENTIONS.md` has the reasoning for each.
+
+There is no upper bound on the number of members. A set of nine is a wardrobe
+capsule rather than a suit, and refusing it would be a number invented here with
+nothing behind it.
+
+### `GET /sets/{set_id}`
+```json
+← 200 { …set object… }
+```
+
+`404` with `code: "not_found"` for another account's set, on the same
+one-code-per-resource rule as everything else (`DECISIONS.md` 043).
+
+### `DELETE /sets/{set_id}`
+```
+← 204  (no body)
+```
+
+**A hard delete, and it deletes no garment.** The `item_sets` row is removed and
+`ON DELETE SET NULL` clears `set_id` on every member; the items keep their tags,
+their wear counts, their archive state and their place in every look that ever
+wore them. `204` matches `DELETE /trips/{id}` and for the same reason — a
+statement about garments has been withdrawn and there is no object left to
+answer with. It is **not** `DELETE /items/{id}`'s `200`-with-the-row: that one
+soft-deletes and the row is still there to return.
+
+**Not idempotent in the way the item archive is.** A second `DELETE` on the same
+id is `404 not_found`, because the row is genuinely gone — where an
+already-archived item answers `200` again, since it stays readable by id.
+
+`404` with `code: "not_found"` for another account's set.
+
+### `POST /sets/{set_id}/items`
+```json
+→ { "item_id": "uuid" }
+← 200 { …set object… }
+```
+
+Adds one garment to an existing set. One id per request rather than a list: the
+control that calls it picks one garment from the wardrobe, and a partial failure
+over a list would need a shape this API has nowhere else.
+
+`422` `set_item_unavailable` when the id names nothing this account owns and can
+style. `422` `set_member_taken` when it already belongs to **another** set.
+
+**Adding an item that is already in *this* set is `200` and changes nothing** —
+the request asked for a state the set is already in, and answering `422` for it
+would make a double-tap an error. `set_member_taken` is about a garment being
+claimed elsewhere, which this is not.
+
+`404` `not_found` for another account's set, and for an item id that resolves to
+no row at all — an id naming nothing is not an unavailable garment. Both answer
+before anything is written.
+
+### `DELETE /sets/{set_id}/items/{item_id}`
+```json
+← 200 { …set object… }     the set survives with two or more members
+← 204  (no body)           the removal left one member and the set is gone
+```
+
+Removes one garment from a set. The item is untouched apart from its `set_id`.
+
+**Two status codes on one path, and the pair is the contract.** A set of three
+loses one and answers `200` with the two that remain. A set of **two** loses one
+and there is no set left to answer with: the `item_sets` row is deleted, the
+foreign key clears the remaining member's `set_id`, and the response is `204`.
+`02-DATA-MODEL.md` is where the rule lives — fewer than two members is not a
+set — and this is the only endpoint that can reach it.
+
+The alternative was `200` on both, carrying a set object with one member or a
+flag saying the set had dissolved. It was rejected because the object would be
+describing something that no longer exists in the database, and because the
+client has to branch anyway: the item detail screen shows a set row or an empty
+one, and the status code is the branch. `204` is `DELETE /sets/{set_id}`'s answer
+and it means the same thing here, which is that this call ended the set.
+
+`404` `not_found` for another account's set, and for an `item_id` that is not a
+member of this set. The second is a statement about the URL rather than about the
+garment, so it is `404` and not `set_item_unavailable` — which is a `422` about
+what a client asked to *add*.
 
 ---
 

@@ -206,18 +206,45 @@ readings were found to disagree; the example below has shown the em dash for a
 shoe with no `fit` since Stage 0.
 
 ```
-A3F9K2 | top/shirt | oversized | long_sleeve | white | — | solid | cotton | F3 W2 | base
-7BX1QM | bottom/jeans | straight | full | light_blue | — | denim_wash | denim | F2 W2 | base | rise:high
+A3F9K2 | top/shirt | oversized | long_sleeve | white | — | solid | cotton | F3 W2 | base | set:1
+7BX1QM | bottom/jeans | straight | full | light_blue | — | denim_wash | denim | F2 W2 | base | rise:high | set:1
 SEFA38 | shoes/boots | — | ankle | black | gold | solid | leather | F3 W4 | standalone | water_resistant
 EH8VVQ | outerwear/blazer | relaxed | regular | beige | — | solid | wool | F4 W3 | outer
 ```
 
 Format: `SHORT_ID | category/subcategory | fit | length | color | color_secondary | pattern | material | F{formality} W{warmth} | layer | extras`
 
-**Extras are ordered `rise` then `water_resistant`.** Both are reachable on one
-item — a waterproof bottom has each — and the order is arbitrary but fixed, so
-that a line is a function of the item and not of the order the code happened to
-test two flags in.
+**Extras are ordered `rise`, `water_resistant`, then `set`.** All three are
+reachable on one item — a waterproof trouser that came with a jacket has each —
+and the order is arbitrary but fixed, so that a line is a function of the item
+and not of the order the code happened to test three flags in. `set` was
+appended rather than inserted, at task 4A.1, so that no existing line changes
+shape.
+
+**`set:<n>` marks a garment that belongs to a set** — two or more items the user
+declared as bought or worn together (`02-DATA-MODEL.md`, `item_sets`). Every
+member of one set carries the same `n`, and a different set gets a different one.
+
+**`n` is a per-request ordinal, not the set's id.** Sets are numbered `1, 2, 3 …`
+in the order their first member appears in the wardrobe that is actually being
+serialised. Internal ids do not reach the AI layer — the same rule that keeps
+UUIDs out of the line entirely and leaves `short_id` as the only identifier the
+model ever sees (`04-API-SPEC.md`, Conventions). A UUID would also cost about
+twelve tokens per member to say what one digit says.
+
+**A set with only one member in the serialised wardrobe carries no token at
+all.** The other members were filtered out before serialisation — archived,
+`processing`, `failed`, or in an excluded category — and a `set:` token on a
+single line names a grouping the model cannot act on: there is nothing to pair
+the garment with. It is the serialiser's reading of the same rule the API
+enforces on the way in, that fewer than two members is not a set. The ordinals
+are assigned over the sets that survive that check, so they stay contiguous.
+
+The token is omitted on every item with no `set_id`, which in a real wardrobe is
+almost all of them — so the measured 30.7 tokens per item above is unchanged for
+the majority of lines and moves by a token or two on the minority. Measuring the
+new figure against the unit test's 6,000 ceiling is task 4A.1's, not this
+document's to predict.
 
 `color_secondary` was added to the format at task 2.3. Colour coordination is
 what this contract exists to get right and about one item in seven is two-tone,
@@ -285,6 +312,10 @@ STYLING PRINCIPLES
 - Skinny and slim bottoms balance volume above.
 - Colour: build around a neutral base (black, white, grey, beige, navy, brown)
   and let one item carry the colour or pattern. Two loud patterns clash.
+- Items sharing a "set:" marker were bought or are worn together. Prefer to use
+  them in the same look where the occasion and the weather allow it. This is a
+  preference, not a requirement: wearing one member of a set with other items is
+  a good look, not a mistake.
 - Keep formality within one point across a look. Do not pair a formality-5
   dress with formality-2 sneakers unless the occasion explicitly calls for
   contrast.
@@ -682,6 +713,21 @@ retry, the give-up and `502 stylist_failed` belong to `POST /looks/suggest` at
 9. **At most one item per slot, and a dress instead of separates.** One `outer` layer item, one `top` tagged `layer: base`, one `bottom`, one `dress`, one pair of `shoes`, one `bag`, and at most two accessories — and where a `dress` is present, no separate `top` or `bottom` at all. Read from the wardrobe that was sent, the way rule 3 read `outer`. Added at task 2.11a for base tops alone and widened at **2.11b**, after a shoe-swap answered with long jeans and shorts in one look.
 10. **The `(day, slot)` pairs are exactly the pairs that were asked for**, each once. Trip path only; the single-day schema has neither field. It is not the same rule as 4: seven looks numbered 1, 1, 2, 3, 4, 5, 6 pass the count and leave day 7 undressed and Monday wearing two outfits. Added at 4.3 with the field, which is the condition `DECISIONS.md` 163 struck `day` for failing. **Widened from ordinals to pairs at 4.11**, and it is the rule the whole slot feature rests on: *the days are `1..n` each exactly once* would accept two `day` looks for Monday and call the evening dressed, which is the same failure one level down and invisible until somebody opens their suitcase. Set comparison against the request rather than `range()`, because the expected set is no longer a range — a trip with an evening on Tuesday alone is `(1,day) (2,day) (2,evening) (3,day)`. `DECISIONS.md` 194, 225.
 11. **No two looks are composed of the same set of item ids.** Set equality, not order — the same four garments in a different sequence is the same outfit. `STAGE-4`'s acceptance criterion is *no two days produce an identical full look*, and the system prompt has asked for it since Stage 0 without anything enforcing it, which is rule 9's own history (`AUDITS.md` O-28). It is a rule rather than prompt-only because the model reaches for it exactly when the reuse instruction bites hardest: the cheapest way to pack twelve items across seven days is to repeat Tuesday. Trip path only — one look cannot duplicate itself. **Unchanged at 4.11 and doing a second job for it**: the packing constraint now asks the model to reuse items *between* the two slots of one day, and this rule is the line between reuse and repetition — the same trousers with a different top is a change of outfit, and the same four garments twice is not a change at all. It is also the only part of the cross-slot instruction that is enforced rather than asked for, which is the trip message's own argument above. `DECISIONS.md` 194, 225.
+
+**Sets add no rule, and that is the decision rather than an omission.** The
+`set:<n>` token in the wardrobe line is a **preference the prompt states**, and
+nothing in this list checks whether the model honoured it. A rule of the *all
+members of a set appear together or none of them do* shape was rejected on two
+grounds. It is **wrong on the merits**: the requirement sets exist to serve is
+that the set's top stays wearable with other trousers, so the look the rule
+would refuse is precisely the one the feature is for. And it is **expensive
+where it is wrong**: a violation spends the single retry (`DECISIONS.md` 171)
+and then answers `502 stylist_failed` — task 2.11's failure shape, met again one
+field along, where the user asked a reasonable question and the API says it
+could not put a look together. Rule 6 is the precedent for the narrowing rather
+than the counter-example: it was narrowed at 2.5 for exactly this reason, so
+that a look which obeyed an explicit instruction is not refused by a rule
+enforcing a default. `DECISIONS.md` 230.
 
 Rules 7 and 8 are fully deterministic and make excellent E2E assertions — the requested item is either there or it is not. They arrive with the anchor at 2.10 and the swap at 2.11, which are the tasks that put the fields on the wire.
 

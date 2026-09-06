@@ -125,6 +125,8 @@ trip call gets its **own** response schema rather than extending
 single-day call (189), and a trip's dates are bounded on the **last** day,
 `end_date <= today + 14`, with no seasonal-average fallback in this stage (190).
 
+**Stage 4A — Sets** *(`stages/STAGE-4A-sets.md`, added 2026-09-06)* sits between Stage 4 and Stage 5: two tasks, `feat(sets): schema and api` and `feat(web): sets`, neither started — a set is two or more garments declared as worn together, a relation over `items` rather than an item, and the stylist gets a preference from it rather than a rule (`DECISIONS.md` 230).
+
 ## Stage 5 — QA and Deployment  *(do not cut)*
 `stages/STAGE-5-qa-deploy.md` · target 5 days
 
