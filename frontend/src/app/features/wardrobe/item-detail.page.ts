@@ -1,19 +1,51 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { ItemsApi } from '../../core/api/items.api';
+import { SetsApi } from '../../core/api/sets.api';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { WardrobeStore } from '../../core/state/wardrobe.store';
+import { ItemSet } from '../../shared/models/item-set.model';
 import { Item, ItemUpdate } from '../../shared/models/item.model';
 import { CloudinaryUrlPipe } from '../../shared/pipes/cloudinary-url.pipe';
 import { Button } from '../../shared/ui/button';
+import { SetPicker } from './set-picker';
 import { TagEditor } from './tag-editor';
+
+// Branches on the documented code rather than on the status, which is the rule
+// wardrobe.store.ts states for the upload and the retag: 04-API-SPEC.md gives
+// this pair of endpoints two 422s and they are two different things to say, and
+// only one of them has an obvious cause the user can see. `set_member_taken` is
+// reachable only from a stale collection — the picker excludes a garment that
+// already carries a set_id — which is exactly why it needs a sentence: a
+// wardrobe loaded before somebody else's tab declared a set is the case.
+const PICK_ERROR_KEYS: Readonly<Record<string, string>> = {
+  set_item_unavailable: 'item.set.error.unavailable',
+  set_member_taken: 'item.set.error.taken',
+};
+
+function pickErrorKey(error: unknown): string {
+  if (error instanceof HttpErrorResponse) {
+    const code = (error.error as { code?: string } | null)?.code;
+    if (code !== undefined && code in PICK_ERROR_KEYS) {
+      return PICK_ERROR_KEYS[code];
+    }
+  }
+  return 'item.set.error.add';
+}
 
 @Component({
   selector: 'app-item-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, CloudinaryUrlPipe, RouterLink, TagEditor],
+  imports: [Button, CloudinaryUrlPipe, RouterLink, SetPicker, TagEditor],
   template: `
     <main class="mx-auto flex w-full max-w-3xl flex-col gap-region px-6 py-region">
       <a
@@ -121,6 +153,102 @@ import { TagEditor } from './tag-editor';
           }
         </section>
 
+        <!-- The set row, and it renders in both states rather than only when
+             there is a set: a garment in none is where a set is declared from,
+             and STAGE-4A puts the declaration on this screen because it is
+             where a user is standing when they think about one. The branch is
+             row.set_id and not set(), which is null both for a garment in no
+             set and for one whose set failed to load — the second must not
+             offer to declare a set that already exists. -->
+        <section class="flex flex-col gap-group">
+          <div class="flex flex-col gap-2">
+            <h2 class="font-display text-xl">{{ i18n.t('item.set.title') }}</h2>
+
+            @if (row.set_id === null) {
+              <p class="text-sm">{{ i18n.t('item.set.explain') }}</p>
+            } @else if (set(); as declared) {
+              <!-- The content face, for 071's reason: a set's name was typed by
+                   a person and Fraunces is not the family to render it in. -->
+              @if (declared.name; as name) {
+                <p class="font-sans text-sm text-ink">{{ name }}</p>
+              }
+
+              <ul class="flex flex-wrap gap-4">
+                @for (member of members(); track member.id) {
+                  <li class="w-24">
+                    <a
+                      [routerLink]="['/wardrobe', member.id]"
+                      class="flex flex-col gap-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    >
+                      <!-- Empty alt, because the name below is inside the same
+                           anchor: with alt text the link announces twice. -->
+                      <img
+                        [src]="member.image_url"
+                        alt=""
+                        loading="lazy"
+                        class="aspect-4/5 w-full rounded-[2px] object-contain"
+                      />
+                      <span class="font-sans text-xs text-ink">{{ memberName(member) }}</span>
+                      <!-- An archived member stays in its set (02-DATA-MODEL.md)
+                           and GET /items excludes it, so this row is the only
+                           place in the application it is visible at all. Saying
+                           so is the API spec's requirement of any client that
+                           draws a set. -->
+                      @if (member.is_archived) {
+                        <span
+                          class="text-[10px] font-medium tracking-[0.18em] text-ink-soft uppercase"
+                          >{{ i18n.t('item.set.archived') }}</span
+                        >
+                      }
+                    </a>
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <div class="flex flex-wrap items-center gap-3">
+              <button
+                appButton
+                variant="secondary"
+                type="button"
+                (click)="openPicker()"
+                [disabled]="picking()"
+                class="disabled:opacity-50"
+              >
+                {{ row.set_id === null ? i18n.t('item.set.declare') : i18n.t('item.set.add') }}
+              </button>
+
+              @if (row.set_id !== null) {
+                <button
+                  appButton
+                  variant="ghost"
+                  type="button"
+                  (click)="removeFromSet()"
+                  [disabled]="removingFromSet()"
+                  class="disabled:opacity-50"
+                >
+                  {{ removingFromSet() ? i18n.t('item.set.removing') : i18n.t('item.set.remove') }}
+                </button>
+              }
+            </div>
+
+            <!-- Said before the control is pressed, which is STAGE-4A's
+                 requirement and the one place a user can act on it: the rule is
+                 the server's, enforced by DELETE /sets/{id}/items/{id}
+                 answering 204, and this is it stated once in words. Two members
+                 exactly — at three the removal leaves a set behind. -->
+            @if (dissolves()) {
+              <p class="text-sm">{{ i18n.t('item.set.dissolves') }}</p>
+            }
+          </div>
+
+          @if (setError(); as key) {
+            <p class="text-sm font-medium text-danger">{{ i18n.t(key) }}</p>
+          }
+        </section>
+
         <!-- The armed line is the confirmation for the button directly above
              it, not a notice about the page. DECISIONS.md 212. -->
         <div class="flex flex-col gap-group">
@@ -186,6 +314,20 @@ import { TagEditor } from './tag-editor';
         @if (actionError(); as key) {
           <p class="text-sm font-medium text-danger">{{ i18n.t(key) }}</p>
         }
+
+        <!-- The whole loaded wardrobe goes in and the sheet excludes what it
+             must; the page supplies the id it is showing, which is the one
+             exclusion the sheet cannot work out for itself. -->
+        @if (picking()) {
+          <app-set-picker
+            [items]="store.items()"
+            [currentItemId]="row.id"
+            [saving]="addingToSet()"
+            [errorKey]="pickError()"
+            (picked)="onPicked($event)"
+            (dismissed)="closePicker()"
+          />
+        }
       } @else if (loadError()) {
         <p class="text-sm font-medium text-danger">{{ i18n.t('item.error.load') }}</p>
       }
@@ -194,8 +336,11 @@ import { TagEditor } from './tag-editor';
 })
 export class ItemDetailPage {
   protected readonly i18n = inject(I18nService);
-  private readonly store = inject(WardrobeStore);
+  // Read by the template since 4A.2: the picker's candidates are the wardrobe
+  // this page already holds, rather than a second collection fetched for it.
+  protected readonly store = inject(WardrobeStore);
   private readonly api = inject(ItemsApi);
+  private readonly sets = inject(SetsApi);
   private readonly router = inject(Router);
 
   // Read from the snapshot, not a subscription: nothing changes `:id` under
@@ -220,9 +365,33 @@ export class ItemDetailPage {
   protected readonly armed = signal(false);
   protected readonly actionError = signal<string | null>(null);
 
+  // The set this garment belongs to, hydrated from GET /sets/{set_id} rather
+  // than assembled out of items(): the collection excludes archived rows, so a
+  // set with an archived member would draw one member short with nothing on
+  // screen saying so, and a deep link onto this route has no collection at all.
+  // 04-API-SPEC.md assigns the fetch to "the one screen that renders them",
+  // which is this one.
+  protected readonly set = signal<ItemSet | null>(null);
+  // The row's own error line — a set that would not load, or a removal that
+  // failed. Add failures go to the sheet instead, in `pickError`, because that
+  // is where the user was standing when they asked.
+  protected readonly setError = signal<string | null>(null);
+  protected readonly pickError = signal<string | null>(null);
+  protected readonly picking = signal(false);
+  protected readonly addingToSet = signal(false);
+  protected readonly removingFromSet = signal(false);
+
   protected readonly item = computed(
     () => this.store.items().find((candidate) => candidate.id === this.id) ?? this.fetched(),
   );
+
+  protected readonly members = computed(
+    () => this.set()?.items.filter((member) => member.id !== this.id) ?? [],
+  );
+
+  // Two exactly. A set of three loses a member and survives; a set of two has
+  // nothing left to be, which the server enforces and this line announces.
+  protected readonly dissolves = computed(() => this.set()?.items.length === 2);
 
   protected readonly deleteLabel = computed(() => {
     if (this.deleting()) {
@@ -232,12 +401,142 @@ export class ItemDetailPage {
   });
 
   constructor() {
-    if (this.item() === null) {
+    // WardrobePage's guard, on the second page that can start a run. This one
+    // does not poll on arrival, but it may call store.load() when the picker
+    // opens on an empty collection — and the store is providedIn: 'root', so a
+    // run nobody stops keeps polling behind whatever screen comes next.
+    // DECISIONS.md 107.
+    inject(DestroyRef).onDestroy(() => this.store.stopPolling());
+
+    const row = this.item();
+    if (row === null) {
       this.api.get(this.id).subscribe({
-        next: (item) => this.fetched.set(item),
+        next: (item) => {
+          this.fetched.set(item);
+          this.loadSet(item);
+        },
         error: () => this.loadError.set(true),
       });
+      return;
     }
+    this.loadSet(row);
+  }
+
+  private loadSet(row: Item): void {
+    const setId = row.set_id;
+    if (setId === null) {
+      return;
+    }
+    this.sets.get(setId).subscribe({
+      next: (found) => this.set.set(found),
+      // The row states that this garment is in a set — set_id says so — and
+      // then cannot name the others. It deliberately does not fall back to the
+      // empty state, which would offer to declare a set that already exists.
+      error: () => this.setError.set('item.set.error.load'),
+    });
+  }
+
+  protected openPicker(): void {
+    this.disarm();
+    this.pickError.set(null);
+    this.picking.set(true);
+    // A deep link onto this route never loaded the wardrobe, and the sheet
+    // would open on nothing. This is the store's own load rather than a second
+    // way of fetching items, and it is asked for here rather than on
+    // construction because it is the picker that needs the collection.
+    if (this.store.items().length === 0) {
+      this.store.load();
+    }
+  }
+
+  protected closePicker(): void {
+    this.picking.set(false);
+  }
+
+  // One control, two endpoints. A garment in no set declares one over itself
+  // and the garment just picked; a garment in a set adds to the set it has.
+  protected onPicked(picked: Item): void {
+    const declared = this.set();
+    this.addingToSet.set(true);
+    this.pickError.set(null);
+
+    const request =
+      declared === null
+        ? this.sets.create({ item_ids: [this.id, picked.id] })
+        : this.sets.addItem(declared.id, { item_id: picked.id });
+
+    request.subscribe({
+      next: (found) => {
+        this.absorb(found);
+        this.addingToSet.set(false);
+        // Closed on success, where the upload sheet's camera path stays open:
+        // there is one garment to pick and the thing to look at afterwards is
+        // the row behind this sheet. DECISIONS.md 098's asymmetry, decided the
+        // other way for a control that is not a batch.
+        this.picking.set(false);
+      },
+      error: (error: unknown) => {
+        this.pickError.set(pickErrorKey(error));
+        this.addingToSet.set(false);
+      },
+    });
+  }
+
+  protected removeFromSet(): void {
+    const declared = this.set();
+    if (declared === null) {
+      return;
+    }
+    this.disarm();
+    this.removingFromSet.set(true);
+    this.setError.set(null);
+
+    this.sets.removeItem(declared.id, this.id).subscribe({
+      next: (survivor) => {
+        // The screen ends in the same state either way — this garment has no
+        // set — and the difference is whether the *other* member still has one.
+        // A null is the 204: the set dissolved, so every member it held loses
+        // its set_id, including the one that was never named in the URL. A set
+        // object is the 200: only this garment was detached, and the survivors
+        // arrive as server rows.
+        const orphaned = survivor === null ? declared.items.map((member) => member.id) : [this.id];
+        this.store.clearSetId(orphaned);
+        if (survivor !== null) {
+          this.store.absorbSet(survivor);
+        }
+        this.detach();
+        this.removingFromSet.set(false);
+      },
+      error: () => {
+        this.setError.set('item.set.error.remove');
+        this.removingFromSet.set(false);
+      },
+    });
+  }
+
+  private absorb(found: ItemSet): void {
+    this.set.set(found);
+    this.store.absorbSet(found);
+    // A deep-linked row never entered items(), so the store write cannot reach
+    // it and the page's own copy has to be moved by hand — the same thing
+    // onSave does with the row a PATCH answers with.
+    const mine = found.items.find((member) => member.id === this.id);
+    if (this.fetched() !== null && mine !== undefined) {
+      this.fetched.set(mine);
+    }
+  }
+
+  private detach(): void {
+    this.set.set(null);
+    const row = this.fetched();
+    if (row !== null) {
+      this.fetched.set({ ...row, set_id: null });
+    }
+  }
+
+  protected memberName(member: Item): string {
+    const name = member.display_name?.trim();
+    return name ? name : this.i18n.t('item.untitled');
   }
 
   protected onSave(changes: ItemUpdate): void {

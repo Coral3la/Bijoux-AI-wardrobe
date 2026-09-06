@@ -18,22 +18,24 @@ Angular 22 also introduces selectorless components (importing a component direct
 src/app/
 ├── core/
 │   ├── auth/            auth.service.ts (signals), auth.guard.ts, jwt.interceptor.ts
-│   ├── api/             items.api.ts, looks.api.ts, trips.api.ts, weather.api.ts, me.api.ts
+│   ├── api/             items.api.ts, looks.api.ts, trips.api.ts, weather.api.ts, me.api.ts,
+│   │                    sets.api.ts
 │   ├── i18n/            i18n.service.ts
 │   └── state/           wardrobe.store.ts, user.store.ts
 ├── features/
 │   ├── auth/            login.page.ts, register.page.ts
 │   ├── wardrobe/        wardrobe.page.ts, upload-sheet.ts, item-card.ts,
-│   │                    item-detail.page.ts, tag-editor.ts, filter-bar.ts
+│   │                    item-detail.page.ts, tag-editor.ts, filter-bar.ts,
+│   │                    set-picker.ts
 │   ├── stylist/         stylist.page.ts, look-request-form.ts, look-card.ts
 │   ├── trips/           trips.page.ts, trip-form.ts, packing-view.ts, day-strip.ts
 │   └── profile/         profile.page.ts
 ├── shared/
-│   ├── ui/              nav-bar.ts (task 4.9, the only one built)
-│   │                    button, chip, sheet, skeleton, empty-state, spinner,
-│   │                    toast — the seven are AUDITS.md O-15 and none exists
+│   ├── ui/              button.ts, chip.ts, empty-state.ts, skeleton.ts,
+│   │                    nav-bar.ts (4.9), authored-line.ts. Of AUDITS.md
+│   │                    O-15's seven, sheet, spinner and toast do not exist
 │   ├── models/          user.model.ts, item.model.ts, look.model.ts,
-│   │                    trip.model.ts, enums.ts
+│   │                    trip.model.ts, item-set.model.ts, enums.ts
 │   └── pipes/           cloudinary-url.pipe.ts (built at 1.9), enum-label.pipe.ts
 
 src/environments/        environment.model.ts, environment.ts,
@@ -217,6 +219,8 @@ place.
 
 **Built at task 1.5**, and three things about the grid are not what this section originally drew. **A `processing` tile keeps its photograph**, dimmed, with a "Tagging…" label — the legend above said skeleton, and the image is on the wire from the first response, so a grey block would replace a picture the user has just taken with a placeholder (`DECISIONS.md` 091). **A `failed` tile renders from `status` and never from "the tags are null"**: a retag leaves the previous attempt's values in place, so a failed item may arrive fully tagged (`DECISIONS.md` 089). **The empty state's button is inert until 1.6** wires it to the upload sheet, and the FAB drawn above is 1.6's rather than 1.5's — 1.5's acceptance line requires the one and no task requires the other (`DECISIONS.md` 090). The weather strip is 2.12's (this line said 2.2's until task 2.1; `STAGE-2` is authoritative and 2.2 is the location search), the chip row and filter panel are 1.8's, and the grid/list toggle is **nobody's** — this line assigned it to 1.8 while `STAGE-1` §1.8 named it nowhere, and 1.8 corrected that rather than building an affordance no brief asks for (090's ownership test); it stays first on the stage's cut list; the mockup above spans three stages.
 
+**A tile whose garment is in a set carries a badge, from task 4A.2.** `set_id` arrives on every item payload at 4A.1, so this is a marker and not a second request — the grid already has everything it needs to draw it. It is **opt-in on `ItemCard` and the wardrobe grid is the only caller that asks**, which reverses the default `[caption]` set one input along: four screens render that component and only this one can act on a set, because the tile behind it leads to the screen where a set is edited. On a look, on a saved look and on a trip day the same badge would be a fact with nothing to do — the argument `look-card.ts` already makes from the other side about its own ↻ badge, that a marker belonging to one screen does not live in the component both screens share. It sits at the start of the tile's top edge and is **drawn under the failed overlay rather than over it**: tagging failed is the more urgent thing to say about a garment, and both cannot have the corner. `DECISIONS.md` 231.
+
 That only holds if the whole wardrobe was loaded. `GET /items` defaults to `limit=100` and caps at 200, while a realistic wardrobe is 80–150 items, so the store must pass an explicit `limit` rather than take the default — otherwise the filter bar silently filters over the first hundred items and the counts are wrong with no error anywhere.
 
 ### 3. Upload sheet — bottom sheet over the wardrobe
@@ -267,6 +271,20 @@ Wear count and last worn are **built at task 3.4**. Until then the section carri
 **The route into this screen was specified nowhere.** The grid legend below gives a tile one behaviour, "tap to retry". Task 1.9 makes the tile's photograph a link to `/wardrobe/:id`, with the retry button as its sibling rather than inside it — an anchor wrapping a button is nested interactive content (`DECISIONS.md` 129). A `failed` tile also carries **Add tags by hand**, which is `03-AI-CONTRACTS.md`'s long-promised "Add manually" link and `AUDITS.md` **O-3**.
 
 The tag editor is not optional polish. Vision tagging is wrong on roughly 10–20% of items, and this screen is both the fix and the answer to "what happens when the AI is wrong?"
+
+**The set row is built at task 4A.2**, below the wear history and above the delete row, and it renders in **both** states rather than only when there is a set: a garment in none is where a set is declared from, and `STAGE-4A` puts the declaration here because it is where a user is standing when they think about one. In the empty state it is one sentence saying what a set is and a **Declare a set** control. With a set it is the other members as thumbnails linking to their own detail screens, the set's name where it has one, **Add to this set**, and **Remove from this set**.
+
+**The members come from `GET /sets/{set_id}` and not from the loaded wardrobe**, which is `04-API-SPEC.md`'s own assignment of that fetch to "the one screen that renders them", and there are two reasons the collection cannot serve. **`GET /items` excludes archived rows**, and an archived garment stays in its set — so a set drawn from `items()` would be one member short with nothing on screen saying why, where this row prints an **Archived** marker on it and is the only place in the application that garment can still be seen. And a **deep link** onto this route has no collection at all. The picker's candidates *are* the loaded wardrobe, which is the other half of the same rule: one read of the wardrobe on this screen, and the set is a resource of its own.
+
+**The branch is `set_id`, never the fetched set.** A failed `GET /sets/{set_id}` leaves the row with no members and an error line — and it must not fall through to the empty state, which would offer to declare a set that already exists.
+
+**The removal that leaves one member behind dissolves the set, and the row says so before the control is pressed.** A line under the two controls, rendered when the set holds exactly two, because at three the removal leaves a set behind. It is the rule `DELETE /sets/{set_id}/items/{item_id}` enforces on the wire, said once in words in the one place a user can act on it — not a two-press arm like **Delete**, which guards something irreversible where this destroys no garment at all.
+
+**Both of that endpoint's answers end this screen in the same state** — this garment has no set — and the difference is invisible here and not in the wardrobe behind it: a `200` detaches this garment and the others keep their `set_id`, a `204` means the set is gone and **the member that was never named in the URL loses its `set_id` too**. The store's copy of every affected row is moved either way, so the grid's badges follow without a reload. `DECISIONS.md` 231.
+
+**The picker is a bottom sheet — `set-picker.ts`, the second sheet in the project** and the first since 1.6. A plain element with `role="dialog"` rather than `<dialog>`, on 098's measurement, and the category chips from the filter bar reusing `shared/ui/chip`. It lists the wardrobe newest first, and it offers **neither the garment on screen, nor anything that already carries a `set_id`, nor anything that is not `ready`** — three exclusions that are each a request the server would refuse. It deliberately does **not** exclude the categories the stylist skips: that list is server configuration, this client has no copy of it, and a hand-mirrored constant with nothing watching it is the failure `CONVENTIONS.md` names. A swimsuit is therefore offered and refused on the wire, and the refusal is rendered in the sheet, by code, with `set_item_unavailable` and `set_member_taken` getting a sentence each.
+
+**Renaming a set, a sets list screen and anchoring the stylist on a whole set are out of scope for `STAGE-4A`**, and none of the three is stubbed here.
 
 ### 5. Stylist — `/stylist`
 

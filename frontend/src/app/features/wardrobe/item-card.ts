@@ -45,6 +45,26 @@ import { Item } from '../../shared/models/item.model';
           />
         </a>
 
+        <!-- Opt-in, and the default is the opposite of caption's below it. This
+             component is rendered by four screens and only one of them can act
+             on a set: the wardrobe grid, where the badge says which garments
+             are spoken for and the detail screen behind the tile is where a set
+             is edited. In a look, on a saved look and on a trip day it would be
+             a fact with nothing to do — look-card.ts makes the same argument
+             from the other side for its own badge, that a marker belonging to
+             one screen does not go in the component both share. So the grid
+             asks for it and nothing else does.
+             Drawn before the status overlays rather than after, so a failed
+             tile's panel covers it: tagging failed is the more urgent thing to
+             say about that garment, and both cannot occupy the corner. -->
+        @if (setBadge() && item().set_id !== null) {
+          <p
+            class="absolute start-0 top-0 bg-canvas/90 px-1 py-0.5 text-[10px] font-medium tracking-[0.18em] text-ink-muted uppercase"
+          >
+            {{ i18n.t('wardrobe.item.inSet') }}
+          </p>
+        }
+
         @if (item().status === 'processing' && !gaveUp()) {
           <p
             class="absolute inset-x-0 bottom-0 bg-canvas/90 p-1 text-center text-[10px] font-medium tracking-[0.18em] text-ink-muted uppercase"
@@ -142,6 +162,7 @@ export class ItemCard {
   readonly errorKey = input<string | null>(null);
   readonly stoppedWaiting = input(false);
   readonly caption = input(true);
+  readonly setBadge = input(false);
 
   readonly retry = output<void>();
 

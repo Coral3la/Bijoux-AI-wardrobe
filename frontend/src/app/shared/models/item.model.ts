@@ -45,6 +45,14 @@ export interface Item {
 
   readonly is_archived: boolean;
 
+  // On the wire from 4A.1, on every item payload in the application, because
+  // there is one item shape: GET /items, the upload response, and the hydrated
+  // items inside every look and every trip. A bare id rather than a nested set
+  // object, so a grid of 200 garments does not carry the same two or three
+  // members repeated — the one screen that draws the members fetches them from
+  // GET /sets/{set_id}. Null on almost every garment.
+  readonly set_id: string | null;
+
   readonly created_at: string;
   readonly updated_at: string;
 }

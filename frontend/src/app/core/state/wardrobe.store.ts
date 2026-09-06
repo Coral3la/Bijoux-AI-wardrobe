@@ -4,6 +4,7 @@ import { Observable, Subscription, tap } from 'rxjs';
 
 import { ItemsApi } from '../api/items.api';
 import { Category, Color } from '../../shared/models/enums';
+import { ItemSet } from '../../shared/models/item-set.model';
 import { Item, ItemUpdate } from '../../shared/models/item.model';
 
 // One page, always. 04-API-SPEC.md caps `limit` at 200 and nothing in the plan
@@ -564,6 +565,34 @@ export class WardrobeStore {
     }
     this.setRetagError(id, null);
     this.resumeWaiting(id);
+  }
+
+  // The two writers of `set_id` on this client, and they are here rather than
+  // on the detail page because `items` is this store's collection and the grid
+  // badge reads it: a membership written only into the page's own copy would
+  // leave the tile behind it saying the opposite until the next load().
+  //
+  // Server rows, so 097 and 120 hold unchanged: every member in a set object
+  // came off the wire as a full ItemResponse. One pass over the collection
+  // rather than `replace` per member, which would walk it once per garment.
+  absorbSet(set: ItemSet): void {
+    const members = new Map(set.items.map((member) => [member.id, member]));
+    this.itemsSignal.update((items) => items.map((current) => members.get(current.id) ?? current));
+  }
+
+  // The one field this client writes without a server row carrying it, and the
+  // wire is the whole reason: DELETE /sets/{set_id}/items/{item_id} answers 204
+  // with no body at all, and 200 with the members that *survived* — never with
+  // the garment just removed, and never with the second member of a set that
+  // has just dissolved. Both statuses assert the same thing about those rows,
+  // so this transcribes a response rather than guessing at one, and it runs
+  // after the server has answered. 120 refuses an *optimistic* write, which is
+  // a different thing: nothing here is on screen before the removal succeeded.
+  clearSetId(ids: readonly string[]): void {
+    const cleared = new Set(ids);
+    this.itemsSignal.update((items) =>
+      items.map((current) => (cleared.has(current.id) ? { ...current, set_id: null } : current)),
+    );
   }
 
   private setRetagError(id: string, key: string | null): void {

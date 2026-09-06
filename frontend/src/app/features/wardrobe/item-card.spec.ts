@@ -40,6 +40,7 @@ function item(overrides: Partial<Item> = {}): Item {
     wear_count: 0,
     last_worn_at: null,
     is_archived: false,
+    set_id: null,
     created_at: '2026-08-19T09:00:00Z',
     updated_at: '2026-08-19T09:00:00Z',
     ...overrides,
@@ -63,12 +64,14 @@ async function render(
   retrying = false,
   errorKey: string | null = null,
   stoppedWaiting = false,
+  setBadge = false,
 ): Promise<void> {
   fixture = TestBed.createComponent(ItemCard);
   fixture.componentRef.setInput('item', value);
   fixture.componentRef.setInput('retrying', retrying);
   fixture.componentRef.setInput('errorKey', errorKey);
   fixture.componentRef.setInput('stoppedWaiting', stoppedWaiting);
+  fixture.componentRef.setInput('setBadge', setBadge);
   await fixture.whenStable();
 }
 
@@ -255,5 +258,45 @@ describe('ItemCard', () => {
     await render(item());
 
     expect(links().some((link) => link.textContent?.includes('Add tags by hand'))).toBe(false);
+  });
+  // --- the set badge, task 4A.2 --------------------------------------------
+
+  // Off unless asked for, which is the opposite of `caption` directly below it
+  // and deliberate: four screens render this component and only the wardrobe
+  // grid can act on a set. A default of true would put the badge on every look
+  // and every trip day, where it is a fact with nothing behind it.
+  it('draws no badge unless the caller asks for one', async () => {
+    await render(item({ set_id: 'set-1' }));
+
+    expect(text()).not.toContain('In a set');
+  });
+
+  it('draws the badge on a garment in a set when asked', async () => {
+    await render(item({ set_id: 'set-1' }), false, null, false, true);
+
+    expect(text()).toContain('In a set');
+  });
+
+  it('draws no badge on a garment in no set, even when asked', async () => {
+    await render(item({ set_id: null }), false, null, false, true);
+
+    expect(text()).not.toContain('In a set');
+  });
+
+  // Three short words that could as easily have been typed into the template.
+  // A second string table is the only test that can tell the two apart.
+  it('reads the badge from the string table', async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    });
+    mock = TestBed.inject(HttpTestingController);
+    const loading = TestBed.inject(I18nService).load();
+    mock.expectOne('/i18n/en.json').flush({ ...en, 'wardrobe.item.inSet': 'Paired' });
+    await loading;
+
+    await render(item({ set_id: 'set-1' }), false, null, false, true);
+
+    expect(text()).toContain('Paired');
   });
 });

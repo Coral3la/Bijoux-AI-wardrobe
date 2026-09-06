@@ -703,6 +703,45 @@ so this item's other recommendation is now the live one: delete the line from
 `05`'s file tree rather than leave a map of a structure the project does not
 have. That is a Stage 5 tidy and it needs a decision, not a commit.
 
+**The second sheet arrived at task 4A.2, and it is the first thing to meet this
+item's actual condition.** The recommendation was *extract the first primitive
+at its second caller, not its first*; `set-picker.ts` is the second caller of a
+**sheet** — the first since 1.6, and the only other `role="dialog"` in the tree
+— where 1.8, 1.9 and 4.9 each declined by not needing one at all. So this is not
+a fifth decline: the four before it were tasks that had no second caller, and
+this is the second caller declining to extract on a different ground.
+
+**The ground is that the extraction changes no behaviour and edits a file this
+task has no other reason to open.** A shared `sheet` would have to carry what
+`upload-sheet.ts` owns for itself — the fixed backdrop, the `role="dialog"`
+element, the dismiss control and the plain-element decision 098 recorded — and
+lifting it means rewriting a component that is correct, tested and untouched by
+sets, for a diff whose entire content is *the same pixels from a different
+file*. `set-picker.ts` therefore copies the shape and says so in a comment
+naming this item. **The duplication is real and it is two elements and four
+classes**, not a behaviour: the two sheets already differ in what they do on
+success (the camera keeps 1.6's sheet open; a pick closes this one), which is
+the part an extraction could not have shared anyway.
+
+**What this changes for whoever closes it.** The item's two open questions were
+*extract at the second caller* and *delete the line from `05`'s tree if the
+directory stays empty*. **The second is closed in this commit**, by correction
+rather than by deletion: the directory did not stay empty, and `05`'s tree said
+**none of the seven exists** long after that stopped being true. The count it
+was hiding is worth stating, because "six exist" and "four exist" are both true
+of different lists — `shared/ui/` holds **six** components (`button`, `chip`,
+`empty-state`, `skeleton`, `nav-bar`, `authored-line`), of which **four** are on
+this item's list of seven; `nav-bar` and `authored-line` were never on it, and
+`sheet`, `spinner` and `toast` are the three that still do not exist. The tree
+now says that. `CONVENTIONS.md`'s test is whether a sentence is false *now*, and
+that one was.
+
+**So this item stands on the sheet alone.** One open question, one named
+condition already met, two callers to justify the work and one of them to
+rewrite: **Stage 5**, where it is a refactor commit of its own rather than a
+rider on a feature. `spinner` and `toast` are not part of it — neither has a
+first caller, let alone a second.
+
 
 #### O-16 · Seven `GET /items` query parameters have no caller, no test, and now no candidate — task 5.2 or 5.4
 

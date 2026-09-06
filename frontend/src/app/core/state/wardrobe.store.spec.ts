@@ -46,6 +46,7 @@ function item(overrides: Partial<Item> = {}): Item {
     wear_count: 0,
     last_worn_at: null,
     is_archived: false,
+    set_id: null,
     created_at: '2026-08-19T09:00:00Z',
     updated_at: '2026-08-19T09:00:00Z',
     ...overrides,
@@ -900,6 +901,70 @@ describe('WardrobeStore', () => {
     store.retag('a', true);
 
     mock.expectOne(`${environment.apiUrl}/items/a/retag?force=true`).flush(item({ id: 'a' }));
+  });
+
+  // --- set_id, task 4A.2 ---------------------------------------------------
+
+  describe('the two writers of set_id', () => {
+    function itemSet(members: readonly Item[]) {
+      return { id: 'set-1', name: null, items: members, created_at: '2026-09-06T09:00:00Z' };
+    }
+
+    // Server rows, replaced whole. Every member of a set object came off the
+    // wire as a full item, so 097's contract on this collection is intact.
+    it('replaces every member the set names and touches nothing else', () => {
+      loaded([item({ id: 'a' }), item({ id: 'b' }), item({ id: 'c' })]);
+
+      store.absorbSet(
+        itemSet([
+          item({ id: 'a', set_id: 'set-1', display_name: 'renamed by the server' }),
+          item({ id: 'b', set_id: 'set-1' }),
+        ]),
+      );
+
+      expect(store.items().map((row) => row.set_id)).toEqual(['set-1', 'set-1', null]);
+      expect(store.items()[0].display_name).toBe('renamed by the server');
+    });
+
+    // A member the collection has never held — an archived one, or a row past
+    // the 200-item page — is not inserted. This collection is what GET /items
+    // answered, and a set object is not a second source of rows for it.
+    it('adds no row the collection did not already hold', () => {
+      loaded([item({ id: 'a' })]);
+
+      store.absorbSet(
+        itemSet([item({ id: 'a', set_id: 'set-1' }), item({ id: 'archived', set_id: 'set-1' })]),
+      );
+
+      expect(store.items().map((row) => row.id)).toEqual(['a']);
+    });
+
+    // The one field written without a server row carrying it, because the wire
+    // cannot: a 204 has no body and a 200 carries only the survivors.
+    it('clears set_id on the ids it is given and no others', () => {
+      loaded([
+        item({ id: 'a', set_id: 'set-1' }),
+        item({ id: 'b', set_id: 'set-1' }),
+        item({ id: 'c', set_id: 'set-2' }),
+      ]);
+
+      store.clearSetId(['a', 'b']);
+
+      expect(store.items().map((row) => row.set_id)).toEqual([null, null, 'set-2']);
+    });
+
+    it('changes nothing else about a row it clears', () => {
+      loaded([item({ id: 'a', set_id: 'set-1', wear_count: 4, display_name: 'the blazer' })]);
+
+      store.clearSetId(['a']);
+
+      expect(store.items()[0]).toMatchObject({
+        id: 'a',
+        set_id: null,
+        wear_count: 4,
+        display_name: 'the blazer',
+      });
+    });
   });
 });
 

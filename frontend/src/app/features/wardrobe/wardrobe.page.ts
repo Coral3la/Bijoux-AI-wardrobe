@@ -235,6 +235,7 @@ function scale(value: string | null): number | undefined {
                   [retrying]="store.retrying().has(item.id)"
                   [errorKey]="store.retagErrors().get(item.id) ?? null"
                   [stoppedWaiting]="store.stoppedWaiting().has(item.id)"
+                  [setBadge]="true"
                   (retry)="store.retag(item.id)"
                 />
               </li>

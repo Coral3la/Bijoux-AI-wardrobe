@@ -46,6 +46,7 @@ function item(overrides: Partial<Item> = {}): Item {
     wear_count: 0,
     last_worn_at: null,
     is_archived: false,
+    set_id: null,
     created_at: '2026-08-19T09:00:00Z',
     updated_at: '2026-08-19T09:00:00Z',
     ...overrides,

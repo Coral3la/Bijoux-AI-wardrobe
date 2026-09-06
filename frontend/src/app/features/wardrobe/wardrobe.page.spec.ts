@@ -43,6 +43,7 @@ function item(overrides: Partial<Item> = {}): Item {
     wear_count: 0,
     last_worn_at: null,
     is_archived: false,
+    set_id: null,
     created_at: '2026-08-19T09:00:00Z',
     updated_at: '2026-08-19T09:00:00Z',
     ...overrides,
@@ -951,5 +952,15 @@ describe('WardrobePage', () => {
       expect(greetingSlot(new Date(2026, 8, 1, 18))).toBe('evening');
       expect(greetingSlot(new Date(2026, 8, 1, 23, 59))).toBe('evening');
     });
+  });
+  // --- the set badge, task 4A.2 --------------------------------------------
+
+  // ItemCard defaults the badge off, so the grid is the one caller that has to
+  // ask. Without this line the tiles are silent about a set and the whole
+  // feature is invisible outside the detail screen.
+  it('asks its tiles for the set badge', async () => {
+    await render([item({ id: 'a', set_id: 'set-1' }), item({ id: 'b' })]);
+
+    expect(text()).toContain('In a set');
   });
 });
