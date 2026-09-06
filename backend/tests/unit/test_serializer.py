@@ -12,6 +12,7 @@ it is supposed to catch; `DECISIONS.md` 101 and the `RESULT_LIMIT` survivor at
 
 import datetime
 import itertools
+import re
 import uuid
 from typing import Any
 
@@ -72,6 +73,10 @@ def _item(**tags: Any) -> ItemResponse:
         "wear_count": 0,
         "last_worn_at": None,
         "is_archived": False,
+        # 4A.1's, and unlike the two above it is a field this module is about:
+        # every test below that does not name a set relies on this default to
+        # say that no token is written.
+        "set_id": None,
         "created_at": _EPOCH,
         "updated_at": _EPOCH,
     }
@@ -207,6 +212,99 @@ def test_water_resistant_is_appended_only_when_true():
 def test_both_extras_appear_with_rise_first():
     line = serialize_wardrobe([_shirt(rise="high", water_resistant=True)])
     assert line.endswith("base | rise:high | water_resistant")
+
+
+# --- the set token, added at 4A.1 ------------------------------------------
+
+
+def test_both_members_of_a_serialised_pair_carry_the_same_token():
+    """`03-AI-CONTRACTS.md`'s worked example, both lines, transcribed.
+
+    It is the only test in this file that pins two whole lines at once, and the
+    reason is that `set:` is the one extra which is not a property of its own
+    row: the token on the shirt is a statement about the jeans being in the same
+    list. It also fixes the extras order — `rise` before `set` — on the
+    document's own example rather than on a second assertion.
+    """
+    suit = uuid.uuid4()
+    wardrobe = [
+        _shirt(set_id=suit),
+        _item(
+            short_id=JEANS_ID,
+            category="bottom",
+            subcategory="jeans",
+            fit="straight",
+            length="full",
+            rise="high",
+            color_primary="light_blue",
+            pattern="denim_wash",
+            material="denim",
+            formality=2,
+            warmth=2,
+            layer="base",
+            set_id=suit,
+        ),
+    ]
+
+    assert serialize_wardrobe(wardrobe) == (
+        "A3F9K2 | top/shirt | oversized | long_sleeve | white | — | solid | cotton "
+        "| F3 W2 | base | set:1\n"
+        "7BX1QM | bottom/jeans | straight | full | light_blue | — | denim_wash | denim "
+        "| F2 W2 | base | rise:high | set:1"
+    )
+
+
+def test_a_set_with_only_one_member_in_the_list_carries_no_token():
+    """The other members were filtered out before serialisation — archived,
+    `processing`, `failed`, or in an excluded category — and a `set:` token on a
+    single line names a grouping the model cannot act on: there is nothing to
+    pair the garment with."""
+    lone = _shirt(set_id=uuid.uuid4())
+
+    assert serialize_wardrobe([lone]).endswith("base")
+
+
+def test_the_ordinals_stay_contiguous_across_a_set_that_lost_its_siblings():
+    """The lone member is skipped rather than numbered and skipped, so the set
+    that follows it is `1` and not `2`. Numbering every `set_id` and then
+    omitting the token would leave the model reading `set:2` with no `set:1`
+    anywhere in the wardrobe."""
+    orphan, pair = uuid.uuid4(), uuid.uuid4()
+    wardrobe = [_shirt(set_id=orphan), _shirt(set_id=pair), _shirt(set_id=pair)]
+
+    tokens = [line.rsplit(" | ", 1)[-1] for line in serialize_wardrobe(wardrobe).splitlines()]
+
+    assert tokens == ["base", "set:1", "set:1"]
+
+
+def test_sets_are_numbered_by_the_order_their_first_member_appears():
+    """`1, 2, 3 …` over the wardrobe actually being serialised, so two runs over
+    the same list produce the same lines. The second set's first member appears
+    third here and is still `set:2`."""
+    first, second = uuid.uuid4(), uuid.uuid4()
+    wardrobe = [
+        _shirt(set_id=first),
+        _shirt(set_id=first),
+        _shirt(set_id=second),
+        _shirt(set_id=None),
+        _shirt(set_id=second),
+    ]
+
+    tokens = [line.rsplit(" | ", 1)[-1] for line in serialize_wardrobe(wardrobe).splitlines()]
+
+    assert tokens == ["set:1", "set:1", "set:2", "base", "set:2"]
+
+
+def test_the_token_is_an_ordinal_and_the_row_id_never_reaches_the_line():
+    """`short_id` is the only identifier the model ever sees, which is
+    `04-API-SPEC.md`'s standing rule and about twelve tokens a member cheaper.
+    Asserted against the UUID *shape* rather than against the two ids planted
+    here, so writing any other row's id into the line fails as well."""
+    suit = uuid.uuid4()
+    text = serialize_wardrobe([_shirt(set_id=suit), _shirt(set_id=suit)])
+
+    assert str(suit) not in text
+    assert re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", text) is None
 
 
 # --- the shape of the whole document ---------------------------------------

@@ -47,6 +47,14 @@ class ItemResponse(BaseModel):
 
     is_archived: bool
 
+    # A bare id rather than a nested set object, which is `04-API-SPEC.md`'s
+    # own narrowing: there is one item shape, so this field rides on every item
+    # payload in the application — `GET /items`, the upload response and the
+    # hydrated items inside every look and every trip — and a grid of 200
+    # garments must not carry the same two or three members repeated. The one
+    # screen that draws the members fetches them from `GET /sets/{set_id}`.
+    set_id: uuid.UUID | None
+
     created_at: datetime
     updated_at: datetime
 

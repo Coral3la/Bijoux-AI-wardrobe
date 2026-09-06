@@ -79,6 +79,10 @@ def _item(short_id: str, **tags: Any) -> ItemResponse:
         "wear_count": 0,
         "last_worn_at": None,
         "is_archived": False,
+        # 4A.1's, and the fourth time this dict has failed to build over a new
+        # required field. `None` is the ordinary value: almost no garment
+        # belongs to a set.
+        "set_id": None,
         "created_at": _EPOCH,
         "updated_at": _EPOCH,
     }

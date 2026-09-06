@@ -23,14 +23,21 @@ their route matches on stops being the name the database reports.
 from pathlib import Path
 
 from app.db.base import Base
-from app.models import item, look, trip, user  # noqa: F401  — registers the tables on Base.metadata
+from app.models import (  # noqa: F401  — registers the tables on Base.metadata
+    item,
+    item_set,
+    look,
+    trip,
+    user,
+)
 
 MIGRATION_0001 = Path(__file__).resolve().parents[2] / "alembic" / "versions" / "0001_initial.py"
 
 # Every constraint the migrations create, under the name the convention expands
-# to. `0002`'s five, `0004`'s one and `0005`'s three are in the same set rather
-# than in sets of their own: the property under test is that one list matches the metadata, and
-# splitting it by migration would let a table belong to neither.
+# to. `0002`'s five, `0004`'s one, `0005`'s three and `0007`'s three are in the
+# same set rather than in sets of their own: the property under test is that one
+# list matches the metadata, and splitting it by migration would let a table
+# belong to neither.
 #
 # Indexes are not constraints and are absent here — `Table.constraints` does not
 # hold them — so `idx_items_wardrobe` and the four `0004` and `0005` build are
@@ -42,7 +49,10 @@ MIGRATION_0001 = Path(__file__).resolve().parents[2] / "alembic" / "versions" / 
 # does not hold it either. What covers it is a refusal test in
 # `tests/integration/test_trips_rows.py`, which is stronger than this comparison
 # rather than weaker — a unique index changes a result, where the four above
-# change only a plan.
+# change only a plan. **`0007`'s `idx_items_set_id` joins that half**, and it is
+# the one index in the project with a test of its own: it is named in
+# `tests/integration/test_sets_rows.py`'s cycle, because a `downgrade()` that
+# left it behind is a revision that cannot be re-applied.
 EXPECTED_NAMES = {
     "pk_users",
     "uq_users_email",
@@ -63,6 +73,9 @@ EXPECTED_NAMES = {
     "pk_trips",
     "fk_trips_user_id_users",
     "ck_trips_date_order",
+    "pk_item_sets",
+    "fk_item_sets_user_id_users",
+    "fk_items_set_id_item_sets",
 }
 
 # The two the write paths match on by name, in a narrow `if` so that a violation

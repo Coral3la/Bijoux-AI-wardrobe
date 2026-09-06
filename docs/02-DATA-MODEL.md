@@ -817,8 +817,13 @@ Stage 3's columns were shown inline in the table definitions above for readabili
 revision, for the reason `0005` did: an `items.set_id` pointing at no table is
 not a schema. It carries no data — every existing row's `set_id` is `NULL` and
 that is the correct value, so there is no backfill and nothing to get wrong.
-Its `downgrade()` is a real reversal, unlike `0003`'s: drop the column, then the
-index and the table.
+Its `downgrade()` is a real reversal, unlike `0003`'s, and it runs the reverse
+of that order: the index, then the column, then the table — because dropping the
+column first would take `idx_items_set_id` with it, and the `drop_index` after
+it would then raise on an object that is already gone. `0005` and `0006` name
+their indexes first for the same reason. *This sentence read "drop the column,
+then the index and the table" until task 4A.1, which is an order that cannot
+run.*
 
 **`0006` is the first migration in this project that carries data as well as
 schema**, and both `UPDATE`s are the same statement said twice: every look with a

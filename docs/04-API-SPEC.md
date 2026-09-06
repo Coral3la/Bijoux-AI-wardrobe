@@ -354,9 +354,16 @@ the request asked for a state the set is already in, and answering `422` for it
 would make a double-tap an error. `set_member_taken` is about a garment being
 claimed elsewhere, which this is not.
 
-`404` `not_found` for another account's set, and for an item id that resolves to
-no row at all — an id naming nothing is not an unavailable garment. Both answer
-before anything is written.
+`404` `not_found` for another account's set, **and for that alone**. An
+`item_id` that resolves to no row at all is `422` `set_item_unavailable`, the
+same answer `POST /sets` gives it: the id is a value in the body rather than the
+resource being addressed, and answering `422` for another account's garment
+while answering `404` for one that exists nowhere would make the pair of codes
+report whether a UUID exists in somebody else's wardrobe. It is
+`anchor_unavailable`'s collapse one endpoint along — `CONVENTIONS.md` makes the
+argument there — and the set is checked before the garment, both before anything
+is written. *This paragraph read the other way, `404` for an id naming no row,
+until task 4A.1 implemented it and the leak became visible.*
 
 ### `DELETE /sets/{set_id}/items/{item_id}`
 ```json

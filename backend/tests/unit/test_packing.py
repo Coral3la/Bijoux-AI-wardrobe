@@ -62,6 +62,7 @@ def _item(short_id: str, category: str) -> ItemResponse:
         attributes={},
         wear_count=0,
         last_worn_at=None,
+        set_id=None,
         created_at=datetime.datetime(2026, 8, 26, tzinfo=datetime.UTC),
         updated_at=datetime.datetime(2026, 8, 26, tzinfo=datetime.UTC),
     )

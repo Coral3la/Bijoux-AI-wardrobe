@@ -100,7 +100,7 @@ same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
 task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, **which task 3.1 closed**, printing both indexes in `02` before migration `0004` built them and finding, on the way, that deleting them failed no test. **O-29 and O-30 were opened at task 3.2**, and they are the two kinds this file has collected most: a cost that only becomes visible on its third instance — three screens with no way into them — and a documented endpoint with nothing under its heading, which is **O-1's shape** found the same way, by the task implementing the section next to it. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had. **O-31 was opened at task 4.1**, and it is the first item here that is a defect in a *shipped* artefact rather than in a document or an unread surface: three constraint names that the live schema has held wrongly since Stage 0, found by the task that was about to add a fourth the same way, and invisible to the one test written to catch exactly it. **Task 4.3 closed O-7**, the oldest item still open — audit 1 predicted the unsatisfiable trip constraints that `DECISIONS.md` 190 later had to settle, and its recommendation is taken in shape though not in number, for measurements taken after it was written. **Task 4.3 also closed O-27**, three lines in the fake, after a fourteen-day trip
 turned "a `502` for four months of the year" into "a `502` for nearly any trip".
-**O-32 was opened by the same task**, and it is the first that is a collision between two stages rather than a defect in either: Stage 4's repack and delete were specified before Stage 3 gave a look three columns worth keeping, and neither document is wrong on its own terms. **Task 4.4 closed it**, taking the recommendation in full and adding the thing three written options had all left out — *when* the destruction happens relative to the model call, which is the difference between a failed repack that costs nothing and one that empties a trip. Task 4.3 also **closed O-26**, across two of its three commits — the contract struck the field, the code followed, and the field that had survived 157's test twice failed it on the third asking. **O-36 and O-37 were opened at task 3.6a**, and they are the two things a task finds when it is the first to *use* work that already shipped: an endpoint whose caller was never built, noticed only because both tasks sit on one checklist, and a number that has been approximate since 1.8 and became visible the moment something linked to the list behind it. Neither is a contradiction between documents — the first is a gap between two halves of one task, and the second is a documented trade-off meeting its first reader who can see it.
+**O-32 was opened by the same task**, and it is the first that is a collision between two stages rather than a defect in either: Stage 4's repack and delete were specified before Stage 3 gave a look three columns worth keeping, and neither document is wrong on its own terms. **Task 4.4 closed it**, taking the recommendation in full and adding the thing three written options had all left out — *when* the destruction happens relative to the model call, which is the difference between a failed repack that costs nothing and one that empties a trip. Task 4.3 also **closed O-26**, across two of its three commits — the contract struck the field, the code followed, and the field that had survived 157's test twice failed it on the third asking. **O-36 and O-37 were opened at task 3.6a**, and they are the two things a task finds when it is the first to *use* work that already shipped: an endpoint whose caller was never built, noticed only because both tasks sit on one checklist, and a number that has been approximate since 1.8 and became visible the moment something linked to the list behind it. Neither is a contradiction between documents — the first is a gap between two halves of one task, and the second is a documented trade-off meeting its first reader who can see it. **O-38 was opened at task 4A.1**, and it is a fifth kind: not a contradiction, not an unread surface and not a measurement, but an assertion that was never written — a wire shape whose additions are caught by test fixtures failing to *construct* rather than by anything asserting what it carries, found because 4A.1 added a field to it and watched which files went red.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -1987,3 +1987,54 @@ the demo wardrobe is 40 rows.
 count, and the category chips — and should be answered once for all three rather
 than three times. Recorded now because 3.6a is what made it visible, and the
 next person to see a short list will look for a bug in the filter.
+
+#### O-38 · Nothing pins `ItemResponse`'s wire key set — opened at task 4A.1
+
+`ItemResponse` is the most widely carried shape in this API. `04-API-SPEC.md`
+defines it once — *every column of `items` except `user_id`*, plus the computed
+`image_url` — and one item shape then rides on `GET /items`, `GET /items/{id}`,
+`PATCH`, `DELETE`, the upload response, the hydrated items inside every look, and
+the hydrated items inside every trip. **No test asserts what it contains.**
+
+**`test_looks_list.py` does exactly this for the look shape and says why.** Its
+`assert set(body["looks"][0]) == {…}` is transcribed from `04` and carries a
+comment recording that `is_saved` was added at 3.2 and *"broke no test at all,
+because nothing anywhere asserted what a look on the wire contains"* — and that
+the assertion then caught `feedback` at 3.3 and `worn_at` at 3.4, as the comment
+predicted. The item shape is still in the state the look shape was in before
+3.2. `test_items_stats.py` pins `MostWornItem`'s three keys as a whole object,
+with a comment noting that *"nothing pinned the narrowing"* — so the project has
+the assertion for the **narrow** item shape and not for the full one.
+
+**What actually caught `set_id` at 4A.1 was four fixture dicts failing to
+build.** `tests/unit/test_serializer.py`, `test_stylist.py`,
+`test_look_validation.py` and `tests/unit/test_packing.py` each construct an
+`ItemResponse` from a literal of every field, so a new required field is a
+collection error naming all four at once — the same signal `wear_count` and
+`last_worn_at` produced at 3.4, and the fixture comments there say so. That is a
+real signal and it is not the assertion:
+
+- **It is an accident of the fixtures being exhaustive.** Give the new field a
+  default on the schema — `set_id: uuid.UUID | None = None` — and all four go on
+  passing while every client in the application quietly gains a key.
+- **It only catches additions.** A field *removed* from `ItemResponse`, or
+  renamed, leaves every fixture building cleanly and every response one key
+  short.
+- **It says nothing about the wire.** `image_url` is a `computed_field` with no
+  column and no fixture entry, so it is the one key on the payload that no
+  fixture would ever have mentioned.
+
+**Recommendation.** One assertion, transcribed from `04-API-SPEC.md` rather than
+derived from `ItemResponse.model_fields` — a derived expectation moves with the
+mutation it is supposed to catch, which is `CONVENTIONS.md`'s rule and the reason
+`test_looks_list.py`'s list is a literal. `tests/integration/test_items_rows.py`
+is the natural home: it already drives the upload and the list route with
+`cloudinary_configured`, so `image_url` is real there. One assertion covers every
+caller, because there is one item shape.
+
+**What closes it.** Stage 5. Deliberately not written at 4A.1: that task's test
+list is closed by its own stage file, and an assertion over a shape 4A.1 widened
+by exactly one field belongs with the QA pass that owns the suite's gaps rather
+than with the feature that made the gap visible. Recorded now because the next
+field added to `ItemResponse` will be found the same accidental way, or not at
+all.

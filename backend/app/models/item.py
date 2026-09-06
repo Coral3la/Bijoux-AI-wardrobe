@@ -41,6 +41,12 @@ class Item(Base):
             "category",
             postgresql_where=text("is_archived = false"),
         ),
+        # The referencing side of `0007`'s foreign key, which PostgreSQL does
+        # not index for us — `idx_looks_trip_id`'s argument one table along. It
+        # is partial because `set_id` is NULL on almost every row, and its one
+        # reader is the item detail screen asking for the other members of this
+        # item's set.
+        Index("idx_items_set_id", "set_id", postgresql_where=text("set_id IS NOT NULL")),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -91,6 +97,15 @@ class Item(Base):
     last_worn_at: Mapped[date | None] = mapped_column(Date)
 
     is_archived: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+
+    # Added by migration 0007. Nullable with no server default, and NULL is the
+    # ordinary value: a set is the exception a user declares, not a property
+    # every garment has. ON DELETE SET NULL is what makes deleting a set safe —
+    # the statement goes and the garments stay — and it is also how the API's
+    # "fewer than two members is not a set" rule clears the last member.
+    set_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("item_sets.id", ondelete="SET NULL")
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=text("now()")
