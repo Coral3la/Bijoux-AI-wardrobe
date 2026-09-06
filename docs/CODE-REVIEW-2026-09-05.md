@@ -105,6 +105,13 @@ if candidate.is_file() and candidate.is_relative_to(_STATIC_DIR):
 Safe: every legitimate asset path resolves inside `static/` and is unchanged.
 Worth a test that a `..` path answers `index.html` (or 404) rather than a file.
 
+**Pass B note, 2026-09-06.** Measured through this project's `TestClient`:
+httpx 0.28.1 collapses a literal `/../` before the request leaves, so
+`GET /../sentinel.txt` arrives as `/sentinel.txt` and exercises nothing. The
+percent-encoded `/%2e%2e/sentinel.txt` reaches the route as `../sentinel.txt`,
+and is the shape `tests/integration/test_spa_fallback.py` sends. The
+server-side claim is unaffected.
+
 ### B2. `get_forecast` accepts a shifted answer that `get_daily_forecast` refuses
 
 `backend/app/services/weather.py:283-342` and `345-444`

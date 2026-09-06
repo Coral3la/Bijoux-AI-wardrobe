@@ -73,20 +73,30 @@ def health(db: Session = Depends(get_db)) -> HealthResponse:
 # stays reachable and the Angular dev server is unaffected.
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
-if _STATIC_DIR.is_dir():
+
+def register_spa(app: FastAPI, static_dir: Path) -> None:
+    """A function with one caller so the tests can register the route against
+    a temporary directory: `static/` exists only inside the image, and the
+    `is_dir()` below runs once, at import."""
 
     @app.get("/{spa_path:path}", include_in_schema=False)
     def _serve_spa(spa_path: str) -> FileResponse:
         # /api/... and /health are registered above and win by order.
         # The catch-all would otherwise turn a missed API call into an HTML
         # page instead of the JSON error CONVENTIONS.md promises the client.
-        if spa_path.startswith("api/") or spa_path == "health":
+        # `/health/` is registered nowhere and reaches here: the catch-all
+        # matches it before Starlette's trailing-slash redirect can.
+        if spa_path.startswith("api/") or spa_path.startswith("health/"):
             raise HTTPException(status_code=404, detail="Not Found")
 
-        candidate = (_STATIC_DIR / spa_path).resolve()
-        if candidate.is_file() and candidate.is_relative_to(_STATIC_DIR):
+        candidate = (static_dir / spa_path).resolve()
+        if candidate.is_file() and candidate.is_relative_to(static_dir):
             return FileResponse(candidate)
         # SPA fallback: hand index.html to the Angular router for any
         # deep link the user refreshes on (/wardrobe, /trip/42, …).
-        return FileResponse(_STATIC_DIR / "index.html")
+        return FileResponse(static_dir / "index.html")
+
+
+if _STATIC_DIR.is_dir():
+    register_spa(app, _STATIC_DIR)
 
