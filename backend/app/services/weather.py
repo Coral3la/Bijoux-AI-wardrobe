@@ -360,6 +360,23 @@ async def get_daily_forecast(
             raise ForecastOutOfRangeError(_reason(response))
         response.raise_for_status()
         forecasts = _forecasts(response.json())
+    # Before the broad clause, not after: `HTTPStatusError` is an `HTTPError`,
+    # so ordered the other way this branch never runs and the status code the
+    # provider answered with is lost — which is the whole point of the split.
+    except httpx.HTTPStatusError as exc:
+        logger.warning(
+            "Daily forecast request failed",
+            extra={
+                "latitude": lat,
+                "longitude": lon,
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "status_code": exc.response.status_code,
+                "body": exc.response.text[:200],
+            },
+            exc_info=exc,
+        )
+        raise ForecastProviderError("The forecast provider did not answer.") from exc
     except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as exc:
         logger.warning(
             "Daily forecast request failed",
@@ -369,6 +386,7 @@ async def get_daily_forecast(
                 "start_date": start.isoformat(),
                 "end_date": end.isoformat(),
             },
+            exc_info=exc,
         )
         raise ForecastProviderError("The forecast provider did not answer.") from exc
 
