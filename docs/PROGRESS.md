@@ -145,6 +145,34 @@ single-day call (189), and a trip's dates are bounded on the **last** day,
 
 _Append one line per completed stage: date, what shipped, what changed from the plan._
 
+**2026-09-07 — a fix outside any stage: two lines of the stylist's styling
+principles.** **1215 backend tests pass, unchanged** — no test transcribed
+either sentence, which was checked before writing rather than after; `ruff`,
+`ruff format` and `mypy` clean. Not a bug fix: `DECISIONS.md` **230** shipped
+the `set:<n>` token with no validation rule and said the way to find out whether
+the model honours it is to ship it. A live run against the demo wardrobe
+answered — two sets, four garments, `set:1`/`set:1` and `set:2`/`set:2` on the
+wire, and the model never paired either across many attempts. Two lines change.
+**The set line** keys on the *number* rather than on the marker — with two sets
+on one list, "items sharing a set: marker" was true of all four garments and
+licensed pairing across them — leads with the instruction, says the set wins
+against the proportion and colour principles when they disagree, and cuts the
+permission to one clause. **The colour line** admits tonal dressing beside the
+neutral-base-plus-one-carrier shape, because both demo sets are monochrome and
+the old line was an instruction not to wear two brown pieces together; the
+pattern clause is kept and conditioned on scale. **This changes every look the
+application produces**, not only looks with sets, and nothing measures whether
+it worked: no rule was added and `validate_look_response()` is untouched.
+Changed: `backend/app/prompts/stylist_system.md`, `docs/03-AI-CONTRACTS.md`.
+**Two corrections rode along.** The brief said `PROMPT_VERSION` would move on
+its own; it hashes the *vision* prompt and the stylist prompt deliberately
+carries no version at all, so nothing recorded this change — `AUDITS.md`
+**O-39**, recommendation only, Stage 5 or later. And `03`'s quoted copy of the
+prompt was missing `PACKING A TRIP` entirely, sixteen lines shipped in Stage 4
+and never transcribed; the block is now regenerated from the file and matches it
+byte for byte, which is how the omission was found and how the absence of any
+other divergence was confirmed. `DECISIONS.md` **232**.
+
 **2026-09-06 — task 4A.2, sets on the web. Stage 4A is closed.** **819 frontend
 tests pass in 44 files (762 in 42 before, 57 added across two new spec files)**,
 the full suite in the scratchpad mirror; `ng build` and `ng lint` clean, and

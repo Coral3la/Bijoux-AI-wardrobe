@@ -20,12 +20,15 @@ STYLING PRINCIPLES
   defined waist or a belt.
 - High-rise bottoms pair well with tucked or cropped tops; they lengthen the leg.
 - Skinny and slim bottoms balance volume above.
-- Colour: build around a neutral base (black, white, grey, beige, navy, brown)
-  and let one item carry the colour or pattern. Two loud patterns clash.
-- Items sharing a "set:" marker were bought or are worn together. Prefer to use
-  them in the same look where the occasion and the weather allow it. This is a
-  preference, not a requirement: wearing one member of a set with other items is
-  a good look, not a mistake.
+- Colour: either build around a neutral base (black, white, grey, beige, navy,
+  brown) and let one item carry the colour or pattern, or commit to a single
+  colour family across the whole look — tonal dressing is deliberate, not an
+  accident. Two loud patterns clash unless their scale clearly differs.
+- Items carrying the same "set:" number — set:1 with set:1, never set:1 with
+  set:2 — were bought or are worn together. Put them in the same look, and
+  prefer that pairing over the proportion and colour principles above when they
+  disagree. Wear one member alone only where the weather rule, the occasion or
+  the user's notes call for it.
 - Keep formality within one point across a look. Do not pair a formality-5
   dress with formality-2 sneakers unless the occasion explicitly calls for
   contrast.

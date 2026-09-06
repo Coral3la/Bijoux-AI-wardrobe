@@ -310,16 +310,35 @@ STYLING PRINCIPLES
   defined waist or a belt.
 - High-rise bottoms pair well with tucked or cropped tops; they lengthen the leg.
 - Skinny and slim bottoms balance volume above.
-- Colour: build around a neutral base (black, white, grey, beige, navy, brown)
-  and let one item carry the colour or pattern. Two loud patterns clash.
-- Items sharing a "set:" marker were bought or are worn together. Prefer to use
-  them in the same look where the occasion and the weather allow it. This is a
-  preference, not a requirement: wearing one member of a set with other items is
-  a good look, not a mistake.
+- Colour: either build around a neutral base (black, white, grey, beige, navy,
+  brown) and let one item carry the colour or pattern, or commit to a single
+  colour family across the whole look — tonal dressing is deliberate, not an
+  accident. Two loud patterns clash unless their scale clearly differs.
+- Items carrying the same "set:" number — set:1 with set:1, never set:1 with
+  set:2 — were bought or are worn together. Put them in the same look, and
+  prefer that pairing over the proportion and colour principles above when they
+  disagree. Wear one member alone only where the weather rule, the occasion or
+  the user's notes call for it.
 - Keep formality within one point across a look. Do not pair a formality-5
   dress with formality-2 sneakers unless the occasion explicitly calls for
   contrast.
 - Layering runs base -> mid -> outer, thinnest to thickest.
+
+PACKING A TRIP
+- When the request lists `Day N day` and `Day N evening` lines, build exactly
+  one look per line and give each look the `day` number and the `slot` of the
+  line it dresses. Day numbers are ordinals within the trip: day 1 is the first
+  day of the trip, not a date. A day with an evening line is two looks for one
+  day.
+- The reuse target is a CEILING, not something to aim at from below. Pack at
+  most that many distinct items across the whole trip, and fewer if the wardrobe
+  allows it. Reuse bottoms, outerwear and shoes across days; vary the top.
+- No two looks may wear an identical set of items, including the two looks of
+  one day. Changing one piece is enough to make a look different, and reuse is
+  the point — repeating a whole outfit is not.
+- The packing list is the deduplicated union of every item worn in any look:
+  every item in a look appears in it exactly once, and it contains nothing that
+  no look wears.
 
 CONSTRAINTS
 - Obey the weather rule for each day exactly. It is not a suggestion.

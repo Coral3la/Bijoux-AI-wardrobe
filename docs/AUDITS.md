@@ -100,7 +100,7 @@ same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
 task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, **which task 3.1 closed**, printing both indexes in `02` before migration `0004` built them and finding, on the way, that deleting them failed no test. **O-29 and O-30 were opened at task 3.2**, and they are the two kinds this file has collected most: a cost that only becomes visible on its third instance — three screens with no way into them — and a documented endpoint with nothing under its heading, which is **O-1's shape** found the same way, by the task implementing the section next to it. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had. **O-31 was opened at task 4.1**, and it is the first item here that is a defect in a *shipped* artefact rather than in a document or an unread surface: three constraint names that the live schema has held wrongly since Stage 0, found by the task that was about to add a fourth the same way, and invisible to the one test written to catch exactly it. **Task 4.3 closed O-7**, the oldest item still open — audit 1 predicted the unsatisfiable trip constraints that `DECISIONS.md` 190 later had to settle, and its recommendation is taken in shape though not in number, for measurements taken after it was written. **Task 4.3 also closed O-27**, three lines in the fake, after a fourteen-day trip
 turned "a `502` for four months of the year" into "a `502` for nearly any trip".
-**O-32 was opened by the same task**, and it is the first that is a collision between two stages rather than a defect in either: Stage 4's repack and delete were specified before Stage 3 gave a look three columns worth keeping, and neither document is wrong on its own terms. **Task 4.4 closed it**, taking the recommendation in full and adding the thing three written options had all left out — *when* the destruction happens relative to the model call, which is the difference between a failed repack that costs nothing and one that empties a trip. Task 4.3 also **closed O-26**, across two of its three commits — the contract struck the field, the code followed, and the field that had survived 157's test twice failed it on the third asking. **O-36 and O-37 were opened at task 3.6a**, and they are the two things a task finds when it is the first to *use* work that already shipped: an endpoint whose caller was never built, noticed only because both tasks sit on one checklist, and a number that has been approximate since 1.8 and became visible the moment something linked to the list behind it. Neither is a contradiction between documents — the first is a gap between two halves of one task, and the second is a documented trade-off meeting its first reader who can see it. **O-38 was opened at task 4A.1**, and it is a fifth kind: not a contradiction, not an unread surface and not a measurement, but an assertion that was never written — a wire shape whose additions are caught by test fixtures failing to *construct* rather than by anything asserting what it carries, found because 4A.1 added a field to it and watched which files went red.
+**O-32 was opened by the same task**, and it is the first that is a collision between two stages rather than a defect in either: Stage 4's repack and delete were specified before Stage 3 gave a look three columns worth keeping, and neither document is wrong on its own terms. **Task 4.4 closed it**, taking the recommendation in full and adding the thing three written options had all left out — *when* the destruction happens relative to the model call, which is the difference between a failed repack that costs nothing and one that empties a trip. Task 4.3 also **closed O-26**, across two of its three commits — the contract struck the field, the code followed, and the field that had survived 157's test twice failed it on the third asking. **O-36 and O-37 were opened at task 3.6a**, and they are the two things a task finds when it is the first to *use* work that already shipped: an endpoint whose caller was never built, noticed only because both tasks sit on one checklist, and a number that has been approximate since 1.8 and became visible the moment something linked to the list behind it. Neither is a contradiction between documents — the first is a gap between two halves of one task, and the second is a documented trade-off meeting its first reader who can see it. **O-38 was opened at task 4A.1**, and it is a fifth kind: not a contradiction, not an unread surface and not a measurement, but an assertion that was never written — a wire shape whose additions are caught by test fixtures failing to *construct* rather than by anything asserting what it carries, found because 4A.1 added a field to it and watched which files went red. **O-39 was opened on 2026-09-07**, by the commit that rewrote two lines of the stylist's styling principles, and it is a sixth kind: not a contradiction, not an unread surface, not a measurement and not a missing assertion, but a **missing provenance record** — found by a change asking what would record its own effect, and finding that nothing does.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -2077,3 +2077,55 @@ by exactly one field belongs with the QA pass that owns the suite's gaps rather
 than with the feature that made the gap visible. Recorded now because the next
 field added to `ItemResponse` will be found the same accidental way, or not at
 all.
+
+#### O-39 · No stored look records which stylist prompt produced it — opened 2026-09-07
+
+`vision.PROMPT_VERSION` is the first twelve hex characters of the SHA-256 of the
+**rendered** vision prompt, and task 1.3 persists it on every tagged row, on both
+the `ready` and the `failed` path (`DECISIONS.md` 088). A garment's tags can
+therefore be attributed to the prompt that produced them.
+
+**The stylist has no equivalent, and that was a decision rather than an
+oversight.** `app/services/stylist.py` says so in a comment: the stylist prompt
+renders no vocabulary, so the file *is* the prompt, and *"it carries no version
+constant — `PROMPT_VERSION` exists in `vision.py` because 1.11 mines it against a
+golden set, and nothing reads a stylist equivalent: no column, no task."* That
+reasoning was sound when it was written and it has now been overtaken by a
+commit, which is the whole content of this item.
+
+**What overtook it.** The 2026-09-07 fix rewrote two lines under STYLING
+PRINCIPLES — the colour principle and the set principle — and `DECISIONS.md` 232
+records that this **changes every look the application produces**, not only looks
+containing a set. `looks` rows written before and after that commit are
+indistinguishable: there is no column, no `attributes` key, and no hash. The
+question *did the change help?* cannot be asked of the database, only of looks
+somebody remembers seeing.
+
+**It was found by the change rather than by a reading.** The brief for that task
+said `PROMPT_VERSION` "will move on its own — do not hand-edit it", which is true
+of the vision prompt and does not apply to this one; checking why the instruction
+did not fit is what surfaced the gap. Recorded here rather than acted on, because
+building it is a schema change and a decision about where the value lives, and
+this commit is four lines of prose.
+
+**Recommendation, not a design.** The cheap shape is `vision.py`'s, one file
+over: a module-level hash of `SYSTEM_PROMPT` in `stylist.py`. Where it is
+written is the open question and it is not free — **`looks` has no `attributes`
+column**, unlike `items`, so there is nowhere to put this without a migration.
+Beside `id` and `user_id` the columns are `trip_id`, `slot`, `title`,
+`occasion`, `reasoning`, `weather_note`, `for_date`, `is_saved`, `feedback`,
+`worn_at` and `created_at`; none is free-form, and there is no `updated_at`. So
+the choice is a `prompt_version` column on `looks` or a JSON column to hold this
+and whatever comes next, and that is a schema decision rather than a line of
+code. The thing to decide first is
+**whether anything will read it**, which is the test `stylist.py`'s comment
+applied and passed on its own terms in Stage 2. It now has one candidate reader:
+a Stage 5 evaluation comparing looks across a prompt change, which is exactly
+what 1.11 does for tagging. If Stage 5 does not want that comparison, the honest
+outcome is to close this item by writing the argument down rather than by
+building a column nothing queries.
+
+**What closes it.** Stage 5 or later. Either the hash and its reader, or a
+recorded decision that looks are not attributed and why — and in that case
+`DECISIONS.md` 232's *"the evidence will again be looking at looks"* is the
+sentence that stands.
