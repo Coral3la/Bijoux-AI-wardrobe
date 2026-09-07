@@ -173,22 +173,22 @@ def wired(monkeypatch: pytest.MonkeyPatch) -> Any:
 
 
 @pytest.mark.parametrize(
-    ("days", "expected"),
+    ("looks", "expected"),
     [(1, 4), (2, 8), (3, 11), (4, 12), (5, 13), (7, 15), (14, 22)],
 )
-def test_the_reuse_target_is_the_smaller_of_the_two_formulas(days: int, expected: int) -> None:
-    # `min(days * 4, days + 8)`: the multiplication wins to day 2 and the
-    # addition from day 3 on, which is where a packing list starts to be a
+def test_the_reuse_target_is_the_smaller_of_the_two_formulas(looks: int, expected: int) -> None:
+    # `min(looks * 4, looks + 8)`: the multiplication wins to two looks and the
+    # addition from three on, which is where a packing list starts to be a
     # packing list rather than a pile of outfits.
-    assert packing.reuse_target(days) == expected
+    assert packing.reuse_target(looks) == expected
 
 
 @pytest.mark.asyncio
-async def test_the_reuse_target_is_computed_from_days_and_not_from_looks(wired: Any) -> None:
+async def test_the_reuse_target_is_computed_from_looks_and_not_from_days(wired: Any) -> None:
     # A two-day trip with an evening out asks the model for three looks and
-    # still gets day 2's ceiling of eight items. Deliberate pressure toward the
-    # reuse this feature exists for, and `DECISIONS.md` 225 takes it knowingly:
-    # the target may need tuning against the demo wardrobe before it is honest.
+    # gets three looks' ceiling of eleven items, not day 2's eight. Counting
+    # days halved the budget per look and the model answered two identical
+    # looks, which rule 11 refused; `DECISIONS.md` 237 supersedes 225 here.
     seen = wired(
         _answer(
             _look(1, TOP_ID, JEANS_ID, BOOTS_ID),
@@ -208,7 +208,7 @@ async def test_the_reuse_target_is_computed_from_days_and_not_from_looks(wired: 
         (2, "day"),
         (2, "evening"),
     ]
-    assert seen["context"].reuse_target == packing.reuse_target(2)
+    assert seen["context"].reuse_target == packing.reuse_target(3)
 
 
 # --- what reaches the model -------------------------------------------------

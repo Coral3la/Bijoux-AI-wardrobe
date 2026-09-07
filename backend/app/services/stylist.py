@@ -574,7 +574,7 @@ def _trip_request(context: TripContext) -> str:
         "evening look, reuse items between the two wherever the weather rule and",
         "the two occasions allow it: the same trousers with a different top is a",
         "change of outfit. Never repeat an identical full look.",
-        f"Aim for at most {context.reuse_target} distinct items across {dates} days.",
+        f"Aim for at most {context.reuse_target} distinct items across all {len(context.days)} looks.",
         "Then return the deduplicated packing list.",
     ]
     return "\n".join(lines)

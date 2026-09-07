@@ -1011,7 +1011,7 @@ def test_the_trip_message_states_the_reuse_target_as_a_number() -> None:
     # is the finding `STAGE-4`'s prompt-tuning note is built on.
     message = stylist._user_message(WARDROBE, _trip_context(days=4))
 
-    assert "Aim for at most 12 distinct items across 4 days." in message
+    assert "Aim for at most 12 distinct items across all 4 looks." in message
 
 
 def test_the_trip_message_omits_notes_entirely_when_there_are_none() -> None:

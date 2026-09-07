@@ -503,7 +503,7 @@ bottoms and outerwear across days. Where a day has both a day and an
 evening look, reuse items between the two wherever the weather rule and
 the two occasions allow it: the same trousers with a different top is a
 change of outfit. Never repeat an identical full look.
-Aim for at most 12 distinct items across 4 days.
+Aim for at most 14 distinct items across all 6 looks.
 Then return the deduplicated packing list.
 ```
 
@@ -544,13 +544,23 @@ what separates a day look from an evening one here is the **occasion**, which
 moves formality rather than warmth. Recorded so the duplicated sentence is not
 read as an oversight. `DECISIONS.md` 225.
 
-**The reuse target stays a function of days, not of looks.** `min(days * 4, days
-+ 8)` counts the trip's length, because the number it constrains is what goes in
-the suitcase and a suitcase is packed for four days whether they hold four looks
-or seven. The arithmetic therefore tightens on its own as slots multiply — the
-same twelve-item ceiling over six looks instead of four — and that pressure is
-exactly what the packing constraint above asks the model to relieve by reusing
-across the two slots of one day.
+**The reuse target is a function of looks, not of days — `DECISIONS.md` 237,
+which reverses 225 on this point.** `min(n * 4, n + 8)` counts the looks asked
+for, so the four-day trip above with two evenings gets a fourteen-item ceiling
+over six looks, and the line that states it counts looks too. 225 argued the
+other way, and its reasoning is kept here as what 237 supersedes: the number
+constrains what goes in the suitcase, a suitcase is packed for four days whether
+they hold four looks or seven, and the tightening as slots multiply — the same
+twelve-item ceiling over six looks instead of four — was deliberate pressure
+toward reuse across the two slots of one day. Production answered that argument.
+An eight-day trip with eight evenings is sixteen looks against a sixteen-item
+ceiling, one item per look, and under that budget the model repeated a whole
+look between two identical request lines — same slot, same occasion, same
+weather rule — which rule 11 refused; the retry broke a look instead. A ceiling
+that rewards repeating items and a rule that forbids repeating a look cannot
+both bite on the same budget. On a trip with one look per day the two counts
+are the same number, so every trip the formula was tuned against is unchanged
+and only trips with evenings loosen.
 
 **Reuse across slots is prompt text and not a numbered rule below**, which is the
 one place this feature could have gone the other way. The numbered list is
@@ -587,7 +597,7 @@ array, and the route reads `looks.slot` — the one column `02-DATA-MODEL.md`'s
 `0006` adds — to tell Monday's two rows apart. `for_date` is still what a look is
 keyed to in the database, and it is now half of the key rather than all of it.
 
-The reuse target is computed as `min(days * 4, days + 8)` and injected. Without an explicit numeric target the model reuses almost nothing.
+The reuse target is computed as `min(looks * 4, looks + 8)` over the number of looks asked for — the number of days until `DECISIONS.md` 237 — and injected. Without an explicit numeric target the model reuses almost nothing.
 
 **The target is prompt-only and is deliberately not a validation rule.** A
 wardrobe that cannot dress seven days from twelve garments should answer with

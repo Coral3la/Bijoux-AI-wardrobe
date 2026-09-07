@@ -149,8 +149,16 @@ class PackingResult:
     missing_pieces: tuple[MissingPiece, ...]
 
 
-def reuse_target(days: int) -> int:
-    """`STAGE-4`'s `min(days * 4, days + 8)`, the number the prompt asks for.
+def reuse_target(looks: int) -> int:
+    """`STAGE-4`'s `min(n * 4, n + 8)`, the number the prompt asks for, where
+    `n` is the number of **looks** asked for and no longer the number of days.
+
+    Counting days halved the budget per look on a trip with evenings — sixteen
+    looks against a ceiling of sixteen items — and a ceiling that rewards
+    repeating items under two identical request lines got the whole look
+    repeated, which rule 11 refuses. On a trip with one look per day the two
+    counts are the same number, so every trip the formula was tuned against is
+    unaffected and only trips with evenings loosen. `DECISIONS.md` 237.
 
     Prompt-only, and deliberately not a validation rule: a wardrobe that cannot
     dress seven days from twelve garments should answer with the looks it can
@@ -162,7 +170,7 @@ def reuse_target(days: int) -> int:
     It lives here rather than in the prompt builder so that the tuning that note
     describes moves one number in the packing module. `DECISIONS.md` 193.
     """
-    return min(days * 4, days + 8)
+    return min(looks * 4, looks + 8)
 
 
 async def _destination(query: str) -> Location:
@@ -391,7 +399,7 @@ async def pack_trip(
     context = TripContext(
         destination=location.name,
         days=days,
-        reuse_target=reuse_target(request.days),
+        reuse_target=reuse_target(len(request.occasions)),
         notes=request.notes,
         height_cm=user.height_cm,
         style_notes=user.style_notes,
