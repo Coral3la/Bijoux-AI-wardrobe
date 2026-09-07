@@ -224,12 +224,13 @@ processing · ready · failed
 clear · partly_cloudy · cloudy · fog · drizzle · rain · snow · thunderstorm
 ```
 
-It names the sky rather than a garment, so no table has a `condition` column and
-no migration creates a type for it. It is here because this document is
-authoritative for closed vocabularies by its own first line, and because the
-argument that closed every list above applies to it unchanged — `partly_cloudy`
-and `Partly Cloudy` and `partlycloudy` are the same weather and would be three
-i18n keys. Added at task 2.1, which is where `GET /weather` first has to return
+It names the sky rather than a garment, so no migration creates a type for it.
+The one column that carries it — `forecasts.condition`, since `0008` — is `TEXT`
+holding the value, the way `trips.forecast` already carries it inside JSON. It
+is here because this document is authoritative for closed vocabularies by its
+own first line, and because the argument that closed every list above applies
+to it unchanged — `partly_cloudy` and `Partly Cloudy` and `partlycloudy` are the
+same weather and would be three i18n keys. Added at task 2.1, which is where `GET /weather` first has to return
 a value; `AUDITS.md` **O-8** made the same case for `occasion`, which is the
 section below and landed at task 2.7. `DECISIONS.md` 144.
 
@@ -785,6 +786,53 @@ feeding it the expanded one produces `ck_trips_ck_trips_date_order`. Measured at
 
 ---
 
+### `forecasts`
+
+```sql
+CREATE TABLE forecasts (
+  lat         DOUBLE PRECISION NOT NULL,
+  lon         DOUBLE PRECISION NOT NULL,
+  date        DATE NOT NULL,
+  temp_min_c  DOUBLE PRECISION NOT NULL,
+  temp_max_c  DOUBLE PRECISION NOT NULL,
+  precip_mm   DOUBLE PRECISION NOT NULL,
+  wind_kph    DOUBLE PRECISION NOT NULL,
+  condition   TEXT NOT NULL,
+  fetched_at  TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (lat, lon, date)
+);
+```
+
+One row per place and day, holding what the provider last answered for it. It
+is the durable half of the forecast cache in `app/services/weather.py`, and
+that module is its only reader and its only writer: every successful provider
+answer upserts its days, every request reads memory first, this table second
+and the provider third, and **when the provider fails, a row for the requested
+day is served whatever its age**. A requested day with no row still fails as it
+did before. `DECISIONS.md` 235.
+
+**The key is the in-memory cache's key, stored.** `lat` and `lon` are rounded to
+`COORD_PRECISION` before they become part of it — the same rounding, in the same
+line, as the dictionary key — and the columns are `DOUBLE PRECISION` because that
+is what a Python float is: the double `round()` produces is written and read
+back bit-identical, so a lookup on the same rounding matches. `REAL`, which
+`users.home_lat` is, cannot hold 32.08, which is why `145` rounds at all. The
+four values are doubles for the same reason: on fallback the number served is
+the number the provider gave.
+
+**No user, no foreign key, no index beyond the primary key.** A forecast is a
+fact about a place and a day and belongs to nobody. `fetched_at` is written by
+the application from its own UTC clock rather than by a `now()` default, because
+the application judges freshness against that same clock.
+
+**It is not a history.** Rows older than yesterday are deleted by the write that
+follows a provider answer, and a downgrade drops the table outright. Nothing a
+user can see is lost by either: `trips.forecast` above is the historical record
+of what a trip was packed against, and this table only ever holds the most
+recent answer.
+
+---
+
 ## Migrations
 
 One Alembic migration per stage, never a single mega-migration.
@@ -798,6 +846,7 @@ One Alembic migration per stage, never a single mega-migration.
 | `0005_trips` | 4 | `trips`, `looks.trip_id`, `idx_trips_user_id`, `idx_looks_trip_id` |
 | `0006_look_slot` | 4 | `looks.slot`, its `CHECK`, `uq_looks_trip_day_slot`, and two backfills |
 | `0007_sets` | 4A | `item_sets`, `items.set_id`, `idx_items_set_id` |
+| `0008_forecasts` | — | `forecasts` |
 
 **`0003` renumbered the two that follow it**, which is what a migration inserted
 mid-project costs; it was scheduled after `0002_looks` precisely so that the
@@ -824,6 +873,14 @@ it would then raise on an object that is already gone. `0005` and `0006` name
 their indexes first for the same reason. *This sentence read "drop the column,
 then the index and the table" until task 4A.1, which is an order that cannot
 run.*
+
+**`0008` belongs to no stage**, against the line at the head of this section, and
+it is the second revision to arrive that way: the provider swap (`DECISIONS.md`
+234) was a fix outside any stage file, and the durable store is what that swap's
+own trade-off — a quota that is now the project's to exhaust — asked for next.
+It is recorded in `AUDITS.md` **O-42** rather than in a stage. One table, no
+foreign key, no data, and a `downgrade()` that is a real reversal in `0007`'s
+sense: dropping a cache loses nothing a user can see.
 
 **`0006` is the first migration in this project that carries data as well as
 schema**, and both `UPDATE`s are the same statement said twice: every look with a

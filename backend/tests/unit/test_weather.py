@@ -1,4 +1,5 @@
-"""The weather rule, the icon map and the forecast cache. No network anywhere.
+"""The weather rule, the icon map and the forecast cache. No network and no
+database anywhere.
 
 `build_rule` is the reason `03-AI-CONTRACTS.md` computes weather in Python
 rather than letting the model reason about a temperature: it is a pure function
@@ -12,9 +13,13 @@ API. What that proves is our parsing of our own fixture, so the fixture is a
 `weather.visualcrossing.com` for Tel Aviv — and `DECISIONS.md` 234 records the
 field names and units it was checked against. A hand-written fixture would have
 agreed with whatever this module happened to read.
+
+The `forecasts` table is stubbed out below the cache: every test here reads it
+as empty and writes nothing to it. What the store does when it is real is
+`tests/integration/test_weather_endpoint.py`'s, because it commits.
 """
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -128,6 +133,16 @@ def clear_cache() -> None:
 @pytest.fixture(autouse=True)
 def api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "VISUAL_CROSSING_API_KEY", "test-key")
+
+
+@pytest.fixture(autouse=True)
+def no_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A run of `tests/unit` alone must not need a database, and both store
+    functions open a session. Patched by name, the way `_transport` is: the
+    module looks each one up at call time, so the stand-ins are what the worker
+    thread receives."""
+    monkeypatch.setattr(weather, "_read_stored", lambda lat, lon, days: {})
+    monkeypatch.setattr(weather, "_write_stored", lambda lat, lon, forecasts, fetched_at: None)
 
 
 def _transport(handler: Any) -> httpx.MockTransport:
@@ -923,3 +938,43 @@ async def test_a_failed_range_caches_nothing(monkeypatch: pytest.MonkeyPatch) ->
             await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)
 
     assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_range_with_a_day_missing_from_the_store_still_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Three of the four days stored, stale, and the provider down. Only the trip
+    # path can reach this state — the single-day endpoint's one requested day is
+    # either stored or not, and `_read_stored`'s date filter alone decides it —
+    # so this is where "only a requested day with no row at all still raises"
+    # is actually a decision: rows for Saturday to Monday are not a forecast
+    # for Tuesday, and a fallback that served three days of a four-day trip
+    # would hand `pack_trip` a range it refuses one line later anyway.
+    def partly_stored(
+        lat: float, lon: float, days: list[date]
+    ) -> dict[date, tuple[datetime, Forecast]]:
+        stale = datetime.now(UTC) - timedelta(days=3)
+        return {
+            day: (
+                stale,
+                Forecast(
+                    date=day,
+                    temp_min_c=6.0,
+                    temp_max_c=14.0,
+                    precip_mm=0.0,
+                    wind_kph=12.0,
+                    condition=Condition.CLOUDY,
+                ),
+            )
+            for day in days[:-1]
+        }
+
+    def refused(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(weather, "_read_stored", partly_stored)
+    monkeypatch.setattr(weather, "_transport", lambda: _transport(refused))
+
+    with pytest.raises(ForecastProviderError):
+        await get_daily_forecast(*BERLIN, TRIP_START, TRIP_END)

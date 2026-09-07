@@ -1,4 +1,5 @@
-"""Visual Crossing forecast and the weather rule. One API key, no AI, no database.
+"""Visual Crossing forecast and the weather rule. One API key, no AI, and one
+table this module alone reads and writes.
 
 `build_rule` is the reliability mechanism `03-AI-CONTRACTS.md` builds the whole
 feature on: a temperature is never sent to the model to reason about, it is
@@ -37,18 +38,38 @@ served — ours to reject, the provider's own `400` arrives here too, and so doe
 a day the provider answered from climate statistics rather than a forecast.
 `ForecastProviderError` means the provider did not answer usably. `DECISIONS.md`
 147.
+
+**Since 2026-09-07 a provider answer is also written to `forecasts`**, one row
+per day, and the read order is memory, then that table, then the provider. A
+stored row is a normal hit for six hours; after that it is refetched — unless
+the provider fails, in which case every requested day with a row of *any* age
+is served and the call succeeds. Only a requested day with no row at all still
+raises `ForecastProviderError`. The fallback is invisible to the user on
+purpose, and `ForecastOutOfRangeError` never reaches it: a date past the horizon
+is refused before the table is read. **This is the first module in the project
+to open a `Session` itself** rather than receive one from a route, because the
+table is the same kind of thing as `_cache` — state the signatures hide — and a
+fetched forecast is a fact whether or not the pack that asked for it succeeded,
+so it must not share the route's transaction. `DECISIONS.md` 235.
 """
 
+import asyncio
 import datetime
 import logging
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 
 import httpx
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
+from app.db.session import SessionLocal
 from app.enums import Condition
+from app.models.forecast import StoredForecast
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +101,15 @@ _PRECHECK_HORIZON_DAYS: Final = FORECAST_HORIZON_DAYS + 1
 _STATISTICAL_SOURCE: Final = "stats"
 
 CACHE_TTL_SECONDS: Final = 30 * 60
+
+# How long a `forecasts` row is a normal hit. Twelve times the in-memory TTL,
+# because the two answer different questions: memory dies with the process, and
+# Render's free tier sleeps the process after idle, so the table is what actually
+# saves requests. Six hours is inside the provider's own error for a day two
+# weeks out, and the bands `build_rule` reads are six degrees wide — a user who
+# packs at 09:00 and reopens at 14:00 sees the same suitcase rather than one
+# that moved because a maximum crossed 22.0. `DECISIONS.md` 235.
+STORE_TTL_SECONDS: Final = 6 * 60 * 60
 
 # Two decimals is about 1.1 km, and it is what makes the cache able to hit at
 # all: `users.home_lat` is a REAL column and a value that survived a float
@@ -322,14 +352,29 @@ async def get_daily_forecast(
     belongs to `POST /trips/pack` and the date picker, which are the two places
     190 names.
 
+    **Memory, then `forecasts`, then the provider**, and each layer is all or
+    nothing over the range: a partial hit costs one request for the whole
+    range, which is what a miss costs anyway. A fresh stored range warms the
+    in-memory cache for its normal thirty minutes. A stale one served because
+    the provider failed does not, so a stale answer cannot mask the provider's
+    recovery for half an hour. Both store calls run in a worker thread — the
+    session is synchronous and this function is not, and the provider call
+    already releases the loop for its whole round trip, so a query held on it
+    would be the first database call in the application to block anything.
+
     Raises `ForecastOutOfRangeError` when the **last** day is past the pre-check
     — the first day cannot be past it without the last one being — or when the
     provider answered any day from statistics, and `ForecastProviderError` when
-    no key is configured, the provider does not answer, answers something
-    unreadable, or answers days other than the ones asked for. `ValueError` for
-    an inverted range, which is a caller's bug rather than a forecast condition:
-    left to the provider it would come back as a `400` and be reported as
-    "beyond the horizon", which is not what went wrong.
+    the provider failed **and** some requested day has no stored row. A missing
+    key is a provider failure like the others and falls back the same way; it
+    was already logged at warning before the fallback, so a misconfigured deploy
+    is visible even while it answers. **The store itself raises nothing to the
+    caller**: a read that fails is an empty read and the provider is asked, a
+    write that fails is logged and the provider's answer goes out anyway, so the
+    store is never worse than no store. `ValueError` for an inverted range, which
+    is a caller's bug rather than a forecast condition: left to the provider it
+    would come back as a `400` and be reported as "beyond the horizon", which is
+    not what went wrong.
     """
     if end < start:
         raise ValueError(f"The range ends before it starts: {start} to {end}.")
@@ -345,10 +390,7 @@ async def get_daily_forecast(
 
     now = time.monotonic()
     # The same per-day entries `get_forecast` reads and writes, so a trip warms
-    # the cache for the single-day endpoint and vice versa. All or nothing: a
-    # partial hit costs one request for the whole range, which is what a miss
-    # costs anyway, and re-fetching a day already held is cheaper than the
-    # bookkeeping for stitching two sub-ranges together.
+    # the cache for the single-day endpoint and vice versa.
     held = [
         entry[1]
         for day in wanted
@@ -357,6 +399,88 @@ async def get_daily_forecast(
     if len(held) == len(wanted):
         return held
 
+    # The store must never be worse than no store. Authentication has already
+    # passed on the route's pooled session, so a raise here is a busy database
+    # rather than a dead one — an exhausted pool, a query timeout — and the
+    # provider can still answer. Read as empty and carry on.
+    try:
+        stored = await asyncio.to_thread(_read_stored, lat, lon, wanted)
+    except SQLAlchemyError as exc:
+        logger.warning(
+            "Forecast store read failed",
+            extra={
+                "latitude": lat,
+                "longitude": lon,
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+            },
+            exc_info=exc,
+        )
+        stored = {}
+    fresh_after = datetime.datetime.now(datetime.UTC) - datetime.timedelta(
+        seconds=STORE_TTL_SECONDS
+    )
+    if len(stored) == len(wanted) and all(
+        fetched_at > fresh_after for fetched_at, _ in stored.values()
+    ):
+        forecasts = [stored[day][1] for day in wanted]
+        _hold(lat, lon, forecasts, now)
+        return forecasts
+
+    try:
+        forecasts = await _fetch(lat, lon, start, end, wanted)
+    except ForecastProviderError:
+        if len(stored) != len(wanted):
+            raise
+        logger.warning(
+            "Serving stored forecast after provider failure",
+            extra={
+                "latitude": lat,
+                "longitude": lon,
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "oldest_fetched_at": min(
+                    fetched_at for fetched_at, _ in stored.values()
+                ).isoformat(),
+            },
+        )
+        return [stored[day][1] for day in wanted]
+
+    # The provider has answered; nothing the store does may cost the caller
+    # that answer. A failed write is logged and the response goes out anyway.
+    try:
+        await asyncio.to_thread(
+            _write_stored, lat, lon, forecasts, datetime.datetime.now(datetime.UTC)
+        )
+    except SQLAlchemyError as exc:
+        logger.warning(
+            "Forecast store write failed",
+            extra={
+                "latitude": lat,
+                "longitude": lon,
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+            },
+            exc_info=exc,
+        )
+
+    _hold(lat, lon, forecasts, now)
+    return forecasts
+
+
+async def _fetch(
+    lat: float,
+    lon: float,
+    start: datetime.date,
+    end: datetime.date,
+    wanted: Sequence[datetime.date],
+) -> list[Forecast]:
+    """The provider round trip, with every failure already mapped.
+
+    Raises `ForecastOutOfRangeError` and `ForecastProviderError` exactly as
+    `get_daily_forecast` documents; split out so that the caller's fallback
+    `except` has one thing to catch rather than four.
+    """
     # After the cache and before the request: a held answer needs no key, and
     # a missing one is a deployment fault worth one log line rather than a
     # `401` round trip.
@@ -419,7 +543,7 @@ async def get_daily_forecast(
     # a provider failure rather than a result: 4.3 builds one look per day and
     # validates `len(looks) == days`, so a range quietly missing its Thursday
     # becomes a `502` two model calls later instead of an error here.
-    if [forecast.date for forecast in forecasts] != wanted:
+    if [forecast.date for forecast in forecasts] != list(wanted):
         logger.warning(
             "Daily forecast answered a different range",
             extra={
@@ -432,10 +556,105 @@ async def get_daily_forecast(
         )
         raise ForecastProviderError("The forecast provider answered a different range.")
 
+    return forecasts
+
+
+def _read_stored(
+    lat: float, lon: float, days: Sequence[datetime.date]
+) -> dict[datetime.date, tuple[datetime.datetime, Forecast]]:
+    """Every stored row for these days, keyed by day, with when it was fetched.
+
+    Its own short-lived session, closed whatever happens: this runs in a worker
+    thread, and a raise that skipped `close()` would leave a pooled connection
+    checked out with nobody to return it.
+    """
+    session = SessionLocal()
+    try:
+        rows = session.scalars(
+            select(StoredForecast).where(
+                StoredForecast.lat == lat,
+                StoredForecast.lon == lon,
+                StoredForecast.date.in_(days),
+            )
+        ).all()
+        return {
+            row.date: (
+                row.fetched_at,
+                Forecast(
+                    date=row.date,
+                    temp_min_c=row.temp_min_c,
+                    temp_max_c=row.temp_max_c,
+                    precip_mm=row.precip_mm,
+                    wind_kph=row.wind_kph,
+                    condition=Condition(row.condition),
+                ),
+            )
+            for row in rows
+        }
+    finally:
+        session.close()
+
+
+def _write_stored(
+    lat: float, lon: float, forecasts: Sequence[Forecast], fetched_at: datetime.datetime
+) -> None:
+    """Upserts every day of a provider answer, then prunes days older than
+    yesterday, in one transaction.
+
+    An upsert rather than delete-and-insert so that a second answer for a day
+    changes one row in place. The prune rides on the write because this is the
+    one moment the module holds a transaction and no scheduler exists to give it
+    another; yesterday rather than today for the pre-check's reason, a user
+    behind UTC is still living a day a UTC server has already left. Yesterday is
+    counted from `fetched_at`, which is UTC, rather than from the server's local
+    clock: one clock for the row's age and for what it is pruned against.
+    Nothing is lost by it: `trips.forecast` is the historical record.
+    """
+    statement = insert(StoredForecast).values(
+        [
+            {
+                "lat": lat,
+                "lon": lon,
+                "date": forecast.date,
+                "temp_min_c": forecast.temp_min_c,
+                "temp_max_c": forecast.temp_max_c,
+                "precip_mm": forecast.precip_mm,
+                "wind_kph": forecast.wind_kph,
+                "condition": forecast.condition.value,
+                "fetched_at": fetched_at,
+            }
+            for forecast in forecasts
+        ]
+    )
+    upsert = statement.on_conflict_do_update(
+        constraint="pk_forecasts",
+        set_={
+            column: statement.excluded[column]
+            for column in (
+                "temp_min_c",
+                "temp_max_c",
+                "precip_mm",
+                "wind_kph",
+                "condition",
+                "fetched_at",
+            )
+        },
+    )
+    yesterday = fetched_at.date() - datetime.timedelta(days=1)
+
+    session = SessionLocal()
+    try:
+        session.execute(upsert)
+        session.execute(delete(StoredForecast).where(StoredForecast.date < yesterday))
+        session.commit()
+    finally:
+        session.close()
+
+
+def _hold(lat: float, lon: float, forecasts: Sequence[Forecast], now: float) -> None:
     for forecast in forecasts:
         _cache[(lat, lon, forecast.date)] = (now + CACHE_TTL_SECONDS, forecast)
     _evict(now)
-    return forecasts
 
 
 def _reason(response: httpx.Response) -> str:

@@ -100,7 +100,7 @@ same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
 task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, **which task 3.1 closed**, printing both indexes in `02` before migration `0004` built them and finding, on the way, that deleting them failed no test. **O-29 and O-30 were opened at task 3.2**, and they are the two kinds this file has collected most: a cost that only becomes visible on its third instance — three screens with no way into them — and a documented endpoint with nothing under its heading, which is **O-1's shape** found the same way, by the task implementing the section next to it. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had. **O-31 was opened at task 4.1**, and it is the first item here that is a defect in a *shipped* artefact rather than in a document or an unread surface: three constraint names that the live schema has held wrongly since Stage 0, found by the task that was about to add a fourth the same way, and invisible to the one test written to catch exactly it. **Task 4.3 closed O-7**, the oldest item still open — audit 1 predicted the unsatisfiable trip constraints that `DECISIONS.md` 190 later had to settle, and its recommendation is taken in shape though not in number, for measurements taken after it was written. **Task 4.3 also closed O-27**, three lines in the fake, after a fourteen-day trip
 turned "a `502` for four months of the year" into "a `502` for nearly any trip".
-**O-32 was opened by the same task**, and it is the first that is a collision between two stages rather than a defect in either: Stage 4's repack and delete were specified before Stage 3 gave a look three columns worth keeping, and neither document is wrong on its own terms. **Task 4.4 closed it**, taking the recommendation in full and adding the thing three written options had all left out — *when* the destruction happens relative to the model call, which is the difference between a failed repack that costs nothing and one that empties a trip. Task 4.3 also **closed O-26**, across two of its three commits — the contract struck the field, the code followed, and the field that had survived 157's test twice failed it on the third asking. **O-36 and O-37 were opened at task 3.6a**, and they are the two things a task finds when it is the first to *use* work that already shipped: an endpoint whose caller was never built, noticed only because both tasks sit on one checklist, and a number that has been approximate since 1.8 and became visible the moment something linked to the list behind it. Neither is a contradiction between documents — the first is a gap between two halves of one task, and the second is a documented trade-off meeting its first reader who can see it. **O-38 was opened at task 4A.1**, and it is a fifth kind: not a contradiction, not an unread surface and not a measurement, but an assertion that was never written — a wire shape whose additions are caught by test fixtures failing to *construct* rather than by anything asserting what it carries, found because 4A.1 added a field to it and watched which files went red. **O-39 was opened on 2026-09-07**, by the commit that rewrote two lines of the stylist's styling principles, and it is a sixth kind: not a contradiction, not an unread surface, not a measurement and not a missing assertion, but a **missing provenance record** — found by a change asking what would record its own effect, and finding that nothing does. **It counts two prompt changes since the same day**, the second being `DECISIONS.md` 233's SETS block and section move; an item that narrated one of them would understate what the missing column has already cost. **O-40 and O-41 were opened on 2026-09-07 by the provider swap** (`DECISIONS.md` 234), and they are one file apart with nothing else in common: the first is documentation debt the swap created — every place that still names Open-Meteo, led by a frontend constant that now offers a day the server refuses — and the second is a validation gap the swap only made visible, an endpoint with no lower date bound, found by asking whether a user could still cause the provider's `400`.
+**O-32 was opened by the same task**, and it is the first that is a collision between two stages rather than a defect in either: Stage 4's repack and delete were specified before Stage 3 gave a look three columns worth keeping, and neither document is wrong on its own terms. **Task 4.4 closed it**, taking the recommendation in full and adding the thing three written options had all left out — *when* the destruction happens relative to the model call, which is the difference between a failed repack that costs nothing and one that empties a trip. Task 4.3 also **closed O-26**, across two of its three commits — the contract struck the field, the code followed, and the field that had survived 157's test twice failed it on the third asking. **O-36 and O-37 were opened at task 3.6a**, and they are the two things a task finds when it is the first to *use* work that already shipped: an endpoint whose caller was never built, noticed only because both tasks sit on one checklist, and a number that has been approximate since 1.8 and became visible the moment something linked to the list behind it. Neither is a contradiction between documents — the first is a gap between two halves of one task, and the second is a documented trade-off meeting its first reader who can see it. **O-38 was opened at task 4A.1**, and it is a fifth kind: not a contradiction, not an unread surface and not a measurement, but an assertion that was never written — a wire shape whose additions are caught by test fixtures failing to *construct* rather than by anything asserting what it carries, found because 4A.1 added a field to it and watched which files went red. **O-39 was opened on 2026-09-07**, by the commit that rewrote two lines of the stylist's styling principles, and it is a sixth kind: not a contradiction, not an unread surface, not a measurement and not a missing assertion, but a **missing provenance record** — found by a change asking what would record its own effect, and finding that nothing does. **It counts two prompt changes since the same day**, the second being `DECISIONS.md` 233's SETS block and section move; an item that narrated one of them would understate what the missing column has already cost. **O-40 and O-41 were opened on 2026-09-07 by the provider swap** (`DECISIONS.md` 234), and they are one file apart with nothing else in common: the first is documentation debt the swap created — every place that still names Open-Meteo, led by a frontend constant that now offers a day the server refuses — and the second is a validation gap the swap only made visible, an endpoint with no lower date bound, found by asking whether a user could still cause the provider's `400`. **O-42 was opened and closed on the same day by the task that built the forecast store** (`DECISIONS.md` 235), and it is the first item here that a decision entry's trade-off predicted: 234 accepted "a quota that is now the project's own to spend", and the item is what spending it to zero would have cost — every forecast route back at `502`, which is the outage the swap had just ended, self-inflicted this time. It is recorded here rather than in a stage file because no stage owns it, the way the swap itself was.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -2243,3 +2243,59 @@ coordinate corner is a `lt` on one bound, if it is worth a line.
 
 **What closes it.** The bound in `04` and in the route, with the message that
 follows from it.
+
+#### O-42 · ~~A provider outage or an exhausted quota is a `502` on every forecast route~~ — **closed 2026-09-07**
+
+`DECISIONS.md` 234 ended one outage — Open-Meteo refusing a shared Render IP —
+by moving to a keyed provider, and its trade-off named what that bought: *a
+quota that is now the project's own to spend*, a thousand records a day. Before
+this item, the forecast lived in a thirty-minute dictionary that dies with the
+process, and Render's free tier sleeps the process after idle, so in practice
+every session started cold and every cold start spent records. A day the quota
+ran out, or the provider went down, was `502 forecast_unavailable` on `GET
+/weather`, `POST /looks/suggest`, `POST /trips/pack` and `POST /trips/{id}/repack`
+at once — the state the swap had just left, reachable again from the project's
+own usage rather than a neighbour's.
+
+**The gap was structural, not a bug.** Nothing anywhere kept a forecast the
+provider had already answered: `trips.forecast` holds what a trip was packed
+against and nothing reads it back as weather, and the cache was never meant to
+outlive the process. `190` had refused a *climate-average* fallback for good
+reasons — a look built on a number nobody measured — and those reasons do not
+reach a forecast the provider measured six hours ago.
+
+**Closed by the same task.** Migration `0008` adds `forecasts`, one row per
+rounded coordinate pair and day, and `app/services/weather.py` reads memory,
+then the table, then the provider. A row is a normal hit for six hours; when the
+provider fails, a row of any age for every requested day is served and the call
+succeeds; a requested day with no row still raises. The fallback is invisible on
+the wire, on purpose. `02-DATA-MODEL.md` carries the table, `DECISIONS.md` 235
+the six decisions inside it — where the `Session` comes from, the worker thread,
+the window, the prune, and that the store is guarded in both directions so that
+it is never worse than no store. **`02`'s claim that the downgrade is a real
+reversal was run, not asserted:** upgrade, downgrade to `0007`, upgrade again on
+the Dockerised test database on port 5433 on 2026-09-07 — table gone and the
+version pointer back at `0007` after the downgrade, the same columns and
+`pk_forecasts` back after the re-upgrade. It was deliberately **not** run on
+the Neon database in `.env`, which is the database the deployed app may use and
+where a downgrade would drop a table in production for no evidence the local
+cycle had not already produced.
+
+**What it does not close.** The stylist running with **no forecast at all** — a
+new place on the first day of an outage — is still `502`, and that is a separate
+task with a product question in it rather than an infrastructure one. The
+frontend's copy of the horizon (**O-40**) and the endpoint's lower bound
+(**O-41**) are untouched. And the store is only as good as the last answer: a
+place nobody has asked about since before an outage began has nothing to fall
+back on, which is the honest shape of a cache and not a defect in one.
+
+**One test-design finding, recorded so it is not re-found.** The integration
+test for "no row for the requested day" seeds a row for a *different* day and
+proves the `502` — but a mutation weakening the fallback's condition from
+*every requested day stored* to *any row stored* survived it, because
+`_read_stored`'s `date IN (…)` filter never lets the other day into the result
+in the first place. The condition is only distinguishable on a multi-day range
+with some days stored and some not, which is the trip path, so it is pinned by
+a unit test in `tests/unit/test_weather.py` with the store stubbed to answer
+three days of four. A test that proves a behaviour through a guard it did not
+mean to test is a survivor waiting to happen.

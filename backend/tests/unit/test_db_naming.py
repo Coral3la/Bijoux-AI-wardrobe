@@ -76,6 +76,7 @@ EXPECTED_NAMES = {
     "pk_item_sets",
     "fk_item_sets_user_id_users",
     "fk_items_set_id_item_sets",
+    "pk_forecasts",
 }
 
 # The two the write paths match on by name, in a narrow `if` so that a violation
