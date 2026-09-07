@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     OPENAI_STYLIST_MODEL: str = OPENAI_STYLIST_PIN
     OPENAI_TIMEOUT_SECONDS: int = 30
 
+    VISUAL_CROSSING_API_KEY: str = ""
+
     USE_FAKE_AI: bool = False
     # The categories the stylist is never shown. `01-ARCHITECTURE.md` and
     # `STAGE-2` 2.4 both promise this list is configurable and 2.6a gave it two

@@ -5,7 +5,7 @@ onto two status codes, and shape the body. All four are asserted here because
 none of them is visible from `tests/unit/test_weather.py`, which never builds a
 request.
 
-Open-Meteo is stubbed at the transport, so nothing here leaves the process.
+Visual Crossing is stubbed at the transport, so nothing here leaves the process.
 """
 
 import datetime
@@ -16,6 +16,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.enums import Condition
 from app.models.user import User
 from app.services import weather
@@ -30,19 +31,27 @@ def _body(
     temp_min: float = 12.0,
     precip: float = 0.0,
     wind: float = 14.0,
-    code: int = 2,
+    icon: str = "partly-cloudy-day",
     day: datetime.date | None = None,
 ) -> dict[str, Any]:
     return {
-        "daily": {
-            "time": [(day or TODAY).isoformat()],
-            "temperature_2m_max": [temp_max],
-            "temperature_2m_min": [temp_min],
-            "precipitation_sum": [precip],
-            "wind_speed_10m_max": [wind],
-            "weather_code": [code],
-        }
+        "days": [
+            {
+                "datetime": (day or TODAY).isoformat(),
+                "tempmax": temp_max,
+                "tempmin": temp_min,
+                "precip": precip,
+                "windspeed": wind,
+                "icon": icon,
+                "source": "fcst",
+            }
+        ]
     }
+
+
+@pytest.fixture(autouse=True)
+def api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "VISUAL_CROSSING_API_KEY", "test-key")
 
 
 @pytest.fixture(autouse=True)
@@ -138,7 +147,9 @@ def test_a_date_past_the_horizon_is_400_forecast_unavailable(
     authorization: Callable[[User], dict[str, str]],
 ) -> None:
     user = make_user()
-    beyond = TODAY + datetime.timedelta(days=weather.FORECAST_HORIZON_DAYS + 1)
+    # One past the pre-check, not the horizon: the day between the two is
+    # slack that leaves the process and is refused by `source`, not here.
+    beyond = TODAY + datetime.timedelta(days=weather._PRECHECK_HORIZON_DAYS + 1)
 
     response = client.get(
         WEATHER_URL,
@@ -188,7 +199,9 @@ def test_both_failures_share_one_code_at_two_statuses(
     monkeypatch.setattr(weather, "_transport", lambda: httpx.MockTransport(refused))
     user = make_user()
     header = authorization(user)
-    beyond = TODAY + datetime.timedelta(days=weather.FORECAST_HORIZON_DAYS + 1)
+    # One past the pre-check, not the horizon: the day between the two is
+    # slack that leaves the process and is refused by `source`, not here.
+    beyond = TODAY + datetime.timedelta(days=weather._PRECHECK_HORIZON_DAYS + 1)
 
     out_of_range = client.get(
         WEATHER_URL,

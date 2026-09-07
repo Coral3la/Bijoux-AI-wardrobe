@@ -1,4 +1,4 @@
-"""Open-Meteo forecast and the weather rule. No API key, no AI, no database.
+"""Visual Crossing forecast and the weather rule. One API key, no AI, no database.
 
 `build_rule` is the reliability mechanism `03-AI-CONTRACTS.md` builds the whole
 feature on: a temperature is never sent to the model to reason about, it is
@@ -6,25 +6,36 @@ converted here into an explicit instruction the stylist is told to obey. That
 makes the weather behaviour a pure function of three numbers, testable to the
 character without spending anything.
 
+Visual Crossing replaced Open-Meteo on 2026-09-07, in place and with no provider
+abstraction: Open-Meteo's free tier is rate-limited per IP, and Render's free
+web service leaves through a shared outbound IP whose daily quota other tenants
+had already spent, so every forecast call answered `429` and every route
+answered `502`. `DECISIONS.md` 234.
+
 **The field names and units below were verified against a live call on
-2026-08-26** rather than taken from documentation — `wind_speed_10m_max` is
-km/h, `precipitation_sum` is mm, `temperature_2m_max` is °C, `weather_code` is
-a WMO 4677 integer, and `timezone=auto` resolves the calendar day from the
-coordinates so a server in UTC does not fetch yesterday for a user in Asia.
-The legacy spelling `windspeed_10m_max` is what most examples online use and it
-returns a 200 with the key simply absent. `DECISIONS.md` 143.
+2026-09-07** rather than taken from documentation — under `unitGroup=metric`,
+`tempmax`/`tempmin` are °C, `precip` is mm, `windspeed` is km/h (proved by ratio
+against the same day under `unitGroup=us`, 12.5 mph to 20.1) and is the day's
+**maximum** hourly value, which is the meaning `wind_speed_10m_max` carried and
+the one `build_rule`'s 30 km/h threshold was calibrated on. The calendar day is
+resolved in the location's own timezone with no parameter — `Asia/Jerusalem`
+came back for Tel Aviv's coordinates — so a server in UTC does not fetch
+yesterday for a user in Asia. The key travels in the query string, which is the
+only place the provider accepts it; `core/logging.py` silences httpx's own
+per-request INFO line for that reason.
 
 Two entry points since task 4.2: `get_forecast` for one day and
 `get_daily_forecast` for a range, sharing one parser, one cache and one horizon.
-The range is a single request — the provider's `start_date`/`end_date` pair
-answers one — and the fourteen-day bound a *trip* is held to is not here but at
+The range is a single request — the path's `{start}/{end}` pair answers one —
+and the fourteen-day bound a *trip* is held to is not here but at
 `POST /trips/pack`, because it is a product rule and this module only knows what
-Open-Meteo will serve. `DECISIONS.md` 190.
+the provider will serve. `DECISIONS.md` 190, corrected by 234.
 
 Two failures, deliberately not merged, because the route answers them with two
 different status codes. `ForecastOutOfRangeError` means the date cannot be
-served — ours to reject, and the provider's own `400` arrives here too.
-`ForecastProviderError` means Open-Meteo did not answer usably. `DECISIONS.md`
+served — ours to reject, the provider's own `400` arrives here too, and so does
+a day the provider answered from climate statistics rather than a forecast.
+`ForecastProviderError` means the provider did not answer usably. `DECISIONS.md`
 147.
 """
 
@@ -36,71 +47,74 @@ from typing import Any, Final
 
 import httpx
 
+from app.core.config import settings
 from app.enums import Condition
 
 logger = logging.getLogger(__name__)
 
-FORECAST_URL: Final = "https://api.open-meteo.com/v1/forecast"
+FORECAST_URL: Final = (
+    "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline"
+)
 
 # Requested in this order and unpacked positionally nowhere — each is read by
 # name — but the order is asserted in the tests so a silent rename shows up as
 # a diff rather than as a null.
-DAILY_FIELDS: Final = (
-    "temperature_2m_max",
-    "temperature_2m_min",
-    "precipitation_sum",
-    "wind_speed_10m_max",
-    "weather_code",
-)
+ELEMENTS: Final = ("datetime", "tempmax", "tempmin", "precip", "windspeed", "icon", "source")
 
-# Measured 2026-08-26: the provider served 2026-09-10 and refused 2026-09-11,
-# so the last servable day is **today + 15**, which is sixteen days counting
-# today. `AUDITS.md` O-7 reads "16 days ahead" and is off by one against this;
-# it is corrected there rather than here, because Stage 4 is what depends on it.
-FORECAST_HORIZON_DAYS: Final = 15
+# Measured 2026-09-07: today answered `source: "comb"`, today + 1 through
+# today + 14 answered `"fcst"`, and today + 15 answered `"stats"` — a climate
+# average shaped exactly like a forecast. So the last forecast day is
+# **today + 14**, one short of Open-Meteo's measured 15. This is the number the
+# route prints and the one `DECISIONS.md` 190's trip bound is compared against.
+FORECAST_HORIZON_DAYS: Final = 14
+
+# One day looser than the horizon for the local pre-check only: the client's
+# calendar day can be ahead of a UTC server's, and the provider resolves the day
+# in the location's own timezone, so the day the browser meant is still `fcst`.
+# The `source` check is what refuses a day that really is past the horizon.
+_PRECHECK_HORIZON_DAYS: Final = FORECAST_HORIZON_DAYS + 1
+
+# The one `source` value that is not a forecast or an observation. Refused by
+# name rather than allow-listed: an allow-list of `fcst` refuses today, which
+# answers `comb`, and breaks again the first time a past date answers `obs`.
+_STATISTICAL_SOURCE: Final = "stats"
 
 CACHE_TTL_SECONDS: Final = 30 * 60
 
-# Two decimals is about 1.1 km. Open-Meteo snaps to a coarser grid than that on
-# its own — 32.08 was sent and 32.0625 came back — so rounding here discards
-# precision the provider was going to discard anyway, and it is what makes the
-# cache able to hit at all: `users.home_lat` is a REAL column and a value that
-# survived a float round-trip would otherwise never match a typed-in one.
+# Two decimals is about 1.1 km, and it is what makes the cache able to hit at
+# all: `users.home_lat` is a REAL column and a value that survived a float
+# round-trip would otherwise never match a typed-in one. Visual Crossing echoes
+# the coordinates it was sent — 32.08 came back as 32.08 — so unlike Open-Meteo
+# there is no provider grid behind this, only the cache key.
 COORD_PRECISION: Final = 2
 
 _TIMEOUT_SECONDS: Final = 10.0
 
-# WMO 4677, grouped into the eight values `app/enums.py` admits. Codes absent
-# here are handled by `condition_for` rather than by being added speculatively.
-WMO_CONDITIONS: Final[dict[int, Condition]] = {
-    0: Condition.CLEAR,
-    1: Condition.PARTLY_CLOUDY,
-    2: Condition.PARTLY_CLOUDY,
-    3: Condition.CLOUDY,
-    45: Condition.FOG,
-    48: Condition.FOG,
-    51: Condition.DRIZZLE,
-    53: Condition.DRIZZLE,
-    55: Condition.DRIZZLE,
-    56: Condition.DRIZZLE,
-    57: Condition.DRIZZLE,
-    61: Condition.RAIN,
-    63: Condition.RAIN,
-    65: Condition.RAIN,
-    66: Condition.RAIN,
-    67: Condition.RAIN,
-    80: Condition.RAIN,
-    81: Condition.RAIN,
-    82: Condition.RAIN,
-    71: Condition.SNOW,
-    73: Condition.SNOW,
-    75: Condition.SNOW,
-    77: Condition.SNOW,
-    85: Condition.SNOW,
-    86: Condition.SNOW,
-    95: Condition.THUNDERSTORM,
-    96: Condition.THUNDERSTORM,
-    99: Condition.THUNDERSTORM,
+# The `icons2` set, grouped into the eight values `app/enums.py` admits. Icons
+# absent here are handled by `condition_for` rather than by being added
+# speculatively. `DRIZZLE` has no icon in this set and is unreachable from this
+# provider; it stays in the vocabulary, which is `02-DATA-MODEL.md`'s and not
+# the provider's. `wind` names a condition the vocabulary does not have, and
+# `CLOUDY` is arbitrary for it — a windy day can be clear. It is mapped to the
+# value the fallback would give it anyway so that the fallback's warning is
+# kept for icons that are genuinely unknown, not because a windy day is cloudy.
+ICON_CONDITIONS: Final[dict[str, Condition]] = {
+    "clear-day": Condition.CLEAR,
+    "clear-night": Condition.CLEAR,
+    "partly-cloudy-day": Condition.PARTLY_CLOUDY,
+    "partly-cloudy-night": Condition.PARTLY_CLOUDY,
+    "cloudy": Condition.CLOUDY,
+    "wind": Condition.CLOUDY,
+    "fog": Condition.FOG,
+    "rain": Condition.RAIN,
+    "showers-day": Condition.RAIN,
+    "showers-night": Condition.RAIN,
+    "snow": Condition.SNOW,
+    "snow-showers-day": Condition.SNOW,
+    "snow-showers-night": Condition.SNOW,
+    "thunder-rain": Condition.THUNDERSTORM,
+    "thunder-showers-day": Condition.THUNDERSTORM,
+    "thunder-showers-night": Condition.THUNDERSTORM,
 }
 
 # Lower bounds, not the whole-degree ranges `03-AI-CONTRACTS.md` prints. The
@@ -136,7 +150,7 @@ class ForecastOutOfRangeError(Exception):
 
 
 class ForecastProviderError(Exception):
-    """Open-Meteo did not answer, or answered something unreadable."""
+    """Visual Crossing did not answer, or answered something unreadable."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,18 +218,18 @@ def summarize_forecast(forecast: Forecast) -> str:
     return f"{round(forecast.temp_max_c)}°C, {rain}."
 
 
-def condition_for(code: int) -> Condition:
-    """A WMO 4677 code as the closed vocabulary names it.
+def condition_for(icon: str) -> Condition:
+    """An `icons2` icon as the closed vocabulary names it.
 
-    An unmapped code falls back rather than raising. `condition` is a label and
+    An unmapped icon falls back rather than raising. `condition` is a label and
     an icon; what actually dresses the user is `build_rule`, computed from
     temperature, rain and wind, and unaffected by this. Failing a whole
     suggestion over an unknown icon would be the worse answer — but a silent
     fallback would hide a widened vocabulary, so it is logged. `DECISIONS.md` 146.
     """
-    condition = WMO_CONDITIONS.get(code)
+    condition = ICON_CONDITIONS.get(icon)
     if condition is None:
-        logger.warning("Unmapped WMO weather code", extra={"weather_code": code})
+        logger.warning("Unmapped weather icon", extra={"icon": icon})
         return Condition.CLOUDY
     return condition
 
@@ -237,43 +251,43 @@ def _forecasts(body: Any) -> list[Forecast]:
     """Every day the provider answered with, in the order it returned them.
 
     One parser for both entry points: `get_forecast` takes the first element of
-    a one-day range and `get_daily_forecast` takes all of them. A second reader
-    of `daily` would be six field names written twice, with nothing keeping the
-    two in step — `DAILY_FIELDS` already exists because a rename here is a
-    `200` with a key silently absent.
+    a one-day range and `get_daily_forecast` takes all of them.
 
-    **`strict=True` is defence in depth and not the guard that catches a ragged
-    body — measured, at 4.2, by removing it.** The provider answers six parallel
-    arrays and nothing in its protocol promises they are the same length, so
-    without it `zip` stops at the shortest and returns a short list. What turns
-    that into a failure is `get_daily_forecast`'s day-by-day comparison against
-    the range it asked for, which fires on the same body and fires on shifted
-    days too; deleting `strict=True` alone leaves the whole suite green. It
-    stays because the two catch different things — a body ragged *past* the
-    requested range trips this and not that — and because a parser that guesses
-    at misaligned arrays is worse than one that refuses. `ValueError` is what
-    `zip` raises, and its one caller already maps it to `ForecastProviderError`.
+    **The only alignment guard is `get_daily_forecast`'s day-by-day comparison
+    against the range it asked for.** The provider answers one object per day,
+    so there are no parallel arrays for a `zip(strict=True)` to keep in step,
+    and a day that is short a field is a `KeyError` on that day rather than a
+    ragged body. What a short or shifted answer still needs is the comparison
+    downstream, which fires on a missing Thursday exactly as it did before.
+
+    A day the provider filled from climate statistics is refused here, before
+    any `Forecast` is built from it: the body is shaped exactly like a forecast
+    and only `source` tells them apart. `ForecastOutOfRangeError` because the
+    date cannot be served, and it passes through the caller's `except` clauses
+    untouched.
     """
-    daily = body["daily"]
-    return [
-        Forecast(
-            date=datetime.date.fromisoformat(day),
-            temp_min_c=float(temp_min),
-            temp_max_c=float(temp_max),
-            precip_mm=float(precip),
-            wind_kph=float(wind),
-            condition=condition_for(int(code)),
+    return [_forecast(day) for day in body["days"]]
+
+
+def _forecast(day: Any) -> Forecast:
+    if day["source"] == _STATISTICAL_SOURCE:
+        raise ForecastOutOfRangeError(
+            f"{day['datetime']} is past the provider's forecast and was answered from statistics."
         )
-        for day, temp_max, temp_min, precip, wind, code in zip(
-            daily["time"],
-            daily["temperature_2m_max"],
-            daily["temperature_2m_min"],
-            daily["precipitation_sum"],
-            daily["wind_speed_10m_max"],
-            daily["weather_code"],
-            strict=True,
-        )
-    ]
+    # A null `precip` is the provider saying none was measured, so it is a dry
+    # day; an *absent* key is the shape a misspelled element name produces and
+    # stays a `KeyError`, so a typo in `ELEMENTS` cannot read as a permanently
+    # dry world. A null temperature or wind has no honest substitute and the
+    # `TypeError` from `float(None)` is a provider failure like any other.
+    precip = day["precip"]
+    return Forecast(
+        date=datetime.date.fromisoformat(day["datetime"]),
+        temp_min_c=float(day["tempmin"]),
+        temp_max_c=float(day["tempmax"]),
+        precip_mm=0.0 if precip is None else float(precip),
+        wind_kph=float(day["windspeed"]),
+        condition=condition_for(str(day["icon"])),
+    )
 
 
 async def get_forecast(lat: float, lon: float, date: datetime.date) -> Forecast:
@@ -293,21 +307,25 @@ async def get_daily_forecast(
 ) -> list[Forecast]:
     """One place, every day from `start` to `end` inclusive, in one request.
 
-    **One request for the whole range, not one per day.** Open-Meteo's
-    `start_date`/`end_date` pair already answers a range — `get_forecast` sends
-    the same day twice into it — so a per-day loop would be N round trips for a
-    body the provider builds anyway, and 4.3 needs fourteen of them at once.
+    **One request for the whole range, not one per day.** The path's
+    `{start}/{end}` pair already answers a range — `get_forecast` sends the same
+    day twice into it — so a per-day loop would be N round trips for a body the
+    provider builds anyway, and 4.3 needs fourteen of them at once. The provider
+    bills by `queryCost`, and seventeen days cost 3, so a range is a few records
+    against the free daily thousand rather than one per day.
 
-    **The horizon is the provider's, not the trip's.** This raises against
-    `FORECAST_HORIZON_DAYS`, which was measured at 15 on 2026-08-26; the
-    fourteen-day product bound `DECISIONS.md` 190 fixed is `end_date <= today +
-    14` and belongs to `POST /trips/pack` and the date picker, which are the two
-    places 190 names. A service that refused day 15 would also have to refuse it
-    to `GET /weather`, which serves it today.
+    **The horizon is the provider's, not the trip's.** The local pre-check
+    raises against `_PRECHECK_HORIZON_DAYS`, one day past the measured
+    `FORECAST_HORIZON_DAYS`, and the day of slack is refused by the `source`
+    check in `_forecasts` when it really is past the horizon. The fourteen-day
+    product bound `DECISIONS.md` 190 fixed is `end_date <= today + 14` and
+    belongs to `POST /trips/pack` and the date picker, which are the two places
+    190 names.
 
-    Raises `ForecastOutOfRangeError` when the **last** day is past the horizon —
-    the first day cannot be past it without the last one being — and
-    `ForecastProviderError` when Open-Meteo does not answer, answers something
+    Raises `ForecastOutOfRangeError` when the **last** day is past the pre-check
+    — the first day cannot be past it without the last one being — or when the
+    provider answered any day from statistics, and `ForecastProviderError` when
+    no key is configured, the provider does not answer, answers something
     unreadable, or answers days other than the ones asked for. `ValueError` for
     an inverted range, which is a caller's bug rather than a forecast condition:
     left to the provider it would come back as a `400` and be reported as
@@ -316,9 +334,9 @@ async def get_daily_forecast(
     if end < start:
         raise ValueError(f"The range ends before it starts: {start} to {end}.")
 
-    if end > datetime.date.today() + datetime.timedelta(days=FORECAST_HORIZON_DAYS):
+    if end > datetime.date.today() + datetime.timedelta(days=_PRECHECK_HORIZON_DAYS):
         raise ForecastOutOfRangeError(
-            f"Open-Meteo forecasts {FORECAST_HORIZON_DAYS} days ahead; {end} is beyond that."
+            f"The provider forecasts {FORECAST_HORIZON_DAYS} days ahead; {end} is beyond that."
         )
 
     lat = round(lat, COORD_PRECISION)
@@ -339,15 +357,21 @@ async def get_daily_forecast(
     if len(held) == len(wanted):
         return held
 
-    # Annotated because the mixed value types otherwise infer as `object`, which
-    # httpx's `params` will not accept.
-    params: dict[str, str | float] = {
-        "latitude": lat,
-        "longitude": lon,
-        "daily": ",".join(DAILY_FIELDS),
-        "timezone": "auto",
-        "start_date": start.isoformat(),
-        "end_date": end.isoformat(),
+    # After the cache and before the request: a held answer needs no key, and
+    # a missing one is a deployment fault worth one log line rather than a
+    # `401` round trip.
+    if not settings.VISUAL_CROSSING_API_KEY:
+        logger.warning("VISUAL_CROSSING_API_KEY is not set")
+        raise ForecastProviderError("The forecast provider is not configured.")
+
+    url = f"{FORECAST_URL}/{lat},{lon}/{start.isoformat()}/{end.isoformat()}"
+    params = {
+        "key": settings.VISUAL_CROSSING_API_KEY,
+        "unitGroup": "metric",
+        "include": "days",
+        "elements": ",".join(ELEMENTS),
+        "iconSet": "icons2",
+        "contentType": "json",
     }
 
     # A client per call rather than one held at module level: httpx binds a
@@ -355,7 +379,7 @@ async def get_daily_forecast(
     # already removes the repeat calls pooling would pay for.
     try:
         async with httpx.AsyncClient(transport=_transport(), timeout=_TIMEOUT_SECONDS) as client:
-            response = await client.get(FORECAST_URL, params=params)
+            response = await client.get(url, params=params)
         if response.status_code == httpx.codes.BAD_REQUEST:
             raise ForecastOutOfRangeError(_reason(response))
         response.raise_for_status()
@@ -363,6 +387,8 @@ async def get_daily_forecast(
     # Before the broad clause, not after: `HTTPStatusError` is an `HTTPError`,
     # so ordered the other way this branch never runs and the status code the
     # provider answered with is lost — which is the whole point of the split.
+    # No `exc_info` here: the exception's own message carries the request URL,
+    # and the URL carries the key.
     except httpx.HTTPStatusError as exc:
         logger.warning(
             "Daily forecast request failed",
@@ -374,7 +400,6 @@ async def get_daily_forecast(
                 "status_code": exc.response.status_code,
                 "body": exc.response.text[:200],
             },
-            exc_info=exc,
         )
         raise ForecastProviderError("The forecast provider did not answer.") from exc
     except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as exc:
@@ -414,10 +439,10 @@ async def get_daily_forecast(
 
 
 def _reason(response: httpx.Response) -> str:
-    try:
-        return str(response.json()["reason"])
-    except ValueError, KeyError, TypeError:
-        return "The forecast provider refused the request."
+    """The provider's `400` is a one-line plain-text body — measured as
+    `Bad API Request:Start date time value … cannot be parsed` — and it does not
+    echo the request, so it is safe to carry."""
+    return response.text.strip()[:200] or "The forecast provider refused the request."
 
 
 def _evict(now: float) -> None:

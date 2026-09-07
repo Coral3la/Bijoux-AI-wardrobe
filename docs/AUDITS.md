@@ -100,7 +100,7 @@ same task. **O-15 was answered at 1.8 rather than acted on** — the second
 caller decided it does not want a sheet — and **O-16** was opened by the same
 task. O-14 was extended again at 1.7 and at 1.8. **O-21 and O-22 were opened at task 2.3**, and they are the two halves of what a task finds when it reads a contract closely: a promise two documents make that the vocabulary cannot keep, and a worked example that teaches an alphabet the generator forbids. **O-20 was opened at task 2.1**, and it is the first that records **measured data** rather than a document contradiction or an unread surface — the demo wardrobe cannot satisfy part of the weather rule the stylist will be given, and no test can see that. **O-7 was extended by the same task**, with a live measurement that moves its recommendation by one day. **O-25 was opened at task 2.6**, and it is the first that is two deferrals rather than a defect: a column built exactly as the DDL prints it with no vocabulary to fill it, and two indexes deliberately not built. **O-26 and O-27 were opened at task 2.7**, which also closed **O-8** and **O-21** — the two it inherited — and answered half of O-25. Both new items are consequences of decisions taken in the same commit rather than defects found in a document, which is a third kind again: a schema field whose only reader was designed away, and a fake whose determinism the weather can now break. **Task 2.11 closed O-25's vocabulary half** — the six roles are in `02` and enforced by `replace_role` — leaving that item open on its index half alone, **which task 3.1 closed**, printing both indexes in `02` before migration `0004` built them and finding, on the way, that deleting them failed no test. **O-29 and O-30 were opened at task 3.2**, and they are the two kinds this file has collected most: a cost that only becomes visible on its third instance — three screens with no way into them — and a documented endpoint with nothing under its heading, which is **O-1's shape** found the same way, by the task implementing the section next to it. **O-28 was opened and closed at task 2.11a** and **widened and closed again at 2.11b**, and it is the first of a fourth kind: a prompt line with no rule behind it, found by watching what the model actually returns rather than by reading two documents against each other. It is also the first item this project closed twice — the first close fixed the instance, tops, and the second fixed the class, which is a slot count the table never had. **O-31 was opened at task 4.1**, and it is the first item here that is a defect in a *shipped* artefact rather than in a document or an unread surface: three constraint names that the live schema has held wrongly since Stage 0, found by the task that was about to add a fourth the same way, and invisible to the one test written to catch exactly it. **Task 4.3 closed O-7**, the oldest item still open — audit 1 predicted the unsatisfiable trip constraints that `DECISIONS.md` 190 later had to settle, and its recommendation is taken in shape though not in number, for measurements taken after it was written. **Task 4.3 also closed O-27**, three lines in the fake, after a fourteen-day trip
 turned "a `502` for four months of the year" into "a `502` for nearly any trip".
-**O-32 was opened by the same task**, and it is the first that is a collision between two stages rather than a defect in either: Stage 4's repack and delete were specified before Stage 3 gave a look three columns worth keeping, and neither document is wrong on its own terms. **Task 4.4 closed it**, taking the recommendation in full and adding the thing three written options had all left out — *when* the destruction happens relative to the model call, which is the difference between a failed repack that costs nothing and one that empties a trip. Task 4.3 also **closed O-26**, across two of its three commits — the contract struck the field, the code followed, and the field that had survived 157's test twice failed it on the third asking. **O-36 and O-37 were opened at task 3.6a**, and they are the two things a task finds when it is the first to *use* work that already shipped: an endpoint whose caller was never built, noticed only because both tasks sit on one checklist, and a number that has been approximate since 1.8 and became visible the moment something linked to the list behind it. Neither is a contradiction between documents — the first is a gap between two halves of one task, and the second is a documented trade-off meeting its first reader who can see it. **O-38 was opened at task 4A.1**, and it is a fifth kind: not a contradiction, not an unread surface and not a measurement, but an assertion that was never written — a wire shape whose additions are caught by test fixtures failing to *construct* rather than by anything asserting what it carries, found because 4A.1 added a field to it and watched which files went red. **O-39 was opened on 2026-09-07**, by the commit that rewrote two lines of the stylist's styling principles, and it is a sixth kind: not a contradiction, not an unread surface, not a measurement and not a missing assertion, but a **missing provenance record** — found by a change asking what would record its own effect, and finding that nothing does. **It counts two prompt changes since the same day**, the second being `DECISIONS.md` 233's SETS block and section move; an item that narrated one of them would understate what the missing column has already cost.
+**O-32 was opened by the same task**, and it is the first that is a collision between two stages rather than a defect in either: Stage 4's repack and delete were specified before Stage 3 gave a look three columns worth keeping, and neither document is wrong on its own terms. **Task 4.4 closed it**, taking the recommendation in full and adding the thing three written options had all left out — *when* the destruction happens relative to the model call, which is the difference between a failed repack that costs nothing and one that empties a trip. Task 4.3 also **closed O-26**, across two of its three commits — the contract struck the field, the code followed, and the field that had survived 157's test twice failed it on the third asking. **O-36 and O-37 were opened at task 3.6a**, and they are the two things a task finds when it is the first to *use* work that already shipped: an endpoint whose caller was never built, noticed only because both tasks sit on one checklist, and a number that has been approximate since 1.8 and became visible the moment something linked to the list behind it. Neither is a contradiction between documents — the first is a gap between two halves of one task, and the second is a documented trade-off meeting its first reader who can see it. **O-38 was opened at task 4A.1**, and it is a fifth kind: not a contradiction, not an unread surface and not a measurement, but an assertion that was never written — a wire shape whose additions are caught by test fixtures failing to *construct* rather than by anything asserting what it carries, found because 4A.1 added a field to it and watched which files went red. **O-39 was opened on 2026-09-07**, by the commit that rewrote two lines of the stylist's styling principles, and it is a sixth kind: not a contradiction, not an unread surface, not a measurement and not a missing assertion, but a **missing provenance record** — found by a change asking what would record its own effect, and finding that nothing does. **It counts two prompt changes since the same day**, the second being `DECISIONS.md` 233's SETS block and section move; an item that narrated one of them would understate what the missing column has already cost. **O-40 and O-41 were opened on 2026-09-07 by the provider swap** (`DECISIONS.md` 234), and they are one file apart with nothing else in common: the first is documentation debt the swap created — every place that still names Open-Meteo, led by a frontend constant that now offers a day the server refuses — and the second is a validation gap the swap only made visible, an endpoint with no lower date bound, found by asking whether a user could still cause the provider's `400`.
 
 #### O-1 · ~~`POST /items/{id}/retag` and `DELETE /items/{id}` have no documented success response~~ — **closed at task 1.4**
 
@@ -2138,3 +2138,108 @@ building a column nothing queries.
 recorded decision that looks are not attributed and why — and in that case
 `DECISIONS.md` 232's *"the evidence will again be looking at looks"* is the
 sentence that stands.
+
+#### O-40 · The frontend's horizon still says 15, and nineteen places still name Open-Meteo — opened 2026-09-07
+
+`DECISIONS.md` 234 replaced Open-Meteo with Visual Crossing in
+`app/services/weather.py` and measured the horizon at **14**, one day short of
+the 15 measured against Open-Meteo on 2026-08-26. The task's scope was the
+service, its tests, the config, one logging line and one decision entry. Every
+other place that names the old provider or its horizon was left as it was, and
+this item is the list, so that it is visible before the defence rather than
+discovered one file at a time.
+
+**One of them is not documentation.** `frontend/src/app/features/stylist/look-request-form.ts`
+carries its own `FORECAST_HORIZON_DAYS = 15`, and the single-day picker offers
+today + 15. Since the swap the server lets that day leave the process — the
+pre-check is one day looser than the horizon, for the timezone skew 234
+describes — and refuses it when the provider answers it from statistics, with
+`400 forecast_unavailable` and a message that says fourteen days are available.
+So the stylist screen offers a day it will then be told is unavailable, on any
+day the browser and the server agree about the date. `trip-form.ts` reads the
+right bound for trips, 14, but its comment explains that number against the
+single-day 15 and `190`'s margin, which 234 records as measured away.
+
+**The list, by file.** Excluded: every reference to the Open-Meteo *geocoder*,
+which `services/geocoding.py` still calls and which stayed out of the swap on
+purpose — `routes/me.py`, `services/geocoding.py`, `test_geocoding.py`,
+`test_locations_search.py`, `test_trips_pack.py`'s geocoder stub,
+`CONVENTIONS.md`'s `geocoding_unavailable` paragraph, and `01-ARCHITECTURE.md`'s
+tree line for `geocoding.py` are all still true. Also excluded: `PROGRESS.md`
+and closed items in this file, which are records of what was true when written.
+
+- `frontend/src/app/features/stylist/look-request-form.ts` — the constant, 15, and the comment dating it to 2026-08-26. **Load-bearing.**
+- `frontend/src/app/features/trips/trip-form.ts` and `trip-form.spec.ts` — comments explaining 14 against a single-day 15 "measured against Open-Meteo".
+- `frontend/src/app/core/state/stylist.store.ts`, `features/trips/trips.page.spec.ts`, `features/trips/pack-wait.ts`, `features/trips/pack-wait.spec.ts` — comments naming Open-Meteo as the thing that does not answer at `502`.
+- `frontend/src/app/shared/models/weather.model.ts` — "mapped from Open-Meteo's WMO code server-side"; the map is now from `icons2` strings.
+- `backend/app/enums.py` — the `Condition` comment: "Open-Meteo answers in WMO 4677 integers and `weather.py` maps them".
+- `backend/app/models/trip.py` — "Same source — the Open-Meteo geocoder — and `weather.py` rounds to two decimals"; the geocoder half is true, the rounding reason moved (234: the cache key alone, no provider grid).
+- `backend/app/api/v1/routes/looks.py` — "Two of the three calls it makes leave the process — Open-Meteo and OpenAI".
+- `backend/tests/integration/test_looks_suggest.py` — the `forecasts` fixture's docstring, "Open-Meteo, recorded instead of called".
+- `README.md` — "Weather comes from Open-Meteo, which needs no key." Both halves now false.
+- `docs/README.md` — the stack table: "Open-Meteo (no API key required)".
+- `docs/07-DEPLOYMENT.md` — the services table: "Open-Meteo · No key, no account"; the Render environment now needs `VISUAL_CROSSING_API_KEY`, which no deployment document names.
+- `docs/01-ARCHITECTURE.md` — the diagram box, step 3 of the suggest flow, and the tree line for `weather.py` ("Open-Meteo client + rule generation").
+- `docs/02-DATA-MODEL.md` — "Open-Meteo answers in WMO 4677 integers … twenty-eight codes onto these eight"; sixteen icons now, and `drizzle` is a value nothing produces.
+- `docs/04-API-SPEC.md` — `GET /weather`'s failure paragraph and `POST /trips/pack`'s, both "when Open-Meteo does not answer", and the horizon paragraph that reasons from "`weather.py`'s measured 15".
+- `docs/CONVENTIONS.md` — "`async def` is for HTTP clients (OpenAI, Open-Meteo)"; still true of the geocoder, no longer the example it meant.
+- `docs/stages/STAGE-2-stylist.md` — task 2.1's line and the commit list; a stage record, listed for completeness and probably left.
+
+**Recommendation.** Fix the constant first and on its own: `look-request-form.ts`
+to 14, with its spec, and the two `trip-form` comments with it, since the three
+explain one number against another. That is a `fix(web)` commit and it is the
+only item here a user can reach. The documents are a `docs` commit, and
+`07-DEPLOYMENT.md` is the one that matters in it, because it is the file
+someone deploying reads. The comments go last or with whichever task next opens
+each file.
+
+**What closes it.** The constant and the deployment document, at minimum. The
+rest is a reading pass.
+
+#### O-41 · `GET /weather` has no lower date bound — opened 2026-09-07
+
+`GET /weather` takes `date: datetime.date` and bounds nothing but the upper end:
+the service's horizon pre-check, and now the `source` refusal behind it. Any
+date FastAPI can parse leaves the process. Found by `DECISIONS.md` 234 asking
+whether, with a provider that answers a far date with statistics rather than a
+`400`, a user could still cause the provider's `400` at all — and measuring that
+one can, from below.
+
+**Three measurements.** With the production query string against Tel Aviv's
+coordinates: **2005** is not refused anywhere, spends a record, and comes back
+`200` with `source: "obs"` — observations that the route then presents as a
+forecast, with a rule built from them. **1960** answers `400 Bad API
+Request:From date cannot be before 1970-01-01 00:00:00Z`. **1800**, and
+`0001-01-01`, the earliest date FastAPI accepts, answer `400 Bad API
+Request:Invalid year requested. Years must be between 1950 and 2050`. A fourth,
+not a date: latitude **90** with longitude **180**, both inside the route's
+`ge`/`le` bounds, answers `400 Bad API Request:No valid locations could be
+determined from the input`; open ocean at 0,0 answers a real forecast, so this
+is a corner of the bounds rather than a class of place.
+
+**The misleading sentence is the symptom.** The service maps a provider `400`
+to `ForecastOutOfRangeError`, which is right — the request was refused for
+something the user supplied, there is no forecast for that day, and `147`'s
+status and code both hold; mapping it to the provider error would tell a user
+who typed 1960 that the service is down. The route then answers *"A forecast is
+only available up to 14 days ahead"*, which names the horizon for a refusal
+that has nothing to do with it. Whoever picks this up should fix the bound, not
+only the string: a date below the provider's floor is a refusal the route can
+make before any request leaves, the way the horizon guard already does above,
+and a date in the past that the provider *will* answer is a product question —
+whether `GET /weather` is a forecast endpoint or a weather endpoint — that no
+document has been asked.
+
+**Trips do not reach this.** `POST /trips/pack` bounds the whole range against
+today + 14 before the service is called, so the pre-1970 case and the
+observations case are `GET /weather`'s alone; the coordinate corner is reachable
+from both, since a geocoded destination can in principle land on it.
+
+**Recommendation.** Decide the lower bound as a product rule and write it into
+`04-API-SPEC.md` first — today, or today minus some window — then enforce it in
+the route with the same `forecast_unavailable` at `400`, and rewrite the message
+so that it does not name a horizon the request may not have crossed. The
+coordinate corner is a `lt` on one bound, if it is worth a line.
+
+**What closes it.** The bound in `04` and in the route, with the message that
+follows from it.

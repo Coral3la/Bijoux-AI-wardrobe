@@ -85,6 +85,12 @@ def configure_logging() -> None:
     root.addHandler(handler)
     root.setLevel(level)
 
+    # httpx logs every request at INFO with its full URL, and Visual Crossing
+    # accepts its API key only as a query parameter — so at production's INFO
+    # level the key would land in the log on every forecast call. Failures
+    # are logged by the services themselves, with the URL left out.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
     for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
         uvicorn_logger = logging.getLogger(name)
         uvicorn_logger.handlers.clear()
