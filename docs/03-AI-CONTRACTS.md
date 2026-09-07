@@ -246,6 +246,27 @@ the majority of lines and moves by a token or two on the minority. Measuring the
 new figure against the unit test's 6,000 ceiling is task 4A.1's, not this
 document's to predict.
 
+**The tokens alone were not enough, and `serialize_sets` is the answer.** A
+repeated `set:1` on two non-adjacent lines of a 64-line oldest-first list states
+the pairing only by implication, and measured against the real dev wardrobe the
+model split its sets in roughly nine looks out of ten. The same module therefore
+emits a second, separate block, which the user message below prints under the
+wardrobe:
+
+```
+SETS:
+set 1 = A3F9K2 + 7BX1QM
+```
+
+One line per set — `set {n} = {SHORT_ID} + {SHORT_ID}[ + …]` — sets in **ordinal
+order** and members in **the order they appear in the wardrobe**, so the block
+reads down the same list the lines were written from. `n` is the *same* ordinal
+the lines carry, read from the same function, so the block and the lines cannot
+disagree about which set is which. **It is empty, and the caller then omits the
+heading entirely, when no set has two surviving members** — the rule above,
+reused rather than restated. The rule that acts on the block is in CONSTRAINTS
+and not among the styling principles; `DECISIONS.md` 233.
+
 `color_secondary` was added to the format at task 2.3. Colour coordination is
 what this contract exists to get right and about one item in seven is two-tone,
 so a line carrying one colour describes those items wrongly. Measured cost: 303
@@ -314,11 +335,6 @@ STYLING PRINCIPLES
   brown) and let one item carry the colour or pattern, or commit to a single
   colour family across the whole look — tonal dressing is deliberate, not an
   accident. Two loud patterns clash unless their scale clearly differs.
-- Items carrying the same "set:" number — set:1 with set:1, never set:1 with
-  set:2 — were bought or are worn together. Put them in the same look, and
-  prefer that pairing over the proportion and colour principles above when they
-  disagree. Wear one member alone only where the weather rule, the occasion or
-  the user's notes call for it.
 - Keep formality within one point across a look. Do not pair a formality-5
   dress with formality-2 sneakers unless the occasion explicitly calls for
   contrast.
@@ -348,6 +364,15 @@ CONSTRAINTS
   never return an empty one, because an ideal item is absent.
 - An explicit outerwear instruction from the user overrides the weather rule.
   Where none is given, the weather rule decides.
+- Items named together in a SETS line were bought or are worn together. Do not
+  split a set: a look that uses one member uses the other members too. This is
+  a default, not a matter of taste.
+- Three things override it. The weather rule comes first. Where the user's
+  notes explicitly ask for one member without the other, do as they ask. And
+  where the LOCKED block carries a `Replace only the <role>` line, replace that
+  role as instructed even when doing so splits a set.
+- If an ANCHOR names one member and the others cannot fit alongside it, keep the
+  anchor and build the remaining slots from other items.
 - Obey the user's stated preferences. They override styling principles.
 - If the wardrobe cannot satisfy the request, still return your best look and
   report the shortfall in `missing_pieces`. Never silently return a bad outfit,
@@ -369,6 +394,9 @@ Respond in English.
 WARDROBE ({n} items):
 {serialised lines}
 
+SETS:
+set 1 = A3F9K2 + 7BX1QM
+
 USER PROFILE:
 Height: 165 cm. Preferences: prefer high-rise, avoid crop tops.
 
@@ -380,6 +408,14 @@ USER PREFERENCES (learned from rated looks):
 REQUEST:
 {one of the two blocks below}
 ```
+
+**The SETS block states a pairing the wardrobe lines only imply**, and it sits
+against the wardrobe it describes rather than beside the rule that reads it. It
+is **omitted whole, heading included**, when no set has two surviving members —
+`USER PROFILE`'s rule one block down, that a heading followed by nothing tells
+the model a thing exists and is blank. It is in the **shared** part of the
+message and not in either REQUEST block, so a trip carries it too: a suit bought
+together is still a suit in Berlin. `DECISIONS.md` 233.
 
 The preferences block arrives at task 3.5. It is omitted until the user has
 at least three rated looks — a rating is either thumbs-up or thumbs-down, while
@@ -734,19 +770,24 @@ retry, the give-up and `502 stylist_failed` belong to `POST /looks/suggest` at
 11. **No two looks are composed of the same set of item ids.** Set equality, not order — the same four garments in a different sequence is the same outfit. `STAGE-4`'s acceptance criterion is *no two days produce an identical full look*, and the system prompt has asked for it since Stage 0 without anything enforcing it, which is rule 9's own history (`AUDITS.md` O-28). It is a rule rather than prompt-only because the model reaches for it exactly when the reuse instruction bites hardest: the cheapest way to pack twelve items across seven days is to repeat Tuesday. Trip path only — one look cannot duplicate itself. **Unchanged at 4.11 and doing a second job for it**: the packing constraint now asks the model to reuse items *between* the two slots of one day, and this rule is the line between reuse and repetition — the same trousers with a different top is a change of outfit, and the same four garments twice is not a change at all. It is also the only part of the cross-slot instruction that is enforced rather than asked for, which is the trip message's own argument above. `DECISIONS.md` 194, 225.
 
 **Sets add no rule, and that is the decision rather than an omission.** The
-`set:<n>` token in the wardrobe line is a **preference the prompt states**, and
-nothing in this list checks whether the model honoured it. A rule of the *all
-members of a set appear together or none of them do* shape was rejected on two
-grounds. It is **wrong on the merits**: the requirement sets exist to serve is
-that the set's top stays wearable with other trousers, so the look the rule
-would refuse is precisely the one the feature is for. And it is **expensive
-where it is wrong**: a violation spends the single retry (`DECISIONS.md` 171)
+SETS block and the `set:<n>` tokens carry a **rule the prompt states and nothing
+verifies**. Since `DECISIONS.md` 233 it is a *default* under CONSTRAINTS rather
+than a preference under STYLING PRINCIPLES — stronger wording, the same
+enforcement, and nothing in this list checks whether the model honoured it. A
+rule of the *all members of a set appear together or none of them do* shape was
+rejected on two grounds. It is **wrong on the merits**: the requirement sets
+exist to serve is that the set's top stays wearable with other trousers, so the
+look the rule would refuse is precisely the one the feature is for. And it is
+**expensive where it is wrong**: a violation spends the single retry (`DECISIONS.md` 171)
 and then answers `502 stylist_failed` — task 2.11's failure shape, met again one
 field along, where the user asked a reasonable question and the API says it
 could not put a look together. Rule 6 is the precedent for the narrowing rather
 than the counter-example: it was narrowed at 2.5 for exactly this reason, so
 that a look which obeyed an explicit instruction is not refused by a rule
-enforcing a default. `DECISIONS.md` 230.
+enforcing a default. `DECISIONS.md` 230, and **233 sharpens the argument rather
+than reopening it**: CONSTRAINTS now names the swap's `Replace only the <role>`
+line as one of the three things that override the default, so a rule of that
+shape would reject the exact instruction the prompt has just given.
 
 Rules 7 and 8 are fully deterministic and make excellent E2E assertions — the requested item is either there or it is not. They arrive with the anchor at 2.10 and the swap at 2.11, which are the tasks that put the fields on the wire.
 

@@ -145,6 +145,53 @@ single-day call (189), and a trip's dates are bounded on the **last** day,
 
 _Append one line per completed stage: date, what shipped, what changed from the plan._
 
+**2026-09-07 — a second fix outside any stage: the sets are stated, and the rule
+moves to CONSTRAINTS.** **1223 backend tests pass (1215 before, 8 added)** — the
+full suite, run from `backend/`; `ruff`, `ruff format` and `mypy` clean.
+Frontend untouched and not run: this changes what the model is told and no wire
+shape the browser reads. Not a bug fix and not a re-run of the last one:
+`DECISIONS.md` 232 rewrote the set line and a second live measurement against the
+real dev wardrobe — `demo@bijoux.app`, 64 styleable items, two sets, all four
+lines carrying the right ordinal — found the model still splitting sets in
+roughly **nine looks out of ten**, with `_set_ordinals`, `styleable_wardrobe` and
+the serialiser all sound. Two causes, both about how the message reads, and one
+change each. **The pairing is now stated**: a new public `serialize_sets` emits a
+`SETS:` block between the wardrobe and the profile, one `set N = ID + ID` line
+per set, reusing `_set_ordinals` so the block and the trailing `set:<n>` tokens
+can never disagree about a number. **And the rule moves section**, out of
+STYLING PRINCIPLES — where it read as one soft trade-off beside proportion,
+colour and formality — into CONSTRAINTS, as three bullets: a default rather than
+a matter of taste, three named overrides, and the anchor case. The block sits in
+the **shared** prefix of `_user_message`, so `POST /trips/pack` and
+`POST /trips/{id}/swap` get it too. Changed: `backend/app/services/serializer.py`,
+`backend/app/services/stylist.py`, `backend/app/prompts/stylist_system.md`,
+`backend/tests/unit/test_serializer.py` (5), `backend/tests/unit/test_stylist.py`
+(3), and four documents besides this one. One entry, `DECISIONS.md` **233**.
+
+- **The bullets go *above* the preferences line, and the override list is
+  explicit.** The brief put them after it. This prompt's own convention — stated
+  three times in `stylist.py` — is that the later of two conflicting instructions
+  wins, so filing the set rule below `Obey the user's stated preferences` would
+  have flipped a precedence nobody asked to change, and left that line's own text
+  wrong as well: it says it overrides *"styling principles"*, and the set rule is
+  no longer one. The three overrides are named inside the bullet instead.
+- **Breaking a set stays the user's call.** The ↻ swap badge and the notes field
+  are the two ways she says so, and both are named as overrides — `explicitly`
+  doing the narrowing that the old four-clause permission never did.
+- **No validator, again, and the argument is sharper than it was.** An *all
+  members or none* rule would now reject the swap's own `Replace only the
+  <role>` instruction, spend the single retry and answer `502` — 2.11's failure
+  shape (`DECISIONS.md` 230, 171).
+- **`03-AI-CONTRACTS.md`'s copy of the prompt was regenerated from the file** and
+  matches it byte for byte, which is the practice the previous commit started
+  after finding sixteen lines missing from it.
+- **`AUDITS.md` O-39 now counts two prompt changes rather than one.** Neither is
+  recoverable from the database, and the second was measured against the first by
+  hand.
+- **Nothing measures whether this worked**, and the trip case is the least
+  tested: keeping every set whole and minimising distinct items pull against each
+  other, and nothing but the model arbitrates them.
+
 **2026-09-07 — a fix outside any stage: two lines of the stylist's styling
 principles.** **1215 backend tests pass, unchanged** — no test transcribed
 either sentence, which was checked before writing rather than after; `ruff`,

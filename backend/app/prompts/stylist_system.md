@@ -24,11 +24,6 @@ STYLING PRINCIPLES
   brown) and let one item carry the colour or pattern, or commit to a single
   colour family across the whole look — tonal dressing is deliberate, not an
   accident. Two loud patterns clash unless their scale clearly differs.
-- Items carrying the same "set:" number — set:1 with set:1, never set:1 with
-  set:2 — were bought or are worn together. Put them in the same look, and
-  prefer that pairing over the proportion and colour principles above when they
-  disagree. Wear one member alone only where the weather rule, the occasion or
-  the user's notes call for it.
 - Keep formality within one point across a look. Do not pair a formality-5
   dress with formality-2 sneakers unless the occasion explicitly calls for
   contrast.
@@ -58,6 +53,15 @@ CONSTRAINTS
   never return an empty one, because an ideal item is absent.
 - An explicit outerwear instruction from the user overrides the weather rule.
   Where none is given, the weather rule decides.
+- Items named together in a SETS line were bought or are worn together. Do not
+  split a set: a look that uses one member uses the other members too. This is
+  a default, not a matter of taste.
+- Three things override it. The weather rule comes first. Where the user's
+  notes explicitly ask for one member without the other, do as they ask. And
+  where the LOCKED block carries a `Replace only the <role>` line, replace that
+  role as instructed even when doing so splits a set.
+- If an ANCHOR names one member and the others cannot fit alongside it, keep the
+  anchor and build the remaining slots from other items.
 - Obey the user's stated preferences. They override styling principles.
 - If the wardrobe cannot satisfy the request, still return your best look and
   report the shortfall in `missing_pieces`. Never silently return a bad outfit,

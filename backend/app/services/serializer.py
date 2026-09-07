@@ -25,6 +25,14 @@ Every other slot on a line is read off the row; this one is read off the
 be serialised and a set with one surviving member gets no token at all. So the
 function makes two passes, and the list is materialised for it — the ordinals
 have to be known before the first line is written.
+
+**`serialize_sets` is the second public function, and it states what those
+tokens only imply.** A repeated `set:1` on two non-adjacent lines of a long list
+is a pairing the reader has to notice; the block names it. It reads the same
+`_set_ordinals`, so the block and the lines can never disagree about which set
+is which — that shared reading is why it lives here rather than in the message
+that prints it. The blank line under the block does not: `stylist.py` owns the
+assembly, this module owns the format.
 """
 
 import uuid
@@ -113,3 +121,30 @@ def serialize_wardrobe(items: Iterable[ItemResponse]) -> str:
     wardrobe = list(items)
     set_ordinals = _set_ordinals(wardrobe)
     return "\n".join(_line(item, set_ordinals) for item in wardrobe)
+
+
+def serialize_sets(items: Iterable[ItemResponse]) -> str:
+    """The pairing stated, rather than left to be inferred from the lines.
+
+        SETS:
+        set 1 = Z94NTD + 4G988B
+        set 2 = D7HFST + DM5J59
+
+    Sets in ordinal order and members in the order they appear in the wardrobe,
+    so the block reads down the same list the lines were written from.
+
+    **Empty when no set has two surviving members**, which is `_set_ordinals`'
+    own rule reused rather than restated — the caller then omits the heading
+    instead of printing it over nothing.
+    """
+    wardrobe = list(items)
+    ordinals = _set_ordinals(wardrobe)
+    if not ordinals:
+        return ""
+    members: dict[uuid.UUID, list[str]] = {set_id: [] for set_id in ordinals}
+    for item in wardrobe:
+        if item.set_id in members:
+            members[item.set_id].append(item.short_id)
+    return "SETS:\n" + "\n".join(
+        f"set {ordinals[set_id]} = {' + '.join(short_ids)}" for set_id, short_ids in members.items()
+    )

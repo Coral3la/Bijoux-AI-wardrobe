@@ -66,7 +66,7 @@ from openai.types.shared_params.response_format_json_schema import JSONSchema
 from app.core.config import settings
 from app.enums import Category, Layer, Role, Slot
 from app.schemas.item import ItemResponse
-from app.services.serializer import serialize_wardrobe
+from app.services.serializer import serialize_sets, serialize_wardrobe
 from app.services.weather import requires_outerwear
 
 logger = logging.getLogger(__name__)
@@ -432,6 +432,18 @@ def _client() -> AsyncOpenAI:
     )
 
 
+def _sets_block(wardrobe: Sequence[ItemResponse]) -> str:
+    """`serialize_sets` and the blank line that separates it from the profile.
+
+    The blank line is added here and not in the serialiser because this is the
+    function that knows what comes next: `serializer.py` owns the format and
+    nothing about the message it lands in. Omitted whole when no set has two
+    surviving members, for the reason `_profile_block` gives below.
+    """
+    block = serialize_sets(wardrobe)
+    return f"{block}\n\n" if block else ""
+
+
 def _profile_block(context: AnyContext) -> str:
     """`03`'s two-sentence profile line, with either half dropped when the
     column is null.
@@ -568,18 +580,23 @@ def _trip_request(context: TripContext) -> str:
 
 
 def _user_message(wardrobe: Sequence[ItemResponse], context: AnyContext) -> str:
-    """The whole message: one wardrobe, one profile, one request block.
+    """The whole message: one wardrobe, its sets, one profile, one request block.
 
-    The first three sections are shared and the REQUEST is the one that differs,
+    The first four sections are shared and the REQUEST is the one that differs,
     which is `03-AI-CONTRACTS.md`'s own structure — *"one of the two blocks
     below"*. A trip carries the learned-preferences block for the same reason a
     single day does: a user whose stylist has learned they dislike bodycon
-    dresses does not stop disliking them in Berlin (`DECISIONS.md` 196).
+    dresses does not stop disliking them in Berlin (`DECISIONS.md` 196). The
+    sets are shared for that reason too — a suit bought together is still a suit
+    in Berlin — and putting the block here rather than in `_day_request` is the
+    whole of why all three callers of `suggest_looks` get it (`DECISIONS.md`
+    233).
     """
     request = _trip_request(context) if isinstance(context, TripContext) else _day_request(context)
     return (
         f"WARDROBE ({len(wardrobe)} items):\n"
         f"{serialize_wardrobe(wardrobe)}\n\n"
+        f"{_sets_block(wardrobe)}"
         f"{_profile_block(context)}"
         f"{_preferences_block(context)}"
         f"{request}"

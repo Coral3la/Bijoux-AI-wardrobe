@@ -21,7 +21,7 @@ import tiktoken
 from app.core.config import settings
 from app.core.short_id import generate_short_id
 from app.schemas.item import ItemResponse
-from app.services.serializer import serialize_wardrobe
+from app.services.serializer import serialize_sets, serialize_wardrobe
 from scripts.seed_demo import FAILURE_ITEMS, SEED_ITEMS
 
 # Transcribed from `STAGE-2` 2.3: "150 items must serialise to under 6,000
@@ -305,6 +305,90 @@ def test_the_token_is_an_ordinal_and_the_row_id_never_reaches_the_line():
 
     assert str(suit) not in text
     assert re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", text) is None
+
+
+# --- the SETS block ---------------------------------------------------------
+
+
+def test_the_block_names_the_members_of_the_set():
+    """`03-AI-CONTRACTS.md`'s worked block, transcribed. It says in one line the
+    thing two `set:1` tokens on non-adjacent lines leave to be inferred."""
+    suit = uuid.uuid4()
+    wardrobe = [_shirt(set_id=suit), _shirt(short_id=JEANS_ID, set_id=suit)]
+
+    assert serialize_sets(wardrobe) == "SETS:\nset 1 = A3F9K2 + 7BX1QM"
+
+
+def test_the_members_are_listed_in_the_order_they_appear_in_the_wardrobe():
+    """Not sorted and not grouped: the block reads down the same list the lines
+    are written from, so every id can be found by reading in one direction. The
+    three members are deliberately not adjacent, which is what an oldest-first
+    wardrobe produces and the whole reason the block is worth writing."""
+    trio = uuid.uuid4()
+    wardrobe = [
+        _shirt(short_id="SEFA38", set_id=trio),
+        _shirt(short_id="ZR44QW"),
+        _shirt(short_id=TOP_ID, set_id=trio),
+        _shirt(short_id=JEANS_ID, set_id=trio),
+    ]
+
+    assert serialize_sets(wardrobe) == "SETS:\nset 1 = SEFA38 + A3F9K2 + 7BX1QM"
+
+
+def test_the_sets_are_listed_in_ordinal_order_and_a_lone_member_is_absent():
+    """The orphan is first in the wardrobe and gets no line at all, so the two
+    real sets are 1 and 2 — `_set_ordinals`' contiguity, read through the block
+    rather than through the trailing tokens."""
+    orphan, first, second = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    wardrobe = [
+        _shirt(short_id="ZR44QW", set_id=orphan),
+        _shirt(short_id=TOP_ID, set_id=first),
+        _shirt(short_id="SEFA38", set_id=second),
+        _shirt(short_id=JEANS_ID, set_id=first),
+        _shirt(short_id="EH8VVQ", set_id=second),
+    ]
+
+    assert serialize_sets(wardrobe) == "SETS:\nset 1 = A3F9K2 + 7BX1QM\nset 2 = SEFA38 + EH8VVQ"
+
+
+def test_the_block_and_the_lines_cannot_disagree_about_a_number():
+    """The property the whole block rests on, and the reason it reuses
+    `_set_ordinals` instead of numbering the sets a second time. The wardrobe is
+    arranged so that an independent numbering would diverge — a lone member
+    first, then two sets interleaved — and the two readings still agree."""
+    orphan, first, second = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    wardrobe = [
+        _shirt(short_id="ZR44QW", set_id=orphan),
+        _shirt(short_id=TOP_ID, set_id=first),
+        _shirt(short_id="SEFA38", set_id=second),
+        _shirt(short_id=JEANS_ID, set_id=first),
+        _shirt(short_id="EH8VVQ", set_id=second),
+    ]
+
+    from_lines = {
+        line.split(" | ")[0]: line.rsplit("set:", 1)[-1]
+        for line in serialize_wardrobe(wardrobe).splitlines()
+        if "| set:" in line
+    }
+    from_block = {
+        member: heading.removeprefix("set ")
+        for heading, _, members in (
+            line.partition(" = ") for line in serialize_sets(wardrobe).splitlines()[1:]
+        )
+        for member in members.split(" + ")
+    }
+
+    assert from_lines == from_block
+    assert len(from_lines) == 4
+
+
+def test_a_wardrobe_with_no_set_that_survived_produces_no_block():
+    """Emptiness rather than a heading over nothing: the caller omits the block
+    entirely, which is `stylist.py`'s `_profile_block` argument reused — a
+    heading followed by nothing tells the model a thing exists and is blank."""
+    assert serialize_sets([]) == ""
+    assert serialize_sets([_shirt(), _shirt(short_id=JEANS_ID)]) == ""
+    assert serialize_sets([_shirt(set_id=uuid.uuid4())]) == ""
 
 
 # --- the shape of the whole document ---------------------------------------

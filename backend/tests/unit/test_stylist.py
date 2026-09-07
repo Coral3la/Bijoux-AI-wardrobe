@@ -290,6 +290,37 @@ def test_the_wardrobe_block_is_the_serialiser_output() -> None:
     assert serialize_wardrobe(WARDROBE) in stylist._user_message(WARDROBE, _context())
 
 
+def _paired_wardrobe() -> list[ItemResponse]:
+    """`WARDROBE` with the shirt and the jeans declared as one set."""
+    suit = uuid.uuid4()
+    return [
+        _item(TOP_ID, category="top", subcategory="shirt", set_id=suit),
+        _item(JEANS_ID, category="bottom", subcategory="jeans", set_id=suit),
+        BOOTS,
+        BLAZER,
+    ]
+
+
+def test_the_sets_block_sits_between_the_wardrobe_and_the_profile() -> None:
+    """Against the wardrobe it describes, and above the profile — with one blank
+    line either side, which is what makes it a block rather than a fifth
+    wardrobe line."""
+    wardrobe = _paired_wardrobe()
+
+    message = stylist._user_message(wardrobe, _context(height_cm=165))
+
+    assert (
+        f"{serialize_wardrobe(wardrobe)}\n\nSETS:\nset 1 = {TOP_ID} + {JEANS_ID}\n\nUSER PROFILE:"
+    ) in message
+
+
+def test_no_set_in_the_wardrobe_prints_no_block() -> None:
+    # `_profile_block`'s rule, applied to the block above it: a heading over
+    # nothing tells the model a thing exists and is empty, and almost no
+    # wardrobe has a set in it.
+    assert "SETS:" not in stylist._user_message(WARDROBE, _context())
+
+
 def test_the_profile_block_carries_height_and_preferences() -> None:
     message = stylist._user_message(
         WARDROBE, _context(height_cm=165, style_notes="prefer high-rise, avoid crop tops")
@@ -909,6 +940,16 @@ def test_the_trip_message_carries_one_line_per_slot_in_the_documents_order() -> 
     assert f"Day 1 day | work | {SUMMARY} | {RULE}" in message
     assert f"Day 2 day | work | {SUMMARY} | {RULE}" in message
     assert "Build one look per line above — 2 looks for 2 days." in message
+
+
+def test_a_trip_carries_the_sets_block_too() -> None:
+    """The block is in the shared prefix rather than in `_day_request`, and this
+    is the test that says so: a suit bought together is still a suit in Berlin,
+    and `POST /trips/pack` reads the same CONSTRAINTS. `DECISIONS.md` 233."""
+    message = stylist._user_message(_paired_wardrobe(), _trip_context(days=2))
+
+    assert f"\n\nSETS:\nset 1 = {TOP_ID} + {JEANS_ID}\n\n" in message
+    assert message.rstrip().endswith("Then return the deduplicated packing list.")
 
 
 def test_a_date_with_an_evening_writes_two_lines_and_counts_as_one_day() -> None:
