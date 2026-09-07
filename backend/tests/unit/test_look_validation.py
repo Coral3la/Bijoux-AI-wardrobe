@@ -5,9 +5,10 @@ context, and returns a verdict. That is the whole point of the split — the
 retry, the give-up and `502 stylist_failed` are 2.7's, so every rule here is
 testable against a hand-built `StylistResponse`.
 
-Eight rules run, not `03`'s nine. Rule 5 reads `packing_list.item_ids` and
-`STYLIST_SCHEMA` carries no `packing_list` until Stage 4 (`DECISIONS.md` 157);
-rule 8 arrived with the swap at 2.11 and rule 9 at 2.11a.
+Nine rules run, not `03`'s eleven: rule 3 is one slot of rule 9's table since
+2.11b, and rule 5 was struck at `DECISIONS.md` 236 — the packing list is derived
+from the looks in `pack_trip`, so there is no mismatch left to reject. Rule 8
+arrived with the swap at 2.11, rule 9 at 2.11a, and rules 10 and 11 at 4.3.
 
 Violation text is asserted by the fragment a reader would recognise rather than
 by whole sentence, because the sentence is prompt text sent to the model and
@@ -647,51 +648,6 @@ def test_the_same_items_in_a_different_order_are_the_same_look() -> None:
     )
 
     assert not _validate_trip(answer).ok
-
-
-def test_an_item_worn_on_a_day_and_missing_from_the_packing_list_is_rejected() -> None:
-    # Rule 5, the direction `03` did not print until 4.3 and the one a user
-    # feels: a garment worn on Thursday and left at home.
-    answer = _trip_response(
-        _trip_look(1, TOP_ID, JEANS_ID, BOOTS_ID),
-        _trip_look(2, TANK_ID, SHORTS_ID, BOOTS_ID),
-        packing=(TOP_ID, JEANS_ID, BOOTS_ID, TANK_ID),
-    )
-
-    violation = _validate_trip(answer).violation
-
-    assert violation is not None
-    assert f"wears {SHORTS_ID}" in violation
-    assert "not in the packing list" in violation
-
-
-def test_a_packed_item_that_no_day_wears_is_rejected() -> None:
-    answer = _trip_response(
-        _trip_look(1, TOP_ID, JEANS_ID, BOOTS_ID),
-        _trip_look(2, TANK_ID, SHORTS_ID, BOOTS_ID),
-        packing=(TOP_ID, JEANS_ID, BOOTS_ID, TANK_ID, SHORTS_ID, DRESS_ID),
-    )
-
-    violation = _validate_trip(answer).violation
-
-    assert violation is not None
-    assert f"packing list contains {DRESS_ID}" in violation
-
-
-def test_a_trip_with_no_packing_list_is_rejected() -> None:
-    answer = _trip_response(
-        _trip_look(1, TOP_ID, JEANS_ID, BOOTS_ID),
-        _trip_look(2, TANK_ID, SHORTS_ID, BOOTS_ID),
-        packing=None,
-    )
-    answer = stylist.StylistResponse(
-        looks=answer.looks, missing_pieces=(), message="m", packing_list=None
-    )
-
-    violation = _validate_trip(answer).violation
-
-    assert violation is not None
-    assert "no packing list" in violation
 
 
 def test_only_the_cold_day_needs_a_coat() -> None:

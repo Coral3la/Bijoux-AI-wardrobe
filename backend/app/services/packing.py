@@ -443,10 +443,20 @@ async def pack_trip(
         )
     looks = tuple(packed)
 
+    # Derived from the looks and never read from `answer.packing_list`: on long
+    # trips the model's own list disagreed with its looks, and a usable plan was
+    # rejected for it twice. Every item worn, once, in look order then item
+    # order — the order `_swapped_ids` appends newcomers in, so a packed trip
+    # and a swapped one write the column the same way. `DECISIONS.md` 236.
+    #
     # `short_id` in, UUID out. The model is shown nothing else and the client is
-    # given nothing else, so this line is the whole of the boundary between the
-    # two vocabularies. `DECISIONS.md` 193.
-    packed_ids = [str(known[item_id].id) for item_id in answer.packing_list or ()]
+    # given nothing else, so this is the whole of the boundary between the two
+    # vocabularies. `DECISIONS.md` 193.
+    packed_ids: list[str] = []
+    for packed_look in looks:
+        for item in packed_look.items:
+            if str(item.id) not in packed_ids:
+                packed_ids.append(str(item.id))
 
     trip = Trip(
         user_id=user.id,

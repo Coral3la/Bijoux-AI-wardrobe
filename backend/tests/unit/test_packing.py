@@ -323,20 +323,21 @@ async def test_nothing_worn_twice_summarises_to_no_most_reused(wired: Any) -> No
 
 
 @pytest.mark.asyncio
-async def test_a_tie_for_most_reused_is_broken_by_the_packing_list_order(wired: Any) -> None:
-    # Two garments worn on two days each, and a packing list whose order is not
-    # the order the days wore them: the tie must break on the **list**, or the
-    # same plan can summarise differently depending on iteration order.
+async def test_a_tie_for_most_reused_is_broken_by_first_worn(wired: Any) -> None:
+    # Three garments worn on two days each. The stored list is derived from the
+    # looks (`DECISIONS.md` 236), so its order is first-worn order and the tie
+    # breaks on the item day 1 puts on first — whatever the model's own
+    # `packing_list` said, and whatever order day 2 wears them in.
     #
-    # A mutation run at 4.3 is why this test is shaped this way. The first
-    # version wore the same two items in the same order in both looks, so wear
-    # order and packing order agreed and the assertion held whichever the code
-    # read — it passed against a deliberately broken tie-break.
+    # Until 236 this test fed a `packing_list` whose order disagreed with wear
+    # order, to catch a tie-break that read the looks instead of the list. That
+    # mutation is no longer reachable: there is one order now, and what is left
+    # to pin is that the tie is deterministic and breaks on it.
     wired(
         _answer(
-            _look(1, TOP_ID, JEANS_ID, BOOTS_ID),
-            _look(2, TOP_ID, JEANS_ID, BOOTS_ID),
-            packing_list=(JEANS_ID, TOP_ID, BOOTS_ID),
+            _look(1, JEANS_ID, TOP_ID, BOOTS_ID),
+            _look(2, BOOTS_ID, TOP_ID, JEANS_ID),
+            packing_list=(BOOTS_ID, TOP_ID, JEANS_ID),
         )
     )
 

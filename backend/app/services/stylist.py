@@ -8,13 +8,14 @@ answer parsed and **unjudged**.
 
 `validate_look_response` is what judges it — `03`'s validation table, run in the
 documented order against the wardrobe that was actually sent. **The table has
-eleven numbers, ten live rules and two orders**: a single-day call runs 1, 2, 4,
-6, 7, 8, 9 and a trip runs 1, 2, 4, 10, 5, 6, 9, 11, because rules 7 and 8 have
-no fields on `POST /trips/pack` and rules 5, 10 and 11 have nothing to read
-without a packing list and a day number. Rule 3 has been one slot of rule 9's
-table since 2.11b. It calls nothing, raises nothing and owns no loop: it
-returns a verdict beside the normalised response,
-and the caller decides whether to spend the one retry through `correction=` or
+eleven numbers, nine live rules and two orders**: a single-day call runs 1, 2, 4,
+6, 7, 8, 9 and a trip runs 1, 2, 4, 10, 6, 9, 11, because rules 7 and 8 have
+no fields on `POST /trips/pack` and rules 10 and 11 have nothing to read
+without a day number. Rule 3 has been one slot of rule 9's table since 2.11b,
+and rule 5 was struck at `DECISIONS.md` 236: the packing list is derived from
+the looks rather than checked against them. It calls nothing, raises nothing
+and owns no loop: it returns a verdict beside the normalised response, and the
+caller decides whether to spend the one retry through `correction=` or
 to answer `502 stylist_failed` — which is `services/stylist_runner.py`'s loop
 since 4.3, shared by the suggest route and `pack_trip`. That is 1.2b's split
 between `tag_item` and `validate_tags` with the retry one seam further out,
@@ -1092,34 +1093,6 @@ def _duplicate_look(looks: tuple[Look, ...]) -> str | None:
     return None
 
 
-def _packing_mismatch(response: StylistResponse) -> str | None:
-    """Rule 5, both directions. Trip path only.
-
-    `03-AI-CONTRACTS.md` printed only the first half until 4.3 — every packed
-    item is worn — and `STAGE-4`'s acceptance criteria ask for both. The second
-    is the one a user feels: a garment worn on Thursday and missing from the
-    list is a garment left at home.
-    """
-    if response.packing_list is None:
-        return "you returned no packing list, and a trip needs one"
-
-    packed = set(response.packing_list)
-    # Named by pair rather than by position: rule 5 runs after rule 10 on this
-    # path, so the pair is checked, and it is what the reader sees on screen.
-    for look in _in_day_order(response.looks):
-        for item_id in look.item_ids:
-            if item_id not in packed:
-                return _at_slot(
-                    look, f"this look wears {item_id}, which is not in the packing list"
-                )
-
-    worn = {item_id for look in response.looks for item_id in look.item_ids}
-    for item_id in response.packing_list:
-        if item_id not in worn:
-            return f"the packing list contains {item_id}, which no look wears"
-    return None
-
-
 def _missing_outerwear(
     looks: tuple[Look, ...], known: Mapping[str, ItemResponse], context: StylistContext
 ) -> str | None:
@@ -1336,23 +1309,24 @@ def _violation(
     concrete instruction is likelier to be obeyed than five.
 
     **Two chains, and the difference is which rules have a field to read.** On
-    the single-day path rules 5, 10 and 11 are absent: there is no packing list
-    and no day number in `outfit_recommendation`. On the trip path rules 7 and 8
-    are absent, because `POST /trips/pack` accepts no anchor and no locks. Rule
-    7 arrived with the anchor at 2.10, rule 8 with the swap at 2.11, rule 9 at
-    2.11a widened at 2.11b, and rules 5, 10 and 11 at 4.3 with the schema that
-    gave them fields. **Rule 3 is not missing** — it is one slot of rule 9 since
-    2.11b.
+    the single-day path rules 10 and 11 are absent: there is no day number in
+    `outfit_recommendation`. On the trip path rules 7 and 8 are absent, because
+    `POST /trips/pack` accepts no anchor and no locks. Rule 7 arrived with the
+    anchor at 2.10, rule 8 with the swap at 2.11, rule 9 at 2.11a widened at
+    2.11b, and rules 5, 10 and 11 at 4.3 with the schema that gave them fields.
+    **Rule 3 is not missing** — it is one slot of rule 9 since 2.11b — and
+    **rule 5 is struck** since `DECISIONS.md` 236, where the chain below says
+    why.
 
     The trip order is not the numeric one, and the hoist is load-bearing rather
-    than cosmetic: **rule 10 runs before 5 and 6** because rule 6 pairs a look
-    with its own day's weather rule, and that pairing means nothing until the
+    than cosmetic: **rule 10 runs before 6** because rule 6 pairs a look with
+    its own day's weather rule, and that pairing means nothing until the
     ordinals have been checked. `DECISIONS.md` 194.
     """
     known = {item.short_id: item for item in wardrobe}
     if isinstance(context, TripContext):
-        # `03`'s trip order: 1, 2, 4, 10, 5, 6, 9, 11. Rules 7 and 8 have no
-        # fields on this path, and **rule 10 is hoisted above 5 and 6** because
+        # `03`'s trip order: 1, 2, 4, 10, 6, 9, 11. Rules 7 and 8 have no
+        # fields on this path, and **rule 10 is hoisted above 6** because
         # rule 6 pairs a look with its day's weather rule and that pairing means
         # nothing until the ordinals are known good. `DECISIONS.md` 194.
         # Rules 4 and 10 read one argument: 4 counts it, 10 compares against it,
@@ -1363,7 +1337,11 @@ def _violation(
             or _incomplete(response.looks, known, trip=True)
             or _wrong_count(response.looks, len(expected))
             or _wrong_slots(response.looks, expected)
-            or _packing_mismatch(response)
+            # Rule 5 ran here until `DECISIONS.md` 236. `packing_list` is still
+            # asked for and still parsed, but never checked: `pack_trip` derives
+            # the stored list from the looks, and asking the model for the list
+            # is part of what steers it towards reuse — an effect that has not
+            # been measured, so the field stays advisory rather than gone.
             or _missing_outerwear_by_day(response.looks, known, context)
             or _slot_conflict(response.looks, known, trip=True)
             or _duplicate_look(response.looks)

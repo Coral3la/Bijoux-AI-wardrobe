@@ -715,11 +715,19 @@ arithmetic it would have to be checked on anyway.
 
 **The ids in `packing_list.item_ids` are `short_id`s**, like every other id in
 this contract — they are the only ids the model is ever shown. What the *stored*
-`trips.packing_list` holds is different and deliberately so: `pack_trip` maps
-them through the wardrobe it sent and writes **row UUIDs as strings**, because a
-UUID is the only id that leaves this API (`04-API-SPEC.md`: `short_id` exists for
-the AI layer). `02-DATA-MODEL.md` carries the stored shape, including the
-`reuse_summary` object Python writes beside them.
+`trips.packing_list` holds is different and deliberately so: `pack_trip` writes
+**row UUIDs as strings**, because a UUID is the only id that leaves this API
+(`04-API-SPEC.md`: `short_id` exists for the AI layer). `02-DATA-MODEL.md`
+carries the stored shape, including the `reuse_summary` object Python writes
+beside them.
+
+**The stored list is derived from the looks, not read from `packing_list`.**
+Since `DECISIONS.md` 236 `pack_trip` walks the validated looks in order and
+collects every item worn, once — the same order `POST /trips/{id}/swap` appends
+newcomers in — and the model's `packing_list` is parsed and then not read. It is
+still asked for and still in the schema because asking for it is part of what
+steers the model towards reuse, and that effect has not been measured; it is
+advisory, and rule 5 below is struck.
 
 **`day` is required on every look and is the ordinal described above** — 1-based,
 within the trip. **`slot` is required too, and is `day` or `evening`**: strict
@@ -746,11 +754,12 @@ rule 4's, which is the rule that can name what was wrong.
 
 Run in this order. Any failure triggers **one** retry with the violation named explicitly, then a `502`.
 
-**The list has eleven numbers, ten live rules and two paths.** Five ran when it
+**The list has eleven numbers, nine live rules and two paths.** Five ran when it
 was written at 2.5, seven after the anchor and the swap, and the split has
 always been by what has a field to read rather than by preference: rule 3 is
-struck into rule 9, rules 7 and 8 need `POST /looks/suggest`'s fields, and rules
-5, 10 and 11 need `trip_packing_plan`'s. `validate_look_response` is a synchronous
+struck into rule 9, rule 5 is struck because `pack_trip` derives what it checked,
+rules 7 and 8 need `POST /looks/suggest`'s fields, and rules 10 and 11 need
+`trip_packing_plan`'s. `validate_look_response` is a synchronous
 function in `app/services/stylist.py` that calls nothing and raises nothing: it
 returns the first violation and the response with its ids normalised, and the
 retry, the give-up and `502 stylist_failed` belong to `POST /looks/suggest` at
@@ -761,7 +770,7 @@ retry, the give-up and `502 stylist_failed` belong to `POST /looks/suggest` at
 2. Every look contains shoes, and either (a top and a bottom) or a dress.
 3. ~~No look contains two `outer` items.~~ **Absorbed into rule 9 at task 2.11b**, where it is one slot of a table. The number stays in this list rather than being reclaimed: eight documents, a test and three code comments name rule 3, and a renumbering that buys nothing is how a reference becomes wrong.
 4. **The look count matches what was asked for.** `expected_days` was a parameter from task 4.3, where a caller could finally ask for a number other than one; 2.5 hard-coded `1` because `03`'s single-day path is the whole of "a trip of length one" and no request could say otherwise. `DECISIONS.md` 164 recorded the hard-coding as the single-day half of this rule. **From 4.11 the parameter is the requested `(day, slot)` pairs and not a number**, because a four-day trip with two evenings out expects six looks and no arithmetic on the dates produces that six. Rules 4 and 10 read the same argument — 4 counts it, 10 compares against it — so the count and the set cannot disagree about one request. The single-day path passes the one pair it has.
-5. **Both directions: every item in `packing_list.item_ids` appears in at least one look, and every item in every look appears in `packing_list.item_ids`.** **Stage 4, with the field it reads** — `STYLIST_SCHEMA` carries no `packing_list` (`DECISIONS.md` 157) and `trip_packing_plan` is the schema that does, so this rule runs on the trip path alone. Widened from one direction to two at 4.3: `STAGE-4`'s acceptance criteria ask for both — *every packed item appears in at least one look, and every look item appears in the packing list* — and only the second is the one a user feels, because a garment worn on Thursday and missing from the list is a garment left at home. `DECISIONS.md` 194.
+5. ~~Both directions: every item in `packing_list.item_ids` appears in at least one look, and every item in every look appears in `packing_list.item_ids`.~~ **Struck at `DECISIONS.md` 236.** It ran on the trip path alone from 4.3, widened from one direction to two at 4.3 (`DECISIONS.md` 194), and it was the rule that answered `502` to an eight-day trip whose two answers were both usable: the model's list disagreed with its own looks, and the list was the one thing on the wire that Python could compute itself. **`pack_trip` now derives `trips.packing_list.item_ids` from the looks** — every item worn, once, in look order then item order, which is the order `POST /trips/{id}/swap` appends in — so both directions hold by construction and nothing checks the model's `packing_list` at all. The field stays in `trip_packing_plan` and the prompt still asks for it: asking is part of what steers reuse, and that effect has not been measured. The number stays in the list for rule 3's reason.
 6. When the weather rule required outerwear, each look for that day contains an `outerwear` item — **unless the user asked for no outerwear.** `DECISIONS.md` 158 gave an explicit `include_outerwear: false` precedence over the weather rule and the system prompt says so in words, so a look that obeyed the user at 12°C is correct; enforcing this rule over it would spend the retry and then answer `502` to the one answer that did as it was told. Narrowed at 2.5. Rule 6 reads the rule *sentence* through `weather.requires_outerwear`, never a temperature — the stylist is never sent a number. **Per-day from 4.3**: a trip carries one rule per day and each look is judged against its own day's rule, which is what makes "the rainy day gets water-resistant outerwear" a rule rather than an average. *This read "look **i** is judged against day **i**'s rule" until 4.11, and the positional pairing it describes stopped being true the moment a day could hold two looks* — the sixth look of a four-day trip is day 4's, not day 6's, so the rule is found by the look's own `day` and rule 10 above is what makes that number trustworthy. **Both slots of a date are judged against the same sentence**, because one date has one forecast row; the argument is beside the trip message above. The single-day path passes one rule and is unchanged; `include_outerwear` has no trip spelling, because `POST /trips/pack` takes no such field.
 7. When `anchor_item_id` was supplied, it appears in the returned look.
 8. When `locked_item_ids` were supplied, every one of them appears, and the rejected item does not.
@@ -793,7 +802,7 @@ Rules 7 and 8 are fully deterministic and make excellent E2E assertions — the 
 
 **The single-day order has a third caller from task 4.6a-1, and it is the first one whose weather is not computed.** `POST /trips/{id}/swap` builds a `StylistContext` for one day of a packed trip and runs 1, 2, 4, 6, 7, 8, 9 unchanged — so rules 7 and 8 now defend a trip look as well as a stylist one, which is what makes *the swap that rejected a shoe cannot answer with it* enforceable rather than merely asked for. What differs is where rule 6 gets its sentence: the other two callers derive it from three numbers through `build_rule`, and this one **reads it back from `trips.forecast`**. The rule the model obeyed on the day the trip was packed is stored beside that day's numbers (`DECISIONS.md` 199), and a swap is an edit to one day of that plan — so re-deriving it would judge one day against whatever the band table says today while its six neighbours stood on the old one, with nothing on the wire saying so. `DECISIONS.md` 209.
 
-**The run order differs between the two paths, and 4.3 states both rather than leaving the table to be read twice.** A single-day call runs **1, 2, 4, 6, 7, 8, 9** — unchanged from 2.11b. A trip call runs **1, 2, 4, 10, 5, 6, 9, 11**: rules 7 and 8 have no fields on `POST /trips/pack`, and **rule 10 is hoisted above 5 and 6** because rule 6 finds each look's weather rule by its own `day` and that lookup is meaningless until the pairs are known to be the ones that were asked for. The order is unchanged at 4.11 and the hoist matters more than it did: a look claiming a day the trip does not have would have been an `IndexError` under the positional pairing and is a missing key under this one. Rule 1 stays first on both, for the reason it always was: it is what makes every later rule able to look an id up without a `KeyError` on a hallucinated one.
+**The run order differs between the two paths, and 4.3 states both rather than leaving the table to be read twice.** A single-day call runs **1, 2, 4, 6, 7, 8, 9** — unchanged from 2.11b. A trip call runs **1, 2, 4, 10, 6, 9, 11** — *1, 2, 4, 10, 5, 6, 9, 11 until `DECISIONS.md` 236 struck rule 5*: rules 7 and 8 have no fields on `POST /trips/pack`, and **rule 10 is hoisted above 6** because rule 6 finds each look's weather rule by its own `day` and that lookup is meaningless until the pairs are known to be the ones that were asked for. The order is unchanged at 4.11 and the hoist matters more than it did: a look claiming a day the trip does not have would have been an `IndexError` under the positional pairing and is a missing key under this one. Rule 1 stays first on both, for the reason it always was: it is what makes every later rule able to look an id up without a `KeyError` on a hallucinated one.
 
 **Every violation on the trip path is prefixed, and 4.11 splits the prefix in two because position and day are no longer the same number.** Rules 1 and 2 run *before* rule 10, so at that point the returned ordinals are exactly what is not yet trustworthy and a message keyed to one can name a day twice or not at all — those violations name the look's **1-based position in the returned array**: `look 3: the look has no shoes`. Rules that run after rule 10 name the pair: `day 2 evening: the look has no shoes`. *Until 4.11 both were `day 3:`, which was honest while a trip had one look per day and rule 10 made position and `day` the same number; with two slots on a date the sixth look of a four-day trip is not day 6, so the old prefix would have named a day that does not exist.* Single-day violations are unprefixed and their wording is untouched, because 2.5's tests pin those strings — the trip path's strings are pinned too, and 4.13 is where they move. `DECISIONS.md` 194 carries the run order; 225 carries the split.
 
